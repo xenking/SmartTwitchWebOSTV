@@ -238,6 +238,13 @@
     var NETWORK_RTT_HOST_MAX = 64;                     // Max tracked RTT hosts.
     var NETWORK_PROBE_HOST_MAX = 32;                   // Max tracked probe hosts.
     var NETWORK_CIRCUIT_HOST_MAX = 48;                 // Max tracked circuit-breaker hosts.
+    var USHER_PLAYLIST_SERVICE_ID_SUFFIX = '.hls';     // Local JS service suffix appended to app id.
+    var USHER_PLAYLIST_SERVICE_TIMEOUT_MS = 4500;      // Timeout for local service playlist fetch.
+    var USHER_PLAYLIST_SERVICE_TIMEOUT_MIN_MS = 1200;  // Min allowed timeout sent to local service.
+    var USHER_PLAYLIST_SERVICE_TIMEOUT_MAX_MS = 7000;  // Max allowed timeout sent to local service.
+    var USHER_PLAYLIST_CACHE_TTL_MS = 45000;           // In-memory TTL for service-fetched playlists.
+    var USHER_PLAYLIST_CACHE_MAX = 24;                 // Max cached service playlist entries.
+    var USHER_PLAYLIST_INFLIGHT_MAX_AGE_MS = 20000;    // Safety prune age for stale in-flight entries.
     var PREVIEW_SET_COOLDOWN_MS = 450;                 // Dedup cooldown for repeated setPrev calls.
     var LIFECYCLE_STOP_MIN_HIDDEN_MS = 12000;          // Min hidden time before stopping playback.
     var STALL_PROGRESS_THRESHOLD_MS = 4000;            // No-progress window before stall is considered persistent.
@@ -256,6 +263,9 @@
     var networkResponseCacheByKey = {};       // Cached sync XHR responses by request key.
     var networkRttGlobalAvgMs = 0;            // Global average RTT across all hosts.
     var networkPruneLastAt = 0;               // Last network state prune timestamp.
+    var usherPlaylistCacheByKey = {};         // Short-TTL in-memory playlist cache (service path).
+    var usherPlaylistInFlightByKey = {};      // In-flight service fetch callbacks by request key.
+    var usherPlaylistCorsFailureSeen = false; // Session flag: if true, skip doomed browser XHR on usher playlist.
     // --- Loading indicator debounce ---
     // Loader show is delayed by DEBOUNCE_MS to prevent flicker on fast loads.
     // Loader hide is always immediate (canplay/playing/loadeddata events).
@@ -355,6 +365,19 @@
         } catch (e2) {
             return false;
         }
+    }
+    function isForceHlsServiceFetchEnabled() {
+        try {
+            if (w.location && typeof w.location.search === 'string' && /(?:\?|&)sttv_debug_force_hls_service_fetch=1(?:&|$)/i.test(w.location.search)) {
+                return true;
+            }
+        } catch (e0) {}
+        try {
+            if (!w.localStorage) return false;
+            var value = w.localStorage.getItem('STTV_DEBUG_FORCE_HLS_SERVICE_FETCH');
+            if (value === '1' || value === 'true' || value === 'TRUE') return true;
+        } catch (e1) {}
+        return false;
     }
     function bridgeDebugLog(event, extra) {
         if (!BRIDGE_DEBUG_ENABLED) return;
@@ -725,8 +748,10 @@
         }
     }
     // Builds a JSON response string matching the Android sync XHR return format.
-    function res(st, tx, ck) {
-        return JSON.stringify({status: st || 0, responseText: tx || '', checkResult: ck || 0});
+    function res(st, tx, ck, u) {
+        var out = {status: st || 0, responseText: tx || '', checkResult: ck || 0};
+        if (typeof u === 'string' && u) out.url = u;
+        return JSON.stringify(out);
     }
     // =========================================================================
     // Key Dispatch
@@ -1176,13 +1201,14 @@
         var seen = {};
         var i;
         for (i = 0; i < l.length; i++) {
-            if (l[i].indexOf('#EXT-X-STREAM-INF:') !== 0) continue;
-            var n = l[i + 1];
+            var streamLine = l[i] && typeof l[i] === 'string' ? l[i].trim() : '';
+            if (streamLine.toUpperCase().indexOf('#EXT-X-STREAM-INF:') !== 0) continue;
+            var n = l[i + 1] && typeof l[i + 1] === 'string' ? l[i + 1].trim() : '';
             if (!n || n.indexOf('#') === 0) continue;
-            var rm = l[i].match(/RESOLUTION=\d+x(\d+)/);
-            var fm = l[i].match(/FRAME-RATE=([0-9.]+)/);
-            var cm = l[i].match(/CODECS="([^"]+)"/i);
-            var bm = l[i].match(/(?:AVERAGE-)?BANDWIDTH=(\d+)/i);
+            var rm = streamLine.match(/RESOLUTION=\d+x(\d+)/i);
+            var fm = streamLine.match(/FRAME-RATE=([0-9.]+)/i);
+            var cm = streamLine.match(/CODECS="([^"]+)"/i);
+            var bm = streamLine.match(/(?:AVERAGE-)?BANDWIDTH=(\d+)/i);
             var r = rm && rm[1] ? parseInt(rm[1], 10) : 0;
             var f = fm && fm[1] ? Math.round(parseFloat(fm[1]) / 10) * 10 : 30;
             var bw = bm && bm[1] ? parseInt(bm[1], 10) : 0;
@@ -1869,6 +1895,22 @@
         if (state.rawUri && (!maxRes || maxRes <= 0)) return state.rawUri;
         return pickFromMaster(state.rawUri, state.q, maxRes);
     }
+    function normalizeQualityPosition(pos, listLength) {
+        var parsed = -1;
+        if (typeof pos === 'number' && isFinite(pos)) {
+            parsed = Math.round(pos);
+        } else if (typeof pos === 'string') {
+            var trimmed = pos.trim();
+            if (trimmed) parsed = parseInt(trimmed, 10);
+        }
+        if (!isFinite(parsed)) parsed = -1;
+        if (parsed < -1) parsed = -1;
+        // Some runtimes may deliver 1-based indexes across bridge boundaries.
+        if (parsed >= 0 && listLength > 0 && parsed >= listLength && parsed - 1 >= 0 && parsed - 1 < listLength) {
+            parsed = parsed - 1;
+        }
+        return parsed;
+    }
     function clearMainStallTimer() {
         if (!mainStallTimerId) return;
         w.clearTimeout(mainStallTimerId);
@@ -2251,12 +2293,27 @@
         ms.q = parseQ(ms.playlist, ms.rawUri);
         ms.qp = -1;
         ms.resume = rs > 0 ? rs : 0;
+        bridgeDebugLog('main_playlist_parsed', {
+            count: ms.q.length,
+            hasPlaylist: !!ms.playlist,
+            hasRawUri: !!ms.rawUri,
+            firstQuality: ms.q[0] && ms.q[0].id ? ms.q[0].id : ''
+        });
         ms.uri = sourceFromQuality(ms, mainMaxRes);
         if (mv) {
             mv.src = ms.uri;
             applyMainLayout();
             show(mv);
             try { mv.load(); } catch (e) {}
+        }
+        // Align with Android PlayerActivity.onTracksChanged: refresh quality list
+        // for main player (live/vod) when not in PiP/multistream mode.
+        if (ms.type < 3 && !w.PlayExtra_PicturePicture && !w.Play_MultiEnable) {
+            call('Play_getQualities', [ms.type, false]);
+            bridgeDebugLog('main_quality_refresh_requested', {
+                type: ms.type,
+                parsedCount: ms.q.length
+            });
         }
     }
     // Starts preview/feed playback. Deduplicates rapid repeated calls.
@@ -2448,6 +2505,7 @@
         var meta = safeParseRequestMeta(rawUrl);
         var host = meta.host;
         var pathLower = meta.pathLower;
+        var normalizedMethod = String(method || 'GET').toUpperCase();
         var key = '';
         var gqlHost = host.indexOf('gql.twitch.tv') !== -1 || pathLower === '/gql';
         var hlsId = extractHlsId(pathLower);
@@ -2467,11 +2525,239 @@
         }
         return {
             host: host,
+            url: meta.url || '',
+            pathLower: pathLower,
+            method: normalizedMethod,
             highRisk: isHighRiskHost(host),
             requestKey: key,
             circuitEnabled: !isCircuitExcludedHost(host, pathLower),
             dedupeEnabled: !isCoreTwitchHost(host)
         };
+    }
+    function hasUsablePlaylistBody(text) {
+        return typeof text === 'string' && text.indexOf('#EXTM3U') !== -1;
+    }
+    function isUsherPlaylistPath(pathLower) {
+        if (!pathLower) return false;
+        var normalizedPath = String(pathLower).toLowerCase().split('?')[0];
+        if (!/\.m3u8$/.test(normalizedPath)) return false;
+        if (normalizedPath.indexOf('/api/channel/hls/') === 0) return true;
+        if (normalizedPath.indexOf('/vod/') === 0) return true;
+        return false;
+    }
+    function isUsherPlaylistRequest(meta) {
+        if (!meta) return false;
+        if (meta.host !== 'usher.ttvnw.net') return false;
+        if (!isUsherPlaylistPath(meta.pathLower || '')) return false;
+        return String(meta.method || 'GET').toUpperCase() === 'GET';
+    }
+    function shouldUseUsherPlaylistCorsFallback(meta, status, text, reason) {
+        if (!isUsherPlaylistRequest(meta)) return false;
+        var st = parseInt(status, 10) || 0;
+        if (st > 0) return false;
+        if (hasUsablePlaylistBody(text)) return false;
+        if (reason === 'timeout' || reason === 'abort' || reason === 'dedupe_abort' || reason === 'circuit_open') return false;
+        return true;
+    }
+    function buildUsherPlaylistCorsFallbackResult(meta, checkResult, reason) {
+        var fallbackUrl = meta && typeof meta.url === 'string' ? meta.url : '';
+        bridgeDebugLog('usher_hls_cors_fallback', {
+            reason: reason || 'unknown',
+            host: meta && meta.host ? meta.host : '',
+            url: fallbackUrl
+        });
+        return {
+            status: 200,
+            responseText: '',
+            checkResult: checkResult || 0,
+            url: fallbackUrl,
+            synthetic: true
+        };
+    }
+    function getWebOsAppId() {
+        try {
+            if (w.PalmSystem && w.PalmSystem.identifier) {
+                return String(w.PalmSystem.identifier).split(' ')[0] || '';
+            }
+        } catch (e) {}
+        return '';
+    }
+    function getUsherPlaylistServiceName() {
+        var appId = getWebOsAppId();
+        if (!appId) return '';
+        return appId + USHER_PLAYLIST_SERVICE_ID_SUFFIX;
+    }
+    function getUsherPlaylistServiceTimeoutMs(timeoutHint) {
+        var parsed = parseInt(timeoutHint, 10);
+        if (!isFinite(parsed) || parsed <= 0) parsed = USHER_PLAYLIST_SERVICE_TIMEOUT_MS;
+        return clamp(parsed, USHER_PLAYLIST_SERVICE_TIMEOUT_MIN_MS, USHER_PLAYLIST_SERVICE_TIMEOUT_MAX_MS);
+    }
+    function getUsherPlaylistCacheEntry(requestKey) {
+        if (!requestKey) return null;
+        var entry = usherPlaylistCacheByKey[requestKey];
+        if (!entry) return null;
+        var savedAt = parseInt(entry.savedAt, 10) || 0;
+        if (!savedAt || Date.now() - savedAt > USHER_PLAYLIST_CACHE_TTL_MS) {
+            delete usherPlaylistCacheByKey[requestKey];
+            return null;
+        }
+        return entry;
+    }
+    function cacheUsherPlaylistResult(requestKey, responseText, responseUrl) {
+        if (!requestKey || !hasUsablePlaylistBody(responseText)) return;
+        usherPlaylistCacheByKey[requestKey] = {
+            status: 200,
+            responseText: responseText,
+            responseUrl: responseUrl || '',
+            savedAt: Date.now()
+        };
+        pruneOldestMapEntries(usherPlaylistCacheByKey, USHER_PLAYLIST_CACHE_MAX);
+    }
+    function normalizeServicePlaylistResult(rawResult, meta) {
+        var payload = rawResult && typeof rawResult === 'object' ? rawResult : {};
+        var st = parseInt(payload.status, 10) || 0;
+        var text = typeof payload.responseText === 'string' ? payload.responseText : '';
+        if (st !== 200 || !hasUsablePlaylistBody(text)) return null;
+        var url = typeof payload.url === 'string' && payload.url ? payload.url : meta && meta.url ? meta.url : '';
+        return {
+            status: 200,
+            responseText: text,
+            url: url
+        };
+    }
+    function callUsherPlaylistService(meta, timeoutMs, done) {
+        var finish = typeof done === 'function' ? done : function () {};
+        var serviceName = getUsherPlaylistServiceName();
+        if (!serviceName || typeof w.PalmServiceBridge !== 'function') {
+            finish(null, 'service_unavailable');
+            return;
+        }
+        var requestUrl = meta && meta.url ? String(meta.url) : '';
+        if (!requestUrl) {
+            finish(null, 'missing_url');
+            return;
+        }
+        var bridge = null;
+        var timerId = 0;
+        var settled = false;
+        var requestOrigin = '';
+        var requestReferer = '';
+        var requestUserAgent = '';
+        var requestAcceptLanguage = '';
+        try {
+            if (w.location && typeof w.location.origin === 'string' && /^https?:\/\//i.test(w.location.origin)) {
+                requestOrigin = w.location.origin;
+                requestReferer = requestOrigin + '/';
+            } else if (w.location && typeof w.location.href === 'string' && /^https?:\/\//i.test(w.location.href)) {
+                requestReferer = w.location.href;
+            }
+            if (w.navigator && typeof w.navigator.userAgent === 'string') requestUserAgent = w.navigator.userAgent;
+            if (w.navigator) {
+                if (Array.isArray(w.navigator.languages) && w.navigator.languages.length) {
+                    requestAcceptLanguage = w.navigator.languages.join(',');
+                } else if (typeof w.navigator.language === 'string' && w.navigator.language) {
+                    requestAcceptLanguage = w.navigator.language;
+                }
+            }
+        } catch (eLoc) {}
+        var safeFinish = function (result, reason) {
+            if (settled) return;
+            settled = true;
+            if (timerId) {
+                try { w.clearTimeout(timerId); } catch (eClear) {}
+                timerId = 0;
+            }
+            if (bridge) {
+                try { bridge.onservicecallback = null; } catch (eCb) {}
+                try { bridge.cancel(); } catch (eCancel) {}
+            }
+            bridge = null;
+            finish(result, reason || '');
+        };
+        try {
+            bridge = new w.PalmServiceBridge();
+        } catch (eBridge) {
+            safeFinish(null, 'service_bridge_create_fail');
+            return;
+        }
+        bridge.onservicecallback = function (msg) {
+            var parsed = safeParse(msg, null);
+            var normalized = normalizeServicePlaylistResult(parsed, meta);
+            if (normalized) {
+                safeFinish(normalized, 'service_ok');
+                return;
+            }
+            var reason = 'service_bad_payload';
+            if (parsed && typeof parsed === 'object') {
+                if (parsed.errorCode) reason = 'service_error_' + String(parsed.errorCode).toLowerCase();
+                else if (parsed.status) reason = 'service_status_' + String(parsed.status);
+            }
+            safeFinish(null, reason);
+        };
+        timerId = w.setTimeout(function () {
+            safeFinish(null, 'service_timeout');
+        }, getUsherPlaylistServiceTimeoutMs(timeoutMs) + 150);
+        try {
+            bridge.call('luna://' + serviceName + '/fetchPlaylist', JSON.stringify({
+                url: requestUrl,
+                timeoutMs: getUsherPlaylistServiceTimeoutMs(timeoutMs),
+                origin: requestOrigin || '',
+                referer: requestReferer || '',
+                userAgent: requestUserAgent || '',
+                acceptLanguage: requestAcceptLanguage || ''
+            }));
+        } catch (eCall) {
+            safeFinish(null, 'service_call_exception');
+        }
+    }
+    function flushUsherPlaylistInFlight(requestKey, result, reason) {
+        var inFlight = usherPlaylistInFlightByKey[requestKey];
+        if (!inFlight) return;
+        delete usherPlaylistInFlightByKey[requestKey];
+        var callbacks = inFlight.callbacks || [];
+        var i;
+        for (i = 0; i < callbacks.length; i++) {
+            try {
+                callbacks[i](result, reason || '');
+            } catch (eCb) {}
+        }
+    }
+    function requestUsherPlaylistViaService(meta, timeoutMs, done) {
+        var callback = typeof done === 'function' ? done : function () {};
+        if (!isUsherPlaylistRequest(meta) || !meta.requestKey) {
+            callback(null, 'not_usher_playlist');
+            return;
+        }
+        var cached = getUsherPlaylistCacheEntry(meta.requestKey);
+        if (cached) {
+            callback({
+                status: cached.status || 200,
+                responseText: cached.responseText || '',
+                url: cached.responseUrl || meta.url || ''
+            }, 'cache_hit');
+            return;
+        }
+        if (usherPlaylistInFlightByKey[meta.requestKey]) {
+            usherPlaylistInFlightByKey[meta.requestKey].callbacks.push(callback);
+            return;
+        }
+        usherPlaylistInFlightByKey[meta.requestKey] = {
+            callbacks: [callback],
+            startedAt: Date.now()
+        };
+        callUsherPlaylistService(meta, timeoutMs, function (result, reason) {
+            bridgeDebugLog('usher_hls_service_result', {
+                reason: reason || '',
+                status: result && result.status ? result.status : 0,
+                hasPlaylist: !!(result && hasUsablePlaylistBody(result.responseText || '')),
+                url: meta && meta.url ? meta.url : ''
+            });
+            if (result && result.status === 200 && hasUsablePlaylistBody(result.responseText)) {
+                cacheUsherPlaylistResult(meta.requestKey, result.responseText, result.url || meta.url || '');
+                cacheNetworkResponse(meta.requestKey, result.status, result.responseText);
+            }
+            flushUsherPlaylistInFlight(meta.requestKey, result, reason);
+        });
     }
     function getEffectiveTimeoutMs(timeout, meta, sync) {
         var defaultCap = sync ? NETWORK_SYNC_MAX_TIMEOUT_MS : NETWORK_MAX_TIMEOUT_MS;
@@ -2522,7 +2808,22 @@
             var savedAt = entry && entry.savedAt ? parseInt(entry.savedAt, 10) || 0 : 0;
             if (!savedAt || now - savedAt > NETWORK_SYNC_CACHE_STALE_MAX_MS) delete networkResponseCacheByKey[key];
         }
+        for (key in usherPlaylistInFlightByKey) {
+            if (!Object.prototype.hasOwnProperty.call(usherPlaylistInFlightByKey, key)) continue;
+            var playlistInFlight = usherPlaylistInFlightByKey[key];
+            var playlistStartedAt = playlistInFlight && playlistInFlight.startedAt ? parseInt(playlistInFlight.startedAt, 10) || 0 : 0;
+            if (!playlistStartedAt || now - playlistStartedAt > USHER_PLAYLIST_INFLIGHT_MAX_AGE_MS) {
+                flushUsherPlaylistInFlight(key, null, 'pruned');
+            }
+        }
+        for (key in usherPlaylistCacheByKey) {
+            if (!Object.prototype.hasOwnProperty.call(usherPlaylistCacheByKey, key)) continue;
+            var playlistEntry = usherPlaylistCacheByKey[key];
+            var playlistSavedAt = playlistEntry && playlistEntry.savedAt ? parseInt(playlistEntry.savedAt, 10) || 0 : 0;
+            if (!playlistSavedAt || now - playlistSavedAt > USHER_PLAYLIST_CACHE_TTL_MS) delete usherPlaylistCacheByKey[key];
+        }
         pruneOldestMapEntries(networkResponseCacheByKey, NETWORK_RESPONSE_CACHE_MAX);
+        pruneOldestMapEntries(usherPlaylistCacheByKey, USHER_PLAYLIST_CACHE_MAX);
         pruneOldestMapEntries(networkRttByHost, NETWORK_RTT_HOST_MAX);
         pruneOldestMapEntries(networkMediaProbeByHost, NETWORK_PROBE_HOST_MAX);
         pruneOldestMapEntries(networkCircuitByHost, NETWORK_CIRCUIT_HOST_MAX);
@@ -2761,7 +3062,7 @@
         if (family && networkRttGlobalAvgMs > 0) return networkRttGlobalAvgMs;
         return 0;
     }
-    // Sends an async XHR request and invokes callback with (status, responseText, checkArgs...).
+    // Sends an async XHR request and invokes callback with (status, responseText, responseUrl).
     // Android: Android.XmlHttpGetFull() / Android.BasexmlHttpGet() via OkHttp.
     // webOS:   XHR with timeout, circuit-breaker, dedupe, and response caching.
     function sendAsyncRequest(u, to, pm, m, h, cb) {
@@ -2770,25 +3071,47 @@
         var body = req.body;
         var callback = typeof cb === 'function' ? cb : function () {};
         var meta = buildNetworkRequestMeta(u, method, body);
+        var forceServiceFetch = isForceHlsServiceFetchEnabled();
         maybePruneNetworkState();
         var effectiveTimeout = getEffectiveTimeoutMs(to, meta);
         var requestStartedAt = Date.now();
         var x;
         var done = false;
-        var finish = function (status, text, reason) {
+        var serviceAttempted = false;
+        var finish = function (status, text, reason, responseUrl, synthetic, skipServiceAttempt) {
             if (done) return;
+            if (!skipServiceAttempt && !serviceAttempted && shouldUseUsherPlaylistCorsFallback(meta, status, text, reason)) {
+                serviceAttempted = true;
+                usherPlaylistCorsFailureSeen = true;
+                bridgeDebugLog('usher_hls_cors_session_detected', {
+                    reason: reason || 'unknown',
+                    url: meta && meta.url ? meta.url : ''
+                });
+                requestUsherPlaylistViaService(meta, effectiveTimeout, function (serviceResult, serviceReason) {
+                    if (serviceResult && serviceResult.status === 200 && hasUsablePlaylistBody(serviceResult.responseText)) {
+                        finish(serviceResult.status, serviceResult.responseText, 'service_success', serviceResult.url || meta.url || '', true, true);
+                        return;
+                    }
+                    var fallback = buildUsherPlaylistCorsFallbackResult(meta, 0, serviceReason || reason || 'service_unavailable');
+                    finish(fallback.status, fallback.responseText, 'cors_fallback_synthetic', fallback.url, true, true);
+                });
+                return;
+            }
             done = true;
             if (meta.dedupeEnabled && meta.requestKey) clearInFlightRequestByKey(meta.requestKey, x);
-            if (status > 0) {
-                cacheNetworkResponse(meta.requestKey, status, text);
-                recordNetworkRtt(meta.host, Date.now() - requestStartedAt);
-                if (meta.circuitEnabled) recordHostCircuitSuccess(meta.host);
-            } else if (meta.circuitEnabled && reason !== 'dedupe_abort' && reason !== 'circuit_open') {
-                recordHostCircuitFailure(meta.host);
-            }
-            var callbackRef = callback;
             var finalStatus = status || 0;
             var finalText = text || '';
+            var finalUrl = responseUrl || '';
+            if (!synthetic) {
+                if (finalStatus > 0) {
+                    cacheNetworkResponse(meta.requestKey, finalStatus, finalText);
+                    recordNetworkRtt(meta.host, Date.now() - requestStartedAt);
+                    if (meta.circuitEnabled) recordHostCircuitSuccess(meta.host);
+                } else if (meta.circuitEnabled && reason !== 'dedupe_abort' && reason !== 'circuit_open') {
+                    recordHostCircuitFailure(meta.host);
+                }
+            }
+            var callbackRef = callback;
             // Break XHR event handler retain cycles.
             if (x) {
                 try {
@@ -2800,8 +3123,24 @@
             }
             callback = null;
             x = null;
-            if (callbackRef) callbackRef(finalStatus, finalText);
+            if (callbackRef) callbackRef(finalStatus, finalText, finalUrl);
         };
+        if (isUsherPlaylistRequest(meta) && (usherPlaylistCorsFailureSeen || forceServiceFetch)) {
+            if (forceServiceFetch) {
+                bridgeDebugLog('usher_hls_service_forced', {
+                    url: meta && meta.url ? meta.url : ''
+                });
+            }
+            requestUsherPlaylistViaService(meta, effectiveTimeout, function (serviceResult, serviceReason) {
+                if (serviceResult && serviceResult.status === 200 && hasUsablePlaylistBody(serviceResult.responseText)) {
+                    finish(serviceResult.status, serviceResult.responseText, 'service_success', serviceResult.url || meta.url || '', true, true);
+                    return;
+                }
+                var fallback = buildUsherPlaylistCorsFallbackResult(meta, 0, serviceReason || 'service_unavailable');
+                finish(fallback.status, fallback.responseText, 'service_fail_synthetic', fallback.url, true, true);
+            });
+            return;
+        }
         if (meta.circuitEnabled && isCircuitOpenForHost(meta.host)) {
             finish(0, '', 'circuit_open');
             return;
@@ -2833,6 +3172,7 @@
         var method = req.method;
         var body = req.body;
         var meta = buildNetworkRequestMeta(u, method, body);
+        var forceServiceFetch = isForceHlsServiceFetchEnabled();
         maybePruneNetworkState();
         var effectiveTimeout = getEffectiveTimeoutMs(to, meta, sync);
         // Stale-while-revalidate: for sync requests, serve cached data immediately
@@ -2844,6 +3184,24 @@
                 if (cached.isStale) sendAsyncRequest(u, to, pm, m, h, function () {});
                 return {status: cached.status, responseText: cached.responseText, checkResult: ck || 0};
             }
+        }
+        if (sync && isUsherPlaylistRequest(meta) && (usherPlaylistCorsFailureSeen || forceServiceFetch)) {
+            if (forceServiceFetch) {
+                bridgeDebugLog('usher_hls_service_forced_sync', {
+                    url: meta && meta.url ? meta.url : ''
+                });
+            }
+            var cachedUsherPlaylist = getUsherPlaylistCacheEntry(meta.requestKey);
+            if (cachedUsherPlaylist && hasUsablePlaylistBody(cachedUsherPlaylist.responseText || '')) {
+                return {
+                    status: 200,
+                    responseText: cachedUsherPlaylist.responseText,
+                    checkResult: ck || 0,
+                    url: cachedUsherPlaylist.responseUrl || meta.url || ''
+                };
+            }
+            requestUsherPlaylistViaService(meta, effectiveTimeout, function () {});
+            return buildUsherPlaylistCorsFallbackResult(meta, ck, 'service_deferred_sync');
         }
         if (meta.circuitEnabled && isCircuitOpenForHost(meta.host)) {
             if (sync) {
@@ -2881,6 +3239,11 @@
                 x.send(body ? body : null);
             } catch (e2) {
                 if (sync) {
+                    if (shouldUseUsherPlaylistCorsFallback(meta, 0, '', 'request_exception')) {
+                        usherPlaylistCorsFailureSeen = true;
+                        requestUsherPlaylistViaService(meta, effectiveTimeout, function () {});
+                        return buildUsherPlaylistCorsFallbackResult(meta, ck, 'request_exception');
+                    }
                     if (meta.circuitEnabled) recordHostCircuitFailure(meta.host);
                     return {status: 0, responseText: '', checkResult: ck || 0};
                 } else if (meta.dedupeEnabled) {
@@ -2888,12 +3251,19 @@
                 }
             }
             if (sync) {
-                if ((x.status || 0) > 0) {
-                    cacheNetworkResponse(meta.requestKey, x.status || 0, x.responseText || '');
+                var syncStatus = x.status || 0;
+                var syncText = x.responseText || '';
+                if (shouldUseUsherPlaylistCorsFallback(meta, syncStatus, syncText, syncStatus > 0 ? 'success' : 'status0')) {
+                    usherPlaylistCorsFailureSeen = true;
+                    requestUsherPlaylistViaService(meta, effectiveTimeout, function () {});
+                    return buildUsherPlaylistCorsFallbackResult(meta, ck, 'status0_sync');
+                }
+                if (syncStatus > 0) {
+                    cacheNetworkResponse(meta.requestKey, syncStatus, syncText);
                     recordNetworkRtt(meta.host, Date.now() - requestStartedAt);
                     if (meta.circuitEnabled) recordHostCircuitSuccess(meta.host);
                 } else if (meta.circuitEnabled) recordHostCircuitFailure(meta.host);
-                return {status: x.status || 0, responseText: x.responseText || '', checkResult: ck || 0};
+                return {status: syncStatus, responseText: syncText, checkResult: ck || 0};
             }
             return x;
         };
@@ -3748,11 +4118,11 @@
 
         // IMPLEMENTED: Synchronous HTTP request. Android: OkHttp sync call in WebView thread.
         // webOS: Sync XHR (blocks main thread). Required for upstream token fetch compatibility.
-        A.mMethodUrlHeaders = function (u, to, pm, m, ck, h) { var r = xhrReq(u, to, pm, m, ck, h, true); return res(r.status, r.responseText, r.checkResult); };
+        A.mMethodUrlHeaders = function (u, to, pm, m, ck, h) { var r = xhrReq(u, to, pm, m, ck, h, true); return res(r.status, r.responseText, r.checkResult, r.url); };
         // IMPLEMENTED: Async HTTP request (basic). Android: OkHttp async call.
         A.BasexmlHttpGet = function (u, to, pm, m, h, cb, ck, key, ok, err) { sendAsyncRequest(u, to, pm, m, h, function (status, text) { call(cb, [res(status, text, ck), key, ok, err, ck]); }); };
         // IMPLEMENTED: Async HTTP request (full, with extended check parameters). Android: OkHttp async.
-        A.XmlHttpGetFull = function (u, to, pm, m, h, cb, ck, c1, c2, c3, c4, c5, ok, err) { sendAsyncRequest(u, to, pm, m, h, function (status, text) { call(cb, [res(status, text, ck), ck, c1, c2, c3, c4, c5, ok, err]); }); };
+        A.XmlHttpGetFull = function (u, to, pm, m, h, cb, ck, c1, c2, c3, c4, c5, ok, err) { sendAsyncRequest(u, to, pm, m, h, function (status, text, responseUrl) { call(cb, [res(status, text, ck, responseUrl), ck, c1, c2, c3, c4, c5, ok, err]); }); };
 
         // --- Playback Start / Control ---
 
@@ -3765,7 +4135,7 @@
         };
         // IMPLEMENTED: Prepare preview player for quality switch (pause + set quality position).
         A.ReuseFeedPlayerPrepare = function (trackSelectorPos) {
-            ps.qp = typeof trackSelectorPos === 'number' ? trackSelectorPos : -1;
+            ps.qp = normalizeQualityPosition(trackSelectorPos, ps.q.length);
             if (pv) try { pv.pause(); } catch (e) {}
         };
         // IMPLEMENTED: Switch from feed/preview to main player, or restart secondary.
@@ -3829,16 +4199,40 @@
         // Android: ExoPlayer TrackSelector. webOS: video.src swap from parsed playlist.
         A.SetQuality = function (pos) {
             if (!mv || ms.type === 3) return;
-            ms.qp = typeof pos === 'number' ? pos : -1;
+            var requestedPos = pos;
+            ms.qp = normalizeQualityPosition(pos, ms.q.length);
             var tg = sourceFromQuality(ms, mainMaxRes);
-            if (!tg || tg === mv.src) return;
+            var currentSrc = (mv.currentSrc || mv.src || '');
+            var sameTarget = !!(tg && (tg === currentSrc || tg === mv.src));
+            bridgeDebugLog('set_quality_attempt', {
+                rawPos: requestedPos,
+                rawType: typeof requestedPos,
+                pos: ms.qp,
+                available: ms.q.length,
+                hasTarget: !!tg,
+                sameTarget: sameTarget
+            });
+            if (!tg || sameTarget) return;
             ms.resume = ms.type === 2 || ms.type === 3 ? mtime() : 0;
             ms.uri = tg;
             mv.src = tg;
             try { mv.load(); } catch (e) {}
+            tryPlay(mv);
+            bridgeDebugLog('set_quality_applied', {
+                pos: ms.qp,
+                available: ms.q.length
+            });
         };
         // IMPLEMENTED: Returns available quality options as JSON array.
-        A.getQualities = function () { var arr = [{id: 'Auto'}], i; for (i = 0; i < ms.q.length; i++) arr.push({id: ms.q[i].id}); return JSON.stringify(arr); };
+        A.getQualities = function () {
+            var arr = [{id: 'Auto'}], i;
+            for (i = 0; i < ms.q.length; i++) arr.push({id: ms.q[i].id});
+            bridgeDebugLog('get_qualities_called', {
+                count: arr.length,
+                ids: arr.map(function (item) { return item && item.id ? item.id : ''; }).slice(0, 8)
+            });
+            return JSON.stringify(arr);
+        };
         // IMPLEMENTED: Sets max resolution cap for main player.
         A.SetMainPlayerBitrate = function (bitrate, resolution) {
             void bitrate;
