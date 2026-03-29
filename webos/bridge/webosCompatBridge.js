@@ -1895,6 +1895,22 @@
         if (state.rawUri && (!maxRes || maxRes <= 0)) return state.rawUri;
         return pickFromMaster(state.rawUri, state.q, maxRes);
     }
+    function normalizeQualityPosition(pos, listLength) {
+        var parsed = -1;
+        if (typeof pos === 'number' && isFinite(pos)) {
+            parsed = Math.round(pos);
+        } else if (typeof pos === 'string') {
+            var trimmed = pos.trim();
+            if (trimmed) parsed = parseInt(trimmed, 10);
+        }
+        if (!isFinite(parsed)) parsed = -1;
+        if (parsed < -1) parsed = -1;
+        // Some runtimes may deliver 1-based indexes across bridge boundaries.
+        if (parsed >= 0 && listLength > 0 && parsed >= listLength && parsed - 1 >= 0 && parsed - 1 < listLength) {
+            parsed = parsed - 1;
+        }
+        return parsed;
+    }
     function clearMainStallTimer() {
         if (!mainStallTimerId) return;
         w.clearTimeout(mainStallTimerId);
@@ -4110,7 +4126,7 @@
         };
         // IMPLEMENTED: Prepare preview player for quality switch (pause + set quality position).
         A.ReuseFeedPlayerPrepare = function (trackSelectorPos) {
-            ps.qp = typeof trackSelectorPos === 'number' ? trackSelectorPos : -1;
+            ps.qp = normalizeQualityPosition(trackSelectorPos, ps.q.length);
             if (pv) try { pv.pause(); } catch (e) {}
         };
         // IMPLEMENTED: Switch from feed/preview to main player, or restart secondary.
@@ -4174,19 +4190,25 @@
         // Android: ExoPlayer TrackSelector. webOS: video.src swap from parsed playlist.
         A.SetQuality = function (pos) {
             if (!mv || ms.type === 3) return;
-            ms.qp = typeof pos === 'number' ? pos : -1;
+            var requestedPos = pos;
+            ms.qp = normalizeQualityPosition(pos, ms.q.length);
             var tg = sourceFromQuality(ms, mainMaxRes);
+            var currentSrc = (mv.currentSrc || mv.src || '');
+            var sameTarget = !!(tg && (tg === currentSrc || tg === mv.src));
             bridgeDebugLog('set_quality_attempt', {
+                rawPos: requestedPos,
+                rawType: typeof requestedPos,
                 pos: ms.qp,
                 available: ms.q.length,
                 hasTarget: !!tg,
-                sameTarget: !!(tg && tg === mv.src)
+                sameTarget: sameTarget
             });
-            if (!tg || tg === mv.src) return;
+            if (!tg || sameTarget) return;
             ms.resume = ms.type === 2 || ms.type === 3 ? mtime() : 0;
             ms.uri = tg;
             mv.src = tg;
             try { mv.load(); } catch (e) {}
+            tryPlay(mv);
             bridgeDebugLog('set_quality_applied', {
                 pos: ms.qp,
                 available: ms.q.length
