@@ -246,6 +246,7 @@
     var USHER_PLAYLIST_CACHE_TTL_MS = 45000;           // In-memory TTL for service-fetched playlists.
     var USHER_PLAYLIST_CACHE_MAX = 24;                 // Max cached service playlist entries.
     var USHER_PLAYLIST_INFLIGHT_MAX_AGE_MS = 20000;    // Safety prune age for stale in-flight entries.
+    var TTVLOL_DEFAULT_OPTIMIZED_PROXIES = ['firefox.api.cdn-perfprod.com:2023']; // v2 Firefox extension default.
     var PREVIEW_SET_COOLDOWN_MS = 450;                 // Dedup cooldown for repeated setPrev calls.
     var LIFECYCLE_STOP_MIN_HIDDEN_MS = 12000;          // Min hidden time before stopping playback.
     var STALL_PROGRESS_THRESHOLD_MS = 4000;            // No-progress window before stall is considered persistent.
@@ -379,6 +380,53 @@
             if (value === '1' || value === 'true' || value === 'TRUE') return true;
         } catch (e1) {}
         return false;
+    }
+    function parseLocalStorageListValue(value, fallback) {
+        if (typeof value !== 'string') return fallback ? fallback.slice(0) : [];
+        var raw = value.trim();
+        if (!raw) return fallback ? fallback.slice(0) : [];
+        var i;
+        var parsed = null;
+        if (raw.charAt(0) === '[') {
+            try { parsed = JSON.parse(raw); } catch (eJson) { parsed = null; }
+        }
+        var parts = Array.isArray(parsed) ? parsed : raw.split(/[\n,;]+/);
+        var result = [];
+        var seen = {};
+        for (i = 0; i < parts.length; i++) {
+            var item = typeof parts[i] === 'string' ? parts[i].replace(/[\r\n]/g, '').trim() : '';
+            if (!item || seen[item]) continue;
+            seen[item] = true;
+            result.push(item);
+        }
+        return result.length ? result : (fallback ? fallback.slice(0) : []);
+    }
+    function getLocalStorageValue(key) {
+        try {
+            if (!w.localStorage) return '';
+            return w.localStorage.getItem(key) || '';
+        } catch (eStorage) {
+            return '';
+        }
+    }
+    function isTtvLolPlaylistProxyEnabled() {
+        try {
+            if (w.location && typeof w.location.search === 'string' && /(?:\?|&)sttv_ttvlol=0(?:&|$)/i.test(w.location.search)) return false;
+            if (w.location && typeof w.location.search === 'string' && /(?:\?|&)sttv_ttvlol=1(?:&|$)/i.test(w.location.search)) return true;
+        } catch (e0) {}
+        var value = getLocalStorageValue('STTV_TTVLOL_ENABLED');
+        if (value === '0' || value === 'false' || value === 'FALSE') return false;
+        if (value === '1' || value === 'true' || value === 'TRUE') return true;
+        value = getLocalStorageValue('webos_ttv_lol_proxy');
+        if (value === '1') return false;
+        if (value === '2') return true;
+        return true;
+    }
+    function getTtvLolOptimizedProxies() {
+        return parseLocalStorageListValue(
+            getLocalStorageValue('STTV_TTVLOL_PROXIES') || getLocalStorageValue('webos_ttv_lol_proxy_url_value'),
+            TTVLOL_DEFAULT_OPTIMIZED_PROXIES
+        );
     }
     function bridgeDebugLog(event, extra) {
         if (!BRIDGE_DEBUG_ENABLED) return;
@@ -1046,7 +1094,9 @@
     // Returns a version string compatible with the upstream version check format.
     // Android: returns BuildConfig.VERSION_NAME. webOS: synthesized from app version globals.
     function getCompatibleVersion() {
-        var fallback = '3.0.377';
+        // Keep this aligned with app/general/version.js so upstream APK-update
+        // logic does not offer the Android APK on webOS builds.
+        var fallback = '3.0.379';
         try {
             if (!w.version) return fallback;
             var base = String(w.version.VersionBase || '').trim();
@@ -1058,6 +1108,11 @@
         } catch (e) {
             return fallback;
         }
+    }
+    function getCompatiblePublishVersionCode() {
+        var parts = getCompatibleVersion().split('.');
+        var patch = parseInt(parts[2], 10);
+        return isNaN(patch) || patch < 0 ? 0 : patch;
     }
     // =========================================================================
     // Lifecycle Management
@@ -2655,6 +2710,11 @@
         if (!isUsherPlaylistPath(meta.pathLower || '')) return false;
         return String(meta.method || 'GET').toUpperCase() === 'GET';
     }
+    function isLiveUsherPlaylistRequest(meta) {
+        if (!isUsherPlaylistRequest(meta)) return false;
+        var normalizedPath = String(meta.pathLower || '').toLowerCase().split('?')[0];
+        return normalizedPath.indexOf('/api/channel/hls/') === 0;
+    }
     function shouldUseUsherPlaylistCorsFallback(meta, status, text, reason) {
         if (!isUsherPlaylistRequest(meta)) return false;
         var st = parseInt(status, 10) || 0;
@@ -2726,7 +2786,9 @@
         return {
             status: 200,
             responseText: text,
-            url: url
+            url: url,
+            source: typeof payload.source === 'string' ? payload.source : '',
+            proxy: typeof payload.proxy === 'string' ? payload.proxy : ''
         };
     }
     function callUsherPlaylistService(meta, timeoutMs, done) {
@@ -2808,7 +2870,9 @@
                 origin: requestOrigin || '',
                 referer: requestReferer || '',
                 userAgent: requestUserAgent || '',
-                acceptLanguage: requestAcceptLanguage || ''
+                acceptLanguage: requestAcceptLanguage || '',
+                ttvLolEnabled: isTtvLolPlaylistProxyEnabled(),
+                optimizedProxies: getTtvLolOptimizedProxies()
             }));
         } catch (eCall) {
             safeFinish(null, 'service_call_exception');
@@ -2854,6 +2918,8 @@
                 reason: reason || '',
                 status: result && result.status ? result.status : 0,
                 hasPlaylist: !!(result && hasUsablePlaylistBody(result.responseText || '')),
+                source: result && result.source ? result.source : '',
+                proxy: result && result.proxy ? result.proxy : '',
                 url: meta && meta.url ? meta.url : ''
             });
             if (result && result.status === 200 && hasUsablePlaylistBody(result.responseText)) {
@@ -3175,7 +3241,7 @@
         var body = req.body;
         var callback = typeof cb === 'function' ? cb : function () {};
         var meta = buildNetworkRequestMeta(u, method, body);
-        var forceServiceFetch = isForceHlsServiceFetchEnabled();
+        var forceServiceFetch = isForceHlsServiceFetchEnabled() || (isTtvLolPlaylistProxyEnabled() && isLiveUsherPlaylistRequest(meta));
         maybePruneNetworkState();
         var effectiveTimeout = getEffectiveTimeoutMs(to, meta);
         var requestStartedAt = Date.now();
@@ -3276,7 +3342,7 @@
         var method = req.method;
         var body = req.body;
         var meta = buildNetworkRequestMeta(u, method, body);
-        var forceServiceFetch = isForceHlsServiceFetchEnabled();
+        var forceServiceFetch = isForceHlsServiceFetchEnabled() || (isTtvLolPlaylistProxyEnabled() && isLiveUsherPlaylistRequest(meta));
         maybePruneNetworkState();
         var effectiveTimeout = getEffectiveTimeoutMs(to, meta, sync);
         // Stale-while-revalidate: for sync requests, serve cached data immediately
@@ -3519,9 +3585,18 @@
         w.Main_CheckUpdateResult = function (responseText) {
             try {
                 var response = JSON.parse(responseText);
-                if (response && typeof response === 'object' && w.version) {
-                    response.publishVersionCode = typeof w.version.publishVersionCode === 'number' ? w.version.publishVersionCode : 0;
+                if (response && typeof response === 'object') {
+                    response.publishVersionCode = getCompatiblePublishVersionCode();
                     response.ApkUrl = '';
+                    if (w.version && typeof w.version === 'object') {
+                        var localWebTag = parseInt(w.version.WebTag, 10);
+                        var remoteWebTag = parseInt(response.WebTag, 10);
+                        if (!isNaN(localWebTag) && (isNaN(remoteWebTag) || remoteWebTag <= localWebTag)) {
+                            response.WebTag = localWebTag;
+                            response.WebVersion = w.version.WebVersion;
+                            response.changelog = JSON.parse(JSON.stringify(w.version.changelog || []));
+                        }
+                    }
                     return original.call(this, JSON.stringify(response));
                 }
             } catch (e) {}

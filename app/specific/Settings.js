@@ -155,6 +155,22 @@ var Settings_value = {
         values: ['no', 'yes'],
         defaultValue: 1
     },
+    webos_ttv_lol_proxy: {
+        //Migrated to dialog
+        values: ['no', 'yes'],
+        defaultValue: 2
+    },
+    webos_ttv_lol_proxy_url: {
+        //Migrated to dialog
+        values: ['None'],
+        set_values: [''],
+        defaultValue: 1
+    },
+    webos_ttv_lol_proxy_settings: {
+        values: ['None'],
+        set_values: [''],
+        defaultValue: 1
+    },
     proxy_timeout: {
         //Migrated to dialog
         values: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 15, 20, 30],
@@ -986,6 +1002,12 @@ function Settings_SetSettings() {
     div += Settings_Content('speed_adjust', dis_ena, STR_SPEED_ADJUST, STR_SPEED_ADJUST_SUMMARY);
 
     //Dialog settings
+    div += Settings_Content(
+        'webos_ttv_lol_proxy_settings',
+        [STR_ENTER_TO_OPEN],
+        STR_WEBOS_TTVLOL_PROXY_SETTINGS,
+        STR_WEBOS_TTVLOL_PROXY_SETTINGS_SUMMARY
+    );
     //div += Settings_Content('proxy_settings', [STR_ENTER_TO_OPEN], PROXY_SETTINGS, null);
     div += Settings_Content('player_extracodecs', [STR_ENTER_TO_OPEN], STR_PLAYER_EXTRA_CODEC, STR_PLAYER_EXTRA_CODEC_SUMMARY);
     div += Settings_Content('blocked_codecs', [STR_ENTER_TO_OPEN], STR_BLOCKED_CODEC, STR_BLOCKED_CODEC_SUMMARY);
@@ -1156,6 +1178,7 @@ function Settings_SetDefaults() {
     Settings_set_all_notification();
     Settings_SetLang();
     Settings_SetSpeed_adjust();
+    Settings_SetWebOsTtvLolProxy();
 
     Settings_SetResBitRate(0);
 
@@ -1427,6 +1450,7 @@ function Settings_SetDefault(position) {
     else if (position === 'ttv_lolProxy') Settings_set_all_proxy('ttv_lolProxy');
     else if (position === 'k_twitch') Settings_set_all_proxy('k_twitch');
     else if (position === 'T1080') Settings_set_all_proxy('T1080');
+    else if (position === 'webos_ttv_lol_proxy') Settings_SetWebOsTtvLolProxy();
     else if (position === 'vod_seek_min') Settings_check_min_seek();
     else if (position === 'vod_seek_max') Settings_check_max_seek();
     else if (position === 'auto_minimize_inactive') Settings_SetAutoMinimizeTimeout();
@@ -1583,6 +1607,42 @@ function Settings_get_enabled_Proxy() {
     }
 
     return 3;
+}
+
+
+var Settings_WebOsTtvLolProxyDefault = 'firefox.api.cdn-perfprod.com:2023';
+
+function Settings_GetWebOsTtvLolProxyUrl() {
+    return Main_getItemString('webos_ttv_lol_proxy_url_value', Settings_WebOsTtvLolProxyDefault);
+}
+
+function Settings_SetWebOsTtvLolProxy() {
+    Main_setItem('STTV_TTVLOL_ENABLED', Settings_Obj_default('webos_ttv_lol_proxy') ? '1' : '0');
+    Main_setItem('STTV_TTVLOL_PROXIES', Settings_GetWebOsTtvLolProxyUrl());
+}
+
+function Settings_EscapeHtml(value) {
+    return String(value || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function Settings_WebOsTtvLolProxyUrlSummary() {
+    return STR_WEBOS_TTVLOL_PROXY_URL_SUMMARY + STR_BR + STR_BR + Settings_EscapeHtml(Settings_GetWebOsTtvLolProxyUrl());
+}
+
+function Settings_WebOsTtvLolProxyUrlPrompt() {
+    var currentValue = Settings_GetWebOsTtvLolProxyUrl();
+    var nextValue = window.prompt(STR_WEBOS_TTVLOL_PROXY_URL_PROMPT, currentValue);
+    if (nextValue === null) return;
+    nextValue = String(nextValue || '').replace(/[\r\n]+/g, ',').trim();
+    if (!nextValue) nextValue = Settings_WebOsTtvLolProxyDefault;
+    Main_setItem('webos_ttv_lol_proxy_url_value', nextValue);
+    Settings_SetWebOsTtvLolProxy();
+    Main_innerHTML('webos_ttv_lol_proxy_url_summary', Settings_WebOsTtvLolProxyUrlSummary());
 }
 
 function Settings_check_min_seek() {
@@ -2061,6 +2121,7 @@ function Settings_KeyEnter(click) {
     else if (Main_A_includes_B(Settings_value_keys[Settings_cursorY], 'blocked_codecs')) Settings_CodecsShow(click);
     else if (Main_A_includes_B(Settings_value_keys[Settings_cursorY], 'player_extracodecs')) Settings_DialogShowExtraCodecs(click);
     else if (Main_A_includes_B(Settings_value_keys[Settings_cursorY], 'player_bitrate')) Settings_DialogShowBitrate(click);
+    else if (Main_A_includes_B(Settings_value_keys[Settings_cursorY], 'webos_ttv_lol_proxy_settings')) Settings_DialogShowWebOsTtvLolProxy(click);
     else if (Main_A_includes_B(Settings_value_keys[Settings_cursorY], 'proxy_settings')) Settings_DialogShowProxy(click);
     else if (Main_A_includes_B(Settings_value_keys[Settings_cursorY], 'vod_seek')) Settings_vod_seek(click);
     else if (Main_A_includes_B(Settings_value_keys[Settings_cursorY], 'block_qualities')) Settings_block_qualities(click);
@@ -2582,6 +2643,30 @@ function Settings_ForceEnableAnimations() {
     Settings_value.app_animations.defaultValue = 1;
     Main_setItem('app_animations', 2);
     Settings_SetAnimations();
+}
+
+function Settings_DialogShowWebOsTtvLolProxy(click) {
+    var array_no_yes = [STR_NO, STR_YES];
+    Settings_value.webos_ttv_lol_proxy.values = array_no_yes;
+    Settings_value.webos_ttv_lol_proxy_url.values = [STR_ENTER_TO_OPEN];
+
+    var obj = {
+        webos_ttv_lol_proxy: {
+            defaultValue: Settings_value.webos_ttv_lol_proxy.defaultValue,
+            values: Settings_value.webos_ttv_lol_proxy.values,
+            title: STR_WEBOS_TTVLOL_PROXY_ENABLED,
+            summary: STR_WEBOS_TTVLOL_PROXY_ENABLED_SUMMARY
+        },
+        webos_ttv_lol_proxy_url: {
+            defaultValue: Settings_value.webos_ttv_lol_proxy_url.defaultValue,
+            values: Settings_value.webos_ttv_lol_proxy_url.values,
+            title: STR_WEBOS_TTVLOL_PROXY_URL,
+            summary: Settings_WebOsTtvLolProxyUrlSummary(),
+            keyenter: true
+        }
+    };
+
+    Settings_DialogShow(obj, STR_WEBOS_TTVLOL_PROXY_SETTINGS + STR_BR + STR_BR + STR_WEBOS_TTVLOL_PROXY_SETTINGS_SUMMARY, click);
 }
 
 function Settings_DialogShowProxy(click) {
@@ -3696,6 +3781,11 @@ function Settings_DialoghandleKeyDown(event) {
                     Settings_DialogAddBackupAccount();
                 }
 
+                break;
+            }
+
+            if (Settings_DialogValue[Settings_DialogPos] === 'webos_ttv_lol_proxy_url') {
+                Settings_WebOsTtvLolProxyUrlPrompt();
                 break;
             }
 

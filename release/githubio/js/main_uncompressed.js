@@ -740,6 +740,13 @@
         PROXY_SERVICE_OFF,
         PROXY_SETTINGS,
         PROXY_SETTINGS_SUMMARY,
+        STR_WEBOS_TTVLOL_PROXY_SETTINGS,
+        STR_WEBOS_TTVLOL_PROXY_SETTINGS_SUMMARY,
+        STR_WEBOS_TTVLOL_PROXY_ENABLED,
+        STR_WEBOS_TTVLOL_PROXY_ENABLED_SUMMARY,
+        STR_WEBOS_TTVLOL_PROXY_URL,
+        STR_WEBOS_TTVLOL_PROXY_URL_SUMMARY,
+        STR_WEBOS_TTVLOL_PROXY_URL_PROMPT,
         STR_K_TWITCH,
         STR_K_TWITCH_SUMMARY,
         STR_T1080,
@@ -2219,6 +2226,16 @@
         PROXY_SETTINGS = 'Proxy Settings (Internet censorship and related proxy)';
         PROXY_SETTINGS_SUMMARY =
             'Only one proxy can be enable, enables proxy server to get stream links from a different server, that may allow you to see content that is forbidden on yours region and avoid ads, disable this if you have any live stream issue too many or longer buffers, freezes or slow connection that may cause the stream quality to drop.';
+        STR_WEBOS_TTVLOL_PROXY_SETTINGS = 'webOS TTV LOL playlist proxy';
+        STR_WEBOS_TTVLOL_PROXY_SETTINGS_SUMMARY =
+            'Routes live Twitch playlist requests through the TTV LOL v2 Firefox proxy path before falling back to direct Twitch servers.';
+        STR_WEBOS_TTVLOL_PROXY_ENABLED = 'Enable playlist proxy';
+        STR_WEBOS_TTVLOL_PROXY_ENABLED_SUMMARY = 'Disable this if live streams fail, buffer too much, or you want direct Twitch playlists.';
+        STR_WEBOS_TTVLOL_PROXY_URL = 'Proxy server';
+        STR_WEBOS_TTVLOL_PROXY_URL_SUMMARY =
+            'Default: firefox.api.cdn-perfprod.com:2023. You can enter one proxy or multiple proxies separated by comma, semicolon, or new line.';
+        STR_WEBOS_TTVLOL_PROXY_URL_PROMPT =
+            'Enter TTV LOL HTTP(S) proxy server(s). Multiple values can be separated by comma, semicolon, or new line.';
         SEEK_PREVIEW = 'Seek Preview';
         SEEK_PREVIEW_SUMMARY =
             "Allows to control the VOD seek preview image that shows when rewind or fast forward, seek preview isn't available to all VODs.";
@@ -5791,6 +5808,16 @@
         PROXY_SETTINGS = 'Настройки прокси (цензура интернета и связанные прокси)';
         PROXY_SETTINGS_SUMMARY =
             'Можно включить только один прокси, включает прокси-сервер для получения ссылок на стримы с другого сервера, что может позволить вам увидеть контент, запрещённый в вашем регионе, и избежать рекламы. Отключите это, если у вас возникают проблемы с потоковыми трансляциями, такими как слишком много или долгие буферы, зависания или медленное соединение, что может привести к снижению качества трансляции.';
+        STR_WEBOS_TTVLOL_PROXY_SETTINGS = 'webOS TTV LOL прокси плейлистов';
+        STR_WEBOS_TTVLOL_PROXY_SETTINGS_SUMMARY =
+            'Отправляет live playlist-запросы Twitch через прокси-путь TTV LOL v2 Firefox, затем откатывается на прямые серверы Twitch.';
+        STR_WEBOS_TTVLOL_PROXY_ENABLED = 'Включить playlist proxy';
+        STR_WEBOS_TTVLOL_PROXY_ENABLED_SUMMARY = 'Отключи, если стримы не открываются, сильно буферятся или нужны прямые плейлисты Twitch.';
+        STR_WEBOS_TTVLOL_PROXY_URL = 'Прокси-сервер';
+        STR_WEBOS_TTVLOL_PROXY_URL_SUMMARY =
+            'По умолчанию: firefox.api.cdn-perfprod.com:2023. Можно указать один прокси или несколько через запятую, точку с запятой или новую строку.';
+        STR_WEBOS_TTVLOL_PROXY_URL_PROMPT =
+            'Укажи HTTP(S) proxy server(s) для TTV LOL. Несколько значений можно разделить запятой, точкой с запятой или новой строкой.';
         SEEK_PREVIEW = 'Предпросмотр при перемотке';
         SEEK_PREVIEW_SUMMARY = 'Позволяет управлять изображением предпросмотра при перемотке VOD, предпросмотр перемотки доступен не для всех VOD.';
         SEEK_PREVIEW_SINGLE = 'Одно изображение';
@@ -7906,6 +7933,84 @@
      *
      */
 
+    //https://developer.android.com/reference/android/view/KeyEvent
+    //overwrite from java dispatchKeyEvent()
+    var KEY_PAUSE = 83; //overwrite key S = stop because p = play
+    var KEY_PLAY = 80; //overwrite key P = play
+
+    var KEY_STOP = 178;
+    var KEY_PLAYPAUSE = 179;
+
+    var KEY_LEFT = 37;
+    var KEY_UP = 38;
+    var KEY_RIGHT = 39;
+    var KEY_DOWN = 40;
+    var KEY_ENTER = 13;
+
+    var KEY_PG_DOWN = 34;
+    var KEY_PG_UP = 33;
+
+    var KEY_RETURN = 113; //key #F2
+
+    var KEY_KEYBOARD_BACKSPACE = 8; // http://developer.samsung.com/tv/develop/guides/user-interaction/keyboardime
+    var KEY_KEYBOARD_DONE = 13;
+    var KEY_KEYBOARD_SPACE = 32;
+
+    var KEY_MEDIA_NEXT = 176;
+    var KEY_MEDIA_PREVIOUS = 177;
+
+    var KEY_MEDIA_FAST_FORWARD = 228;
+    var KEY_MEDIA_REWIND = 227;
+
+    var KEY_0 = 48;
+    var KEY_1 = 49;
+    var KEY_2 = 50;
+    var KEY_3 = 51;
+    var KEY_4 = 52;
+    var KEY_5 = 53;
+    var KEY_6 = 54;
+    var KEY_7 = 55;
+    var KEY_8 = 56;
+    var KEY_9 = 57;
+
+    var KEY_NUMPAD_0 = 96;
+    var KEY_NUMPAD_1 = 97;
+    var KEY_NUMPAD_2 = 98;
+    var KEY_NUMPAD_3 = 99;
+    var KEY_NUMPAD_4 = 100;
+    var KEY_NUMPAD_5 = 101;
+    var KEY_NUMPAD_6 = 102;
+    var KEY_NUMPAD_7 = 103;
+    var KEY_NUMPAD_8 = 104;
+    var KEY_NUMPAD_9 = 105;
+
+    var KEY_A = 65;
+    var KEY_C = 67;
+    var KEY_E = 69;
+    var KEY_J = 74;
+    var KEY_K = 75;
+    var KEY_T = 84;
+    var KEY_U = 85;
+    /*
+     * Copyright (c) 2017–present Felipe de Leon <fglfgl27@gmail.com>
+     *
+     * This file is part of SmartTwitchTV <https://github.com/fgl27/SmartTwitchTV>
+     *
+     * SmartTwitchTV is free software: you can redistribute it and/or modify
+     * it under the terms of the GNU General Public License as published by
+     * the Free Software Foundation, either version 3 of the License, or
+     * (at your option) any later version.
+     *
+     * SmartTwitchTV is distributed in the hope that it will be useful,
+     * but WITHOUT ANY WARRANTY; without even the implied warranty of
+     * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+     * GNU General Public License for more details.
+     *
+     * You should have received a copy of the GNU General Public License
+     * along with SmartTwitchTV.  If not, see <https://github.com/fgl27/SmartTwitchTV/blob/master/LICENSE>.
+     *
+     */
+
     //Used as based https://kevinfaguiar.github.io/vue-twemoji-picker/docs/emoji-datasets/
     //https://github.com/kevinfaguiar/vue-twemoji-picker/tree/master/emoji-data/en
     //https://emojipedia.org/
@@ -8068,84 +8173,6 @@
         if (!Main_IsOn_OSInterface) calculateFontSize();
     }
     /*
-     * Copyright (c) 2017–present Felipe de Leon <fglfgl27@gmail.com>
-     *
-     * This file is part of SmartTwitchTV <https://github.com/fgl27/SmartTwitchTV>
-     *
-     * SmartTwitchTV is free software: you can redistribute it and/or modify
-     * it under the terms of the GNU General Public License as published by
-     * the Free Software Foundation, either version 3 of the License, or
-     * (at your option) any later version.
-     *
-     * SmartTwitchTV is distributed in the hope that it will be useful,
-     * but WITHOUT ANY WARRANTY; without even the implied warranty of
-     * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-     * GNU General Public License for more details.
-     *
-     * You should have received a copy of the GNU General Public License
-     * along with SmartTwitchTV.  If not, see <https://github.com/fgl27/SmartTwitchTV/blob/master/LICENSE>.
-     *
-     */
-
-    //https://developer.android.com/reference/android/view/KeyEvent
-    //overwrite from java dispatchKeyEvent()
-    var KEY_PAUSE = 83; //overwrite key S = stop because p = play
-    var KEY_PLAY = 80; //overwrite key P = play
-
-    var KEY_STOP = 178;
-    var KEY_PLAYPAUSE = 179;
-
-    var KEY_LEFT = 37;
-    var KEY_UP = 38;
-    var KEY_RIGHT = 39;
-    var KEY_DOWN = 40;
-    var KEY_ENTER = 13;
-
-    var KEY_PG_DOWN = 34;
-    var KEY_PG_UP = 33;
-
-    var KEY_RETURN = 113; //key #F2
-
-    var KEY_KEYBOARD_BACKSPACE = 8; // http://developer.samsung.com/tv/develop/guides/user-interaction/keyboardime
-    var KEY_KEYBOARD_DONE = 13;
-    var KEY_KEYBOARD_SPACE = 32;
-
-    var KEY_MEDIA_NEXT = 176;
-    var KEY_MEDIA_PREVIOUS = 177;
-
-    var KEY_MEDIA_FAST_FORWARD = 228;
-    var KEY_MEDIA_REWIND = 227;
-
-    var KEY_0 = 48;
-    var KEY_1 = 49;
-    var KEY_2 = 50;
-    var KEY_3 = 51;
-    var KEY_4 = 52;
-    var KEY_5 = 53;
-    var KEY_6 = 54;
-    var KEY_7 = 55;
-    var KEY_8 = 56;
-    var KEY_9 = 57;
-
-    var KEY_NUMPAD_0 = 96;
-    var KEY_NUMPAD_1 = 97;
-    var KEY_NUMPAD_2 = 98;
-    var KEY_NUMPAD_3 = 99;
-    var KEY_NUMPAD_4 = 100;
-    var KEY_NUMPAD_5 = 101;
-    var KEY_NUMPAD_6 = 102;
-    var KEY_NUMPAD_7 = 103;
-    var KEY_NUMPAD_8 = 104;
-    var KEY_NUMPAD_9 = 105;
-
-    var KEY_A = 65;
-    var KEY_C = 67;
-    var KEY_E = 69;
-    var KEY_J = 74;
-    var KEY_K = 75;
-    var KEY_T = 84;
-    var KEY_U = 85;
-    /*
      * Copyright (c) 2017-∞ Felipe de Leon <fglfgl27@gmail.com>
      *
      * This file is part of SmartTwitchTV <https://github.com/fgl27/SmartTwitchTV>
@@ -8169,10 +8196,18 @@
     var version = {
         VersionBase: '3.0',
         publishVersionCode: 379, //Always update (+1 to current value) Main_version_java after update publishVersionCode or a major update of the apk is released
-        ApkUrl: 'https://github.com/fgl27/SmartTwitchTV/releases/download/379/SmartTV_twitch_3_0_379.apk',
-        WebVersion: 'March 17 2026',
-        WebTag: 727, //Always update (+1 to current value) Main_version_web after update Main_minversion or a major update of the web part of the app
+        ApkUrl: '',
+        WebVersion: 'April 28 2026',
+        WebTag: 728, //Always update (+1 to current value) Main_version_web after update Main_minversion or a major update of the web part of the app
         changelog: [
+            {
+                title: 'April 28 2026',
+                changes: [
+                    'Add configurable webOS TTV LOL playlist proxy for live streams',
+                    'Route webOS update checks through the xenking fork without offering Android APK updates',
+                    'Keep HEVC playback enabled on webOS devices that reject the original codec hint'
+                ]
+            },
             {
                 title: 'March 17 2026',
                 changes: [
@@ -41834,6 +41869,22 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
             values: ['no', 'yes'],
             defaultValue: 1
         },
+        webos_ttv_lol_proxy: {
+            //Migrated to dialog
+            values: ['no', 'yes'],
+            defaultValue: 2
+        },
+        webos_ttv_lol_proxy_url: {
+            //Migrated to dialog
+            values: ['None'],
+            set_values: [''],
+            defaultValue: 1
+        },
+        webos_ttv_lol_proxy_settings: {
+            values: ['None'],
+            set_values: [''],
+            defaultValue: 1
+        },
         proxy_timeout: {
             //Migrated to dialog
             values: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 15, 20, 30],
@@ -42670,6 +42721,12 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
         div += Settings_Content('speed_adjust', dis_ena, STR_SPEED_ADJUST, STR_SPEED_ADJUST_SUMMARY);
 
         //Dialog settings
+        div += Settings_Content(
+            'webos_ttv_lol_proxy_settings',
+            [STR_ENTER_TO_OPEN],
+            STR_WEBOS_TTVLOL_PROXY_SETTINGS,
+            STR_WEBOS_TTVLOL_PROXY_SETTINGS_SUMMARY
+        );
         //div += Settings_Content('proxy_settings', [STR_ENTER_TO_OPEN], PROXY_SETTINGS, null);
         div += Settings_Content('player_extracodecs', [STR_ENTER_TO_OPEN], STR_PLAYER_EXTRA_CODEC, STR_PLAYER_EXTRA_CODEC_SUMMARY);
         div += Settings_Content('blocked_codecs', [STR_ENTER_TO_OPEN], STR_BLOCKED_CODEC, STR_BLOCKED_CODEC_SUMMARY);
@@ -42840,6 +42897,7 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
         Settings_set_all_notification();
         Settings_SetLang();
         Settings_SetSpeed_adjust();
+        Settings_SetWebOsTtvLolProxy();
 
         Settings_SetResBitRate(0);
 
@@ -43111,6 +43169,7 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
         else if (position === 'ttv_lolProxy') Settings_set_all_proxy('ttv_lolProxy');
         else if (position === 'k_twitch') Settings_set_all_proxy('k_twitch');
         else if (position === 'T1080') Settings_set_all_proxy('T1080');
+        else if (position === 'webos_ttv_lol_proxy') Settings_SetWebOsTtvLolProxy();
         else if (position === 'vod_seek_min') Settings_check_min_seek();
         else if (position === 'vod_seek_max') Settings_check_max_seek();
         else if (position === 'auto_minimize_inactive') Settings_SetAutoMinimizeTimeout();
@@ -43267,6 +43326,43 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
         }
 
         return 3;
+    }
+
+    var Settings_WebOsTtvLolProxyDefault = 'firefox.api.cdn-perfprod.com:2023';
+
+    function Settings_GetWebOsTtvLolProxyUrl() {
+        return Main_getItemString('webos_ttv_lol_proxy_url_value', Settings_WebOsTtvLolProxyDefault);
+    }
+
+    function Settings_SetWebOsTtvLolProxy() {
+        Main_setItem('STTV_TTVLOL_ENABLED', Settings_Obj_default('webos_ttv_lol_proxy') ? '1' : '0');
+        Main_setItem('STTV_TTVLOL_PROXIES', Settings_GetWebOsTtvLolProxyUrl());
+    }
+
+    function Settings_EscapeHtml(value) {
+        return String(value || '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
+    function Settings_WebOsTtvLolProxyUrlSummary() {
+        return STR_WEBOS_TTVLOL_PROXY_URL_SUMMARY + STR_BR + STR_BR + Settings_EscapeHtml(Settings_GetWebOsTtvLolProxyUrl());
+    }
+
+    function Settings_WebOsTtvLolProxyUrlPrompt() {
+        var currentValue = Settings_GetWebOsTtvLolProxyUrl();
+        var nextValue = window.prompt(STR_WEBOS_TTVLOL_PROXY_URL_PROMPT, currentValue);
+        if (nextValue === null) return;
+        nextValue = String(nextValue || '')
+            .replace(/[\r\n]+/g, ',')
+            .trim();
+        if (!nextValue) nextValue = Settings_WebOsTtvLolProxyDefault;
+        Main_setItem('webos_ttv_lol_proxy_url_value', nextValue);
+        Settings_SetWebOsTtvLolProxy();
+        Main_innerHTML('webos_ttv_lol_proxy_url_summary', Settings_WebOsTtvLolProxyUrlSummary());
     }
 
     function Settings_check_min_seek() {
@@ -43753,6 +43849,7 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
         else if (Main_A_includes_B(Settings_value_keys[Settings_cursorY], 'blocked_codecs')) Settings_CodecsShow(click);
         else if (Main_A_includes_B(Settings_value_keys[Settings_cursorY], 'player_extracodecs')) Settings_DialogShowExtraCodecs(click);
         else if (Main_A_includes_B(Settings_value_keys[Settings_cursorY], 'player_bitrate')) Settings_DialogShowBitrate(click);
+        else if (Main_A_includes_B(Settings_value_keys[Settings_cursorY], 'webos_ttv_lol_proxy_settings')) Settings_DialogShowWebOsTtvLolProxy(click);
         else if (Main_A_includes_B(Settings_value_keys[Settings_cursorY], 'proxy_settings')) Settings_DialogShowProxy(click);
         else if (Main_A_includes_B(Settings_value_keys[Settings_cursorY], 'vod_seek')) Settings_vod_seek(click);
         else if (Main_A_includes_B(Settings_value_keys[Settings_cursorY], 'block_qualities')) Settings_block_qualities(click);
@@ -44275,6 +44372,30 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
         Settings_value.app_animations.defaultValue = 1;
         Main_setItem('app_animations', 2);
         Settings_SetAnimations();
+    }
+
+    function Settings_DialogShowWebOsTtvLolProxy(click) {
+        var array_no_yes = [STR_NO, STR_YES];
+        Settings_value.webos_ttv_lol_proxy.values = array_no_yes;
+        Settings_value.webos_ttv_lol_proxy_url.values = [STR_ENTER_TO_OPEN];
+
+        var obj = {
+            webos_ttv_lol_proxy: {
+                defaultValue: Settings_value.webos_ttv_lol_proxy.defaultValue,
+                values: Settings_value.webos_ttv_lol_proxy.values,
+                title: STR_WEBOS_TTVLOL_PROXY_ENABLED,
+                summary: STR_WEBOS_TTVLOL_PROXY_ENABLED_SUMMARY
+            },
+            webos_ttv_lol_proxy_url: {
+                defaultValue: Settings_value.webos_ttv_lol_proxy_url.defaultValue,
+                values: Settings_value.webos_ttv_lol_proxy_url.values,
+                title: STR_WEBOS_TTVLOL_PROXY_URL,
+                summary: Settings_WebOsTtvLolProxyUrlSummary(),
+                keyenter: true
+            }
+        };
+
+        Settings_DialogShow(obj, STR_WEBOS_TTVLOL_PROXY_SETTINGS + STR_BR + STR_BR + STR_WEBOS_TTVLOL_PROXY_SETTINGS_SUMMARY, click);
     }
 
     function Settings_DialogShowProxy(click) {
@@ -45389,6 +45510,11 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
                         Settings_DialogAddBackupAccount();
                     }
 
+                    break;
+                }
+
+                if (Settings_DialogValue[Settings_DialogPos] === 'webos_ttv_lol_proxy_url') {
+                    Settings_WebOsTtvLolProxyUrlPrompt();
                     break;
                 }
 
