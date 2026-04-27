@@ -39,7 +39,7 @@ npm run webos:remove
 - Artifact generation script:
   - `npm run release:artifacts`
 - Stable manifest URL contract:
-  - `https://github.com/TBSniller/SmartTwitchWebOSTV/releases/latest/download/com.tbsniller.smarttwitchwebostv.manifest.json`
+  - `https://github.com/xenking/SmartTwitchWebOSTV/releases/latest/download/com.tbsniller.smarttwitchwebostv.manifest.json`
 
 ## GitHub Release Automation
 

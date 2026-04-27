@@ -137,7 +137,7 @@
         }
         return '/SmartTwitchWebOSTV';
     }
-    var FORK_BASE_URL = (w.location && w.location.origin ? w.location.origin : 'https://tbsniller.github.io') + detectRepoBasePath();
+    var FORK_BASE_URL = (w.location && w.location.origin ? w.location.origin : 'https://xenking.github.io') + detectRepoBasePath();
     var FORK_RELEASE_URL = FORK_BASE_URL + '/release/index.html';
     var FORK_VERSION_URL = FORK_BASE_URL + '/release/githubio/version/version.json';
     // --- Multi-stream warning state ---
@@ -169,6 +169,7 @@
     var mainHardReloadCount = 0;      // Number of hard reloads (mv.load) in current cooldown window.
     var mainLastHardReloadMs = 0;     // Wall-clock timestamp of most recent hard reload.
     var mainDecoderJamRecoveryTimerId = 0; // Timer id for decoder-jam soft recovery follow-up.
+    var sessionRejectedVideoCodecKeys = {}; // Codec keys rejected after runtime playback failure.
 
     // --- Loading indicator state ---
     var mainLoadingSinceAt = 0;       // When main loader was first shown (for hysteresis).
@@ -939,31 +940,87 @@
             c.indexOf('vorbis') === 0
         );
     }
-    // Probes whether all video codecs in a comma-separated list are supported.
-    // Uses a cached <video> element (codecProbeElement) to avoid per-call allocation.
-    function isCodecSetSupported(codecs) {
-        if (!codecs) return true;
+    function getCodecProbeElement() {
+        if (!codecProbeElement && w.document && w.document.createElement) codecProbeElement = w.document.createElement('video');
+        return codecProbeElement;
+    }
+    function getVideoCodecParts(codecs) {
+        if (!codecs) return [];
+        return String(codecs)
+            .split(',')
+            .map(function (s) {
+                return s.trim();
+            })
+            .filter(function (s) {
+                return !!s && !isAudioCodec(s);
+            });
+    }
+    function normalizeCodecKey(codec) {
+        return String(codec || '').toLowerCase().split('.')[0];
+    }
+    function isCodecSessionRejected(codec) {
+        var key = normalizeCodecKey(codec);
+        return !!(key && sessionRejectedVideoCodecKeys[key]);
+    }
+    function canPlayVideoCodec(codec) {
+        if (!codec) return true;
+        if (isCodecSessionRejected(codec)) return false;
         try {
-            if (!codecProbeElement && w.document && w.document.createElement) codecProbeElement = w.document.createElement('video');
-            var probe = codecProbeElement;
+            var probe = getCodecProbeElement();
             if (!probe || typeof probe.canPlayType !== 'function') return true;
-            var parts = String(codecs)
-                .split(',')
-                .map(function (s) {
-                    return s.trim();
-                })
-                .filter(function (s) {
-                    return !!s;
-                });
-            var i;
-            for (i = 0; i < parts.length; i++) {
-                if (isAudioCodec(parts[i])) continue;
-                if (!probe.canPlayType('video/mp4; codecs="' + parts[i] + '"')) return false;
-            }
-            return true;
+            return !!probe.canPlayType('video/mp4; codecs="' + codec + '"');
         } catch (e) {
             return true;
         }
+    }
+    function markCodecSetRejected(codecs, reason) {
+        var parts = getVideoCodecParts(codecs);
+        var marked = [];
+        var i;
+        for (i = 0; i < parts.length; i++) {
+            var key = normalizeCodecKey(parts[i]);
+            if (!key || sessionRejectedVideoCodecKeys[key]) continue;
+            sessionRejectedVideoCodecKeys[key] = true;
+            marked.push(key);
+        }
+        if (marked.length) {
+            bridgeDebugLog('codec_session_rejected', {
+                reason: reason || 'unknown',
+                codecs: codecs || '',
+                keys: marked.join(',')
+            });
+        }
+        return marked.length > 0;
+    }
+    // Probes whether all video codecs in a comma-separated list are supported.
+    // Uses a cached <video> element (codecProbeElement) to avoid per-call allocation.
+    function isCodecSetSupported(codecs) {
+        var parts = getVideoCodecParts(codecs);
+        if (!parts.length) return true;
+        var i;
+        for (i = 0; i < parts.length; i++) {
+            if (!canPlayVideoCodec(parts[i])) return false;
+        }
+        return true;
+    }
+    function isCodecTypeSupported(codecType) {
+        var ct = String(codecType || 'avc').toLowerCase();
+        var probes = ct === 'hevc' ? ['hvc1.1.6.L93.B0', 'hev1.1.6.L93.B0', 'hvc1.1.6.L120.B0'] : ct === 'av01' ? ['av01.0.05M.08', 'av01.0.08M.08'] : ['avc1.640028', 'avc1.4d401f', 'avc1.42E01E'];
+        var i;
+        for (i = 0; i < probes.length; i++) {
+            if (canPlayVideoCodec(probes[i])) return true;
+        }
+        return false;
+    }
+    function buildCodecCapabilityPayload(codecType) {
+        var ct = String(codecType || 'avc').toLowerCase();
+        if (!isCodecTypeSupported(ct)) {
+            bridgeDebugLog('codec_capability_unsupported', {type: ct});
+            return '[]';
+        }
+        var mime = ct === 'hevc' ? 'video/hevc' : ct === 'av01' ? 'video/av01' : 'video/avc';
+        var n = 'webos.' + ct + '.decoder';
+        return JSON.stringify([{CanonicalName: n, instances: 2, isHardwareAccelerated: true, isSoftwareOnly: false, name: n, nameType: n + mime, type: mime, supportsIsHw: true, resolutions: 'Unknown', maxresolution: 'Unknown', maxbitrate: 'Unknown', maxlevel: 'Unknown'}]);
     }
     // Resolves a relative URL to absolute.
     function toAbsoluteUrl(url, base) {
@@ -1228,6 +1285,18 @@
         out.sort(function (a, b) {
             return b.resolution - a.resolution;
         });
+        var supportedOut = out.filter(function (item) {
+            return isCodecSetSupported(item.codecs);
+        });
+        if (supportedOut.length) {
+            if (supportedOut.length !== out.length) {
+                bridgeDebugLog('playlist_unsupported_codecs_filtered', {
+                    before: out.length,
+                    after: supportedOut.length
+                });
+            }
+            out = supportedOut;
+        }
         return out;
     }
     // =========================================================================
@@ -1362,6 +1431,7 @@
         mv.addEventListener('ended', function () {
             clearMainStallTimer();
             clearMainDecoderJamRecoveryTimer();
+            if (ms.type === 1 && mainLastCurrentTime < 1 && retryMainWithCodecFallback('live_ended_before_progress')) return;
             call('Play_PannelEndStart', [ms.type, 0, 0]);
         });
         // error: playback error. Retry up to 2x, then escalate to upstream failure handler.
@@ -1370,6 +1440,7 @@
             clearMainDecoderJamRecoveryTimer();
             setMainLoading(false);
             if (mv && mv.error && mv.error.code === 1) return;
+            if (retryMainWithCodecFallback('main_media_error')) return;
             if (retryMainPlayback()) return;
             handleMainPlaybackFailure(1, mv && mv.error ? mv.error.code || 0 : 0);
         });
@@ -1870,30 +1941,59 @@
         }
         if (pv) { var s = clamp(ps.slot, 1, 3); pv.volume = clamp((audioEnabled[s] ? audioVolumes[s] : 0) * previewScale, 0, 1); }
     }
-    function pickFromMaster(rawUri, list, maxRes) {
-        if (list && list.length) {
-            var supported = list.filter(function (item) {
-                return isCodecSetSupported(item.codecs);
-            });
-            var candidates = supported.length ? supported : list;
-            if (maxRes > 0) {
-                var i;
-                for (i = 0; i < candidates.length; i++) {
-                    if (candidates[i].resolution > 0 && candidates[i].resolution <= maxRes) return candidates[i].url;
-                }
-                return candidates[candidates.length - 1].url;
-            }
-            return candidates[0].url;
-        }
-        return rawUri || '';
-    }
     // Selects the best quality variant URL from the parsed playlist.
     // Android: ExoPlayer TrackSelector handles quality. webOS: manual URL selection.
     function sourceFromQuality(state, maxRes) {
         if (!state) return '';
-        if (state.qp >= 0 && state.q[state.qp]) return state.q[state.qp].url;
-        if (state.rawUri && (!maxRes || maxRes <= 0)) return state.rawUri;
-        return pickFromMaster(state.rawUri, state.q, maxRes);
+        var selected = null;
+        if (state.qp >= 0 && state.q[state.qp] && isCodecSetSupported(state.q[state.qp].codecs)) {
+            selected = state.q[state.qp];
+        } else if (state.q && state.q.length) {
+            var supported = state.q.filter(function (item) {
+                return isCodecSetSupported(item.codecs);
+            });
+            var candidates = supported.length ? supported : state.q;
+            if (maxRes > 0) {
+                var i;
+                for (i = 0; i < candidates.length; i++) {
+                    if (candidates[i].resolution > 0 && candidates[i].resolution <= maxRes) {
+                        selected = candidates[i];
+                        break;
+                    }
+                }
+                if (!selected) selected = candidates[candidates.length - 1];
+            } else {
+                selected = candidates[0];
+            }
+        }
+        if (selected) {
+            state.activeCodecs = selected.codecs || '';
+            return selected.url || '';
+        }
+        state.activeCodecs = '';
+        return state.rawUri || '';
+    }
+    function retryMainWithCodecFallback(reason) {
+        if (!mv || !ms || !ms.activeCodecs) return false;
+        var previousUri = ms.uri || mv.currentSrc || mv.src || '';
+        if (!markCodecSetRejected(ms.activeCodecs, reason)) return false;
+        var fallback = sourceFromQuality(ms, mainMaxRes);
+        if (!fallback || fallback === previousUri) return false;
+        bridgeDebugLog('main_codec_fallback_retry', {
+            reason: reason || 'unknown',
+            from: previousUri,
+            to: fallback,
+            codecs: ms.activeCodecs || ''
+        });
+        ms.uri = fallback;
+        mainErrorCount = 0;
+        resetMainRecoveryState();
+        requestMainLoadingShow();
+        mv.src = fallback;
+        try { mv.load(); } catch (e) {}
+        tryPlay(mv);
+        applyAudio();
+        return true;
     }
     function normalizeQualityPosition(pos, listLength) {
         var parsed = -1;
@@ -2253,6 +2353,7 @@
         ms.playlist = '';
         ms.q = [];
         ms.qp = -1;
+        ms.activeCodecs = '';
         ms.resume = 0;
         mainDurationMsCached = 0;
         liveLatencyOffsetMainMs = 0;
@@ -2264,6 +2365,7 @@
         ps.playlist = '';
         ps.q = [];
         ps.qp = -1;
+        ps.activeCodecs = '';
         ps.mode = 'preview';
         ps.slot = 1;
         ps.multi = 1;
@@ -2292,6 +2394,7 @@
         ms.playlist = pl || '';
         ms.q = parseQ(ms.playlist, ms.rawUri);
         ms.qp = -1;
+        ms.activeCodecs = '';
         ms.resume = rs > 0 ? rs : 0;
         bridgeDebugLog('main_playlist_parsed', {
             count: ms.q.length,
@@ -2352,6 +2455,7 @@
         ps.playlist = pl || '';
         ps.q = parseQ(ps.playlist, ps.rawUri);
         ps.qp = -1;
+        ps.activeCodecs = '';
         ps.resume = rs > 0 ? rs : 0;
         ps.mode = mode;
         ps.slot = slot;
@@ -4656,8 +4760,8 @@
         A.deviceIsTV = function () { return true; };
         // IMPLEMENTED: Returns User-Agent string as webview version surrogate.
         A.getWebviewVersion = function () { return ua || ''; };
-        // IMPLEMENTED: Returns synthetic codec capability payload for upstream codec/settings UI.
-        A.getcodecCapabilities = function (ct) { var mime = ct === 'hevc' ? 'video/hevc' : ct === 'av01' ? 'video/av01' : 'video/avc'; var n = 'webos.' + (ct || 'avc') + '.decoder'; return JSON.stringify([{CanonicalName: n, instances: 2, isHardwareAccelerated: true, isSoftwareOnly: false, name: n, nameType: n + mime, type: mime, supportsIsHw: true, resolutions: 'Unknown', maxresolution: 'Unknown', maxbitrate: 'Unknown', maxlevel: 'Unknown'}]); };
+        // IMPLEMENTED: Returns codec capability payload for upstream codec/settings UI based on HTML5 media probing.
+        A.getcodecCapabilities = function (ct) { return buildCodecCapabilityPayload(ct); };
         // NO-OP: Android reads accessibility service state; webOS bridge does not expose that signal.
         A.isAccessibilitySettingsOn = function () { return false; };
         // IMPLEMENTED (compat): Notification permission considered granted to avoid upstream gating.

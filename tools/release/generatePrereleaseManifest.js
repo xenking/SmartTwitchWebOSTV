@@ -3,9 +3,9 @@ const path = require('path');
 const crypto = require('crypto');
 
 const root = path.resolve(__dirname, '..', '..');
-const sourceRepoUrl = 'https://github.com/TBSniller/SmartTwitchWebOSTV';
+const sourceRepoUrl = 'https://github.com/xenking/SmartTwitchWebOSTV';
 const defaultBuildDir = path.join(root, 'build');
-const fallbackIconUri = 'https://raw.githubusercontent.com/TBSniller/SmartTwitchWebOSTV/master/release/githubio/images/icon_circle.png';
+const fallbackIconUri = 'https://raw.githubusercontent.com/xenking/SmartTwitchWebOSTV/master/release/githubio/images/icon_circle.png';
 
 function parseArgs(argv) {
     const args = {

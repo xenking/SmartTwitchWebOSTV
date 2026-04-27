@@ -16,7 +16,7 @@ webOS gaps and Android -> webOS differences:
 Open Homebrew Channel and install SmartTwitchWebOSTV directly from there.  
   
 ### Manual way
-First you will have to [build](https://github.com/TBSniller/SmartTwitchWebOSTV#development) it from scratch, or download pre-compiled IPK from [releases](https://github.com/TBSniller/SmartTwitchWebOSTV/releases).  
+First you will have to [build](https://github.com/xenking/SmartTwitchWebOSTV#development) it from scratch, or download pre-compiled IPK from [releases](https://github.com/xenking/SmartTwitchWebOSTV/releases).  
   
 ```
 # Copy IPK to TV 
@@ -68,7 +68,7 @@ To build SmartTwitchWebOSTV you will need:
 We have tried to make build process as easy as possible. After building all files can be found in `./build`.
 ```
 # Clone project and submodules
-git clone https://github.com/TBSniller/SmartTwitchWebOSTV.git
+git clone https://github.com/xenking/SmartTwitchWebOSTV.git
 cd ./SmartTwitchWebOSTV
 
 # Install node dependencies
