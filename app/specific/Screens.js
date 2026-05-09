@@ -1251,6 +1251,7 @@ function Screens_LoadPreview(key) {
 
     if (
         ScreenObj[key].PreviewEnable &&
+        OSInterface_CanStartSmallPreview() &&
         !Main_isStopped &&
         Screens_IsInUse(key) &&
         Screens_ObjNotNull(key) &&

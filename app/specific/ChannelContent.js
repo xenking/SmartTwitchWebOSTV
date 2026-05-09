@@ -629,6 +629,7 @@ function ChannelContent_LoadPreview() {
         !Main_isStopped &&
         !ChannelContent_isoffline &&
         Settings_Obj_default('show_live_player') &&
+        OSInterface_CanStartSmallPreview() &&
         Main_isScene1DocVisible() &&
         !Sidepannel_isShowingUserLive() &&
         !Sidepannel_isShowingMenus() &&

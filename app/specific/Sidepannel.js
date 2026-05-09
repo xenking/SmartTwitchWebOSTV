@@ -234,7 +234,7 @@ function Sidepannel_UpdateThumb() {
     if (Sidepannel_isShowingUserLive()) {
         Main_RemoveClassWithEle(Sidepannel_ThumbDoc, 'opacity_zero');
 
-        if (!Main_isStopped && Settings_Obj_default('show_side_player')) {
+        if (!Main_isStopped && Settings_Obj_default('show_side_player') && OSInterface_CanStartSmallPreview()) {
             if (Sidepannel_ObjNotNull()) {
                 var ChannelId = UserLiveFeed_DataObj[UserLiveFeedobj_UserLivePos][Sidepannel_PosFeed][14];
 

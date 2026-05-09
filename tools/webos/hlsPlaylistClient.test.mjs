@@ -92,6 +92,40 @@ const vodUrl = 'https://usher.ttvnw.net/vod/12345.m3u8?sig=s&token=t';
   assert.match(bridgeSource, /3\.0\.379/);
   assert.match(bridgeSource, /remoteWebTag <= localWebTag/);
 
+  const controlsSource = fs.readFileSync('app/specific/PlayEtc.js', 'utf8');
+  assert.match(controlsSource, /Play_controls\[Play_controlsExternal\] = \{/);
+  assert.ok(
+    controlsSource.includes('ShowInLive: false,\n        ShowInVod: false,\n        ShowInClip: false'),
+    'external player control stays hidden in live, VOD, and clip panels'
+  );
+  assert.match(bridgeSource, /STTV_WEBOS_PREVIEW_DEFAULTS_RESTORED/);
+  assert.match(bridgeSource, /CanStartSmallPreview/);
+  assert.match(bridgeSource, /PREVIEW_VIDEO_Z_INDEX/);
+  assert.match(bridgeSource, /appendChild\(pv\)/);
+  assert.match(bridgeSource, /pv\.muted = false/);
+  assert.match(bridgeSource, /isSingleSmallPreviewMode/);
+  assert.match(bridgeSource, /var previewEnabled = !!audioEnabled\[s\] \|\| isSingleSmallPreviewMode\(ps\.mode\)/);
+  assert.match(bridgeSource, /applyPreviewModeLayout\(\);\n            applyAudio\(\);/);
+  assert.match(bridgeSource, /mainPauseRequested = false/);
+  assert.match(bridgeSource, /function handleMainPlaybackFinished\(failType, errorCode\)/);
+  assert.match(bridgeSource, /call\('Play_PannelEndStart', \[type, ft, ec\]\)/);
+  assert.doesNotMatch(
+    bridgeSource,
+    /function handleMainPlaybackFailure[\s\S]*?Play_CheckIfIsLiveClean[\s\S]*?function scheduleMainStallCheck/,
+    'main playback failures must use Play_PannelEndStart, not preview-clean flow'
+  );
+  assert.match(bridgeSource, /A\.StartFeedPlayer = function \(uri, playlist, position, resumePosition, isVod\)/);
+  assert.match(bridgeSource, /A\.StartSidePanelPlayer = function \(uri, playlist\)/);
+  assert.match(bridgeSource, /A\.StartScreensPlayer = function \(uri, playlist, resumePosition, bottom, right, left, webHeight, whoCalled, isBig\)/);
+  assert.match(bridgeSource, /instances: 2/);
+  assert.match(bridgeSource, /mode === 'multi' \|\| mode === 'extra' \|\| mode === 'feed' \|\| mode === 'side' \|\| mode === 'screens'/);
+
+  const osInterfaceSource = fs.readFileSync('app/specific/OSInterface.js', 'utf8');
+  assert.match(osInterfaceSource, /OSInterface_CanStartSmallPreview/);
+
+  const userLiveFeedSource = fs.readFileSync('app/specific/UserLiveFeed.js', 'utf8');
+  assert.match(userLiveFeedSource, /OSInterface_CanStartSmallPreview\(\)/);
+
   const versionSource = fs.readFileSync('app/general/version.js', 'utf8');
   assert.match(versionSource, /April 28 2026/);
   assert.match(versionSource, /WebTag: 728/);

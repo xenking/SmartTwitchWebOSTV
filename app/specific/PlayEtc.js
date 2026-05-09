@@ -2310,11 +2310,11 @@ function Play_MakeControls() {
 
     Play_controls[Play_controlsExternal] = {
         //External
-        ShowInLive: true,
-        ShowInVod: true,
-        ShowInClip: true,
-        ShowInPP: true,
-        ShowInMulti: true,
+        ShowInLive: false,
+        ShowInVod: false,
+        ShowInClip: false,
+        ShowInPP: false,
+        ShowInMulti: false,
         ShowInChat: false,
         ShowInAudio: false,
         ShowInAudioPP: false,

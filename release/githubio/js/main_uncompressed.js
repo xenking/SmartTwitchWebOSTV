@@ -12463,6 +12463,7 @@
             !Main_isStopped &&
             !ChannelContent_isoffline &&
             Settings_Obj_default('show_live_player') &&
+            OSInterface_CanStartSmallPreview() &&
             Main_isScene1DocVisible() &&
             !Sidepannel_isShowingUserLive() &&
             !Sidepannel_isShowingMenus() &&
@@ -21321,6 +21322,14 @@
         if (Main_IsOn_OSInterface) Android.SetPreviewOthersAudio(volume * Settings_VolumeScale);
     }
 
+    function OSInterface_CanStartSmallPreview() {
+        if (!Main_IsOn_OSInterface) return false;
+
+        if (Android.CanStartSmallPreview) return Android.CanStartSmallPreview();
+
+        return true;
+    }
+
     //public void StartFeedPlayer(String uri, String mainPlaylistString, int position, long resumePosition, boolean isVod)
     //uri =  the url of the playlist or the clip
     //mainPlaylistString = the stringify version of the url playlist content
@@ -27639,11 +27648,11 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
 
         Play_controls[Play_controlsExternal] = {
             //External
-            ShowInLive: true,
-            ShowInVod: true,
-            ShowInClip: true,
-            ShowInPP: true,
-            ShowInMulti: true,
+            ShowInLive: false,
+            ShowInVod: false,
+            ShowInClip: false,
+            ShowInPP: false,
+            ShowInMulti: false,
             ShowInChat: false,
             ShowInAudio: false,
             ShowInAudioPP: false,
@@ -34913,6 +34922,7 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
 
         if (
             ScreenObj[key].PreviewEnable &&
+            OSInterface_CanStartSmallPreview() &&
             !Main_isStopped &&
             Screens_IsInUse(key) &&
             Screens_ObjNotNull(key) &&
@@ -46648,7 +46658,7 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
         if (Sidepannel_isShowingUserLive()) {
             Main_RemoveClassWithEle(Sidepannel_ThumbDoc, 'opacity_zero');
 
-            if (!Main_isStopped && Settings_Obj_default('show_side_player')) {
+            if (!Main_isStopped && Settings_Obj_default('show_side_player') && OSInterface_CanStartSmallPreview()) {
                 if (Sidepannel_ObjNotNull()) {
                     var ChannelId = UserLiveFeed_DataObj[UserLiveFeedobj_UserLivePos][Sidepannel_PosFeed][14];
 
@@ -48168,6 +48178,7 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
             pos === UserLiveFeed_FeedPosX &&
             (!Play_isEndDialogVisible() || !Play_EndFocus) &&
             Settings_Obj_default('show_feed_player') &&
+            OSInterface_CanStartSmallPreview() &&
             UserLiveFeed_obj[UserLiveFeed_FeedPosX].checkPreview &&
             (!Play_MultiEnable || !Settings_Obj_default('disable_feed_player_multi')) &&
             UserLiveFeed_MaxInstances()
