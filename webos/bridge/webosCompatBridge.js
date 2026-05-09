@@ -126,6 +126,7 @@
     var MULTISTREAM_NOTICE_COOLDOWN_MS = 3000;
     var MULTISTREAM_NOTICE_MESSAGE = 'webOS limitation: Multi/PiP playback is not available. Using single-player mode.';
     var MULTISTREAM_FAIL_MESSAGE = 'webOS limitation: Multi/PiP playback is not available.';
+    var LOCAL_ARCHIVE_SETTINGS_KEY = 'local_archive_settings';
     var keyUiOpacity = 1;       // Keys overlay opacity (0-1). Android: SetKeysOpacity native call.
     // Device info cache — read once from PalmSystem.deviceInfo at init.
     // Android: Build.MODEL / Build.MANUFACTURER accessed via Java bridge.
@@ -338,6 +339,7 @@
         pendingOriginalLoad: null,
         suppressMatch: false,
         switching: false,
+        settingsPatched: false,
         controlsPatched: false,
         vodPatched: false,
         controlsPosition: -1,
@@ -466,6 +468,24 @@
         var endpoint = normalizeLocalArchiveEndpoint(getLocalStorageValue(LOCAL_ARCHIVE_ENDPOINT_KEY));
         if (!endpoint) endpoint = normalizeLocalArchiveEndpoint(getLocalStorageValue(LOCAL_ARCHIVE_ENDPOINT_LEGACY_KEY));
         return endpoint;
+    }
+    function setLocalArchiveEndpoint(endpoint) {
+        endpoint = normalizeLocalArchiveEndpoint(endpoint);
+        localVodOverride.endpoint = endpoint;
+        localVodOverride.match = null;
+        localVodOverride.twitchMeta = null;
+        localVodOverride.source = 'twitch';
+        try {
+            if (w.localStorage) {
+                if (endpoint) {
+                    w.localStorage.setItem(LOCAL_ARCHIVE_ENDPOINT_KEY, endpoint);
+                    w.localStorage.setItem(LOCAL_ARCHIVE_ENDPOINT_LEGACY_KEY, endpoint);
+                } else {
+                    w.localStorage.removeItem(LOCAL_ARCHIVE_ENDPOINT_KEY);
+                    w.localStorage.removeItem(LOCAL_ARCHIVE_ENDPOINT_LEGACY_KEY);
+                }
+            }
+        } catch (e) {}
     }
     function localArchiveEndpoint() {
         localVodOverride.endpoint = getLocalArchiveEndpoint();
@@ -801,6 +821,59 @@
         localVodOverride.switching = false;
         localVodRefreshControlLabel();
     }
+    function patchLocalVodSettings() {
+        if (localVodOverride.settingsPatched) return true;
+        if (!w.Settings_value || typeof w.Settings_SetSettings !== 'function' || typeof w.Settings_KeyEnter !== 'function' || typeof w.Settings_DivOptionWithSummary !== 'function') return false;
+        if (!w.Settings_value[LOCAL_ARCHIVE_SETTINGS_KEY]) {
+            w.Settings_value[LOCAL_ARCHIVE_SETTINGS_KEY] = {values: ['Open'], defaultValue: 0};
+        }
+        if (!w.Settings_SetSettings.__sttvLocalVodPatched) {
+            var originalSetSettings = w.Settings_SetSettings;
+            w.Settings_SetSettings = function () {
+                var result = originalSetSettings.apply(this, arguments);
+                try {
+                    var settingsMain = w.document.getElementById('settings_main');
+                    if (settingsMain && !w.document.getElementById(LOCAL_ARCHIVE_SETTINGS_KEY + '_div')) {
+                        var html = w.Settings_DivOptionWithSummary(LOCAL_ARCHIVE_SETTINGS_KEY, 'Local VOD archive endpoint', 'LAN archiver URL used to auto-match and override Twitch VOD playback.');
+                        var anchor = w.document.getElementById('vod_seek_div') || w.document.getElementById('webos_ttv_lol_proxy_settings_div');
+                        if (anchor && anchor.insertAdjacentHTML) anchor.insertAdjacentHTML('afterend', html);
+                        else settingsMain.insertAdjacentHTML('beforeend', html);
+                        if (w.Settings_value_keys) {
+                            var existing = w.Settings_value_keys.indexOf(LOCAL_ARCHIVE_SETTINGS_KEY);
+                            if (existing >= 0) w.Settings_value_keys.splice(existing, 1);
+                            var anchorKey = w.Settings_value_keys.indexOf('vod_seek');
+                            if (anchorKey < 0) anchorKey = w.Settings_value_keys.indexOf('webos_ttv_lol_proxy_settings');
+                            if (anchorKey >= 0) w.Settings_value_keys.splice(anchorKey + 1, 0, LOCAL_ARCHIVE_SETTINGS_KEY);
+                            else w.Settings_value_keys.push(LOCAL_ARCHIVE_SETTINGS_KEY);
+                            w.Settings_positions_length = w.Settings_value_keys.length;
+                        }
+                    }
+                } catch (e) {}
+                return result;
+            };
+            w.Settings_SetSettings.__sttvLocalVodPatched = true;
+        }
+        if (!w.Settings_KeyEnter.__sttvLocalVodPatched) {
+            var originalKeyEnter = w.Settings_KeyEnter;
+            w.Settings_KeyEnter = function () {
+                try {
+                    if (w.Settings_value_keys && w.Settings_value_keys[w.Settings_cursorY] === LOCAL_ARCHIVE_SETTINGS_KEY) {
+                        var current = localArchiveEndpoint();
+                        var next = w.prompt ? w.prompt('Local archive endpoint', current || 'http://192.168.1.50:8080') : null;
+                        if (next !== null) {
+                            setLocalArchiveEndpoint(next);
+                            localVodShowWarning(localArchiveEndpoint() ? 'Local archive endpoint saved' : 'Local archive disabled');
+                        }
+                        return;
+                    }
+                } catch (e) {}
+                return originalKeyEnter.apply(this, arguments);
+            };
+            w.Settings_KeyEnter.__sttvLocalVodPatched = true;
+        }
+        localVodOverride.settingsPatched = true;
+        return true;
+    }
     function patchLocalVodControls() {
         if (localVodOverride.controlsPatched) return true;
         if (typeof w.Play_MakeControls !== 'function' || !w.Play_controls || typeof w.temp_controls_pos === 'undefined') return false;
@@ -875,9 +948,10 @@
     }
     function localVodPatchTick() {
         localVodOverride.patchAttempts += 1;
+        patchLocalVodSettings();
         patchLocalVodControls();
         patchLocalVodPlayback();
-        if (localVodOverride.controlsPatched && localVodOverride.vodPatched && localVodOverride.patchAttempts >= LOCAL_VOD_MAX_PATCH_ATTEMPTS) {
+        if (localVodOverride.settingsPatched && localVodOverride.controlsPatched && localVodOverride.vodPatched && localVodOverride.patchAttempts >= LOCAL_VOD_MAX_PATCH_ATTEMPTS) {
             if (localVodOverride.patchTimerId) w.clearInterval(localVodOverride.patchTimerId);
             localVodOverride.patchTimerId = 0;
         }
