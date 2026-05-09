@@ -834,10 +834,19 @@
                 try {
                     var settingsMain = w.document.getElementById('settings_main');
                     if (settingsMain && !w.document.getElementById(LOCAL_ARCHIVE_SETTINGS_KEY + '_div')) {
-                        var html = w.Settings_DivOptionWithSummary(LOCAL_ARCHIVE_SETTINGS_KEY, 'Local archive endpoint', 'Configure LAN archive used to override matching Twitch VOD playback.');
-                        settingsMain.insertAdjacentHTML('beforeend', html);
-                        w.Settings_value_keys.push(LOCAL_ARCHIVE_SETTINGS_KEY);
-                        w.Settings_positions_length = w.Settings_value_keys.length;
+                        var html = w.Settings_DivOptionWithSummary(LOCAL_ARCHIVE_SETTINGS_KEY, 'Local VOD archive endpoint', 'LAN archiver URL used to auto-match and override Twitch VOD playback.');
+                        var anchor = w.document.getElementById('vod_seek_div') || w.document.getElementById('webos_ttv_lol_proxy_settings_div');
+                        if (anchor && anchor.insertAdjacentHTML) anchor.insertAdjacentHTML('afterend', html);
+                        else settingsMain.insertAdjacentHTML('beforeend', html);
+                        if (w.Settings_value_keys) {
+                            var existing = w.Settings_value_keys.indexOf(LOCAL_ARCHIVE_SETTINGS_KEY);
+                            if (existing >= 0) w.Settings_value_keys.splice(existing, 1);
+                            var anchorKey = w.Settings_value_keys.indexOf('vod_seek');
+                            if (anchorKey < 0) anchorKey = w.Settings_value_keys.indexOf('webos_ttv_lol_proxy_settings');
+                            if (anchorKey >= 0) w.Settings_value_keys.splice(anchorKey + 1, 0, LOCAL_ARCHIVE_SETTINGS_KEY);
+                            else w.Settings_value_keys.push(LOCAL_ARCHIVE_SETTINGS_KEY);
+                            w.Settings_positions_length = w.Settings_value_keys.length;
+                        }
                     }
                 } catch (e) {}
                 return result;
