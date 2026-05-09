@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const UglifyJS = require('uglify-js');
 
 const root = path.resolve(__dirname, '..', '..');
 const releaseSourceDir = path.join(root, 'release');
@@ -98,6 +99,67 @@ function replaceRequired(content, pattern, replacement, label) {
     return next;
 }
 
+
+function replaceOnce(content, search, replacement, label) {
+    if (content.indexOf(search) < 0) {
+        throw new Error('Failed to patch staged main script: missing ' + label);
+    }
+    return content.replace(search, replacement);
+}
+
+function patchWebosMainScript(stagedChannelDir) {
+    const mainUncompressedPath = path.join(stagedChannelDir, 'githubio', 'js', 'main_uncompressed.js');
+    const mainPath = path.join(stagedChannelDir, 'githubio', 'js', 'main.js');
+
+    if (!fs.existsSync(mainUncompressedPath)) {
+        throw new Error('Missing staged main_uncompressed.js: ' + mainUncompressedPath);
+    }
+
+    let source = fs.readFileSync(mainUncompressedPath, 'utf8');
+    if (source.indexOf('local_archive_settings') >= 0) {
+        return;
+    }
+
+    source = replaceOnce(
+        source,
+        "        webos_ttv_lol_proxy_settings: {\n            values: ['None'],\n            set_values: [''],\n            defaultValue: 1\n        },\n",
+        "        webos_ttv_lol_proxy_settings: {\n            values: ['None'],\n            set_values: [''],\n            defaultValue: 1\n        },\n        local_archive_settings: {\n            values: ['Open'],\n            defaultValue: 1\n        },\n",
+        'local archive setting value'
+    );
+
+    source = replaceOnce(
+        source,
+        "        div += Settings_Content('preview_settings', [STR_ENTER_TO_OPEN], STR_SIDE_PANEL_PLAYER, null);\n        div += Settings_Content('vod_seek', [STR_ENTER_TO_OPEN], STR_VOD_SEEK, null);\n        div += Settings_Content('playerend_opt', [STR_ENTER_TO_OPEN], STR_END_DIALOG_OPT, null);\n",
+        "        div += Settings_Content('preview_settings', [STR_ENTER_TO_OPEN], STR_SIDE_PANEL_PLAYER, null);\n        div += Settings_Content('vod_seek', [STR_ENTER_TO_OPEN], STR_VOD_SEEK, null);\n        div += Settings_Content(\n            'local_archive_settings',\n            [STR_ENTER_TO_OPEN],\n            'Local VOD archive endpoint',\n            'LAN archiver URL used to auto-match and override Twitch VOD playback.'\n        );\n        div += Settings_Content('playerend_opt', [STR_ENTER_TO_OPEN], STR_END_DIALOG_OPT, null);\n",
+        'local archive setting row'
+    );
+
+    source = replaceOnce(
+        source,
+        "function Settings_check_min_seek() {\n",
+        "function Settings_GetLocalArchiveEndpoint() {\n    return Main_getItemString('sttv_webos_local_archive_endpoint', '');\n}\n\nfunction Settings_LocalArchiveEndpointPrompt() {\n    var currentValue = Settings_GetLocalArchiveEndpoint();\n    var nextValue = window.prompt('Local VOD archive endpoint', currentValue || 'http://192.168.1.50:8080');\n    if (nextValue === null) return;\n    nextValue = String(nextValue || '').replace(/[\\r\\n]+/g, '').trim().replace(/\\/+$/, '');\n    Main_setItem('sttv_webos_local_archive_endpoint', nextValue);\n    Main_setItem('localArchiveEndpoint', nextValue);\n    OSInterface_showToast(nextValue ? 'Local VOD archive endpoint saved' : 'Local VOD archive disabled');\n}\n\nfunction Settings_check_min_seek() {\n",
+        'local archive prompt helper anchor'
+    );
+
+    source = replaceOnce(
+        source,
+        "        else if (Main_A_includes_B(Settings_value_keys[Settings_cursorY], 'webos_ttv_lol_proxy_settings')) Settings_DialogShowWebOsTtvLolProxy(click);\n        else if (Main_A_includes_B(Settings_value_keys[Settings_cursorY], 'proxy_settings')) Settings_DialogShowProxy(click);\n",
+        "        else if (Main_A_includes_B(Settings_value_keys[Settings_cursorY], 'webos_ttv_lol_proxy_settings')) Settings_DialogShowWebOsTtvLolProxy(click);\n        else if (Main_A_includes_B(Settings_value_keys[Settings_cursorY], 'local_archive_settings')) Settings_LocalArchiveEndpointPrompt();\n        else if (Main_A_includes_B(Settings_value_keys[Settings_cursorY], 'proxy_settings')) Settings_DialogShowProxy(click);\n",
+        'local archive enter handler'
+    );
+
+    fs.writeFileSync(mainUncompressedPath, source);
+
+    const minified = UglifyJS.minify(source, {
+        compress: {arrows: false},
+        mangle: {toplevel: true, eval: true}
+    });
+    if (minified.error) {
+        throw minified.error;
+    }
+    fs.writeFileSync(mainPath, minified.code + '\n');
+}
+
 function adaptBridgeForChannel(stagedBridgePath, channel) {
     if (channel !== 'dev') {
         return;
@@ -136,6 +198,7 @@ function buildArtifact(outputRoot, channel) {
     fs.mkdirSync(path.dirname(stagedBridgePath), {recursive: true});
     fs.copyFileSync(bridgeSource, stagedBridgePath);
     adaptBridgeForChannel(stagedBridgePath, channel);
+    patchWebosMainScript(stagedChannelDir);
 
     let html = fs.readFileSync(stagedIndexPath, 'utf8');
     html = html.replace(anyBridgeTagRegex, '');
