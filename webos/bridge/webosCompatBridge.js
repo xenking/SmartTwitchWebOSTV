@@ -119,8 +119,6 @@
     var LOCAL_ARCHIVE_ENDPOINT_LEGACY_KEY = 'localArchiveEndpoint';
     var LOCAL_VOD_MATCH_TOLERANCE_SECONDS = 600;
     var LOCAL_VOD_REQUEST_TIMEOUT_MS = 5500;
-    var LOCAL_VOD_PATCH_INTERVAL_MS = 1200;
-    var LOCAL_VOD_MAX_PATCH_ATTEMPTS = 30;
     // Multi-stream rejection notices. Android: supports multi-stream natively.
     // webOS: single hardware decoder, so multi/PiP/side-panel are rejected.
     var MULTISTREAM_NOTICE_COOLDOWN_MS = 3000;
@@ -335,15 +333,8 @@
         matching: false,
         match: null,
         twitchMeta: null,
-        pendingOriginalLoad: null,
         suppressMatch: false,
-        switching: false,
-        controlsPatched: false,
-        vodPatched: false,
-        controlsPosition: -1,
-        patchAttempts: 0,
-        patchTimerId: 0,
-        cursor: 0,
+        actions: null,
         lastError: ''
     };
     // =========================================================================
@@ -459,7 +450,7 @@
         var endpoint = typeof value === 'string' ? value.replace(/[\r\n]+/g, '').trim() : '';
         if (!endpoint) return '';
         endpoint = endpoint.replace(/\/+$/, '');
-        if (!/^https?:\/\//i.test(endpoint)) return '';
+        if (!/^https?:\/\//i.test(endpoint)) endpoint = 'http://' + endpoint;
         return endpoint;
     }
     function getLocalArchiveEndpoint() {
@@ -529,45 +520,6 @@
         }
         return 0;
     }
-    function localVodCurrentTwitchOffsetSeconds() {
-        var offset = 0;
-        try {
-            if (w.Main_vodOffset) offset = parseFloat(w.Main_vodOffset) || 0;
-        } catch (e) {}
-        if (!offset) {
-            try {
-                if (w.OSInterface_gettime) offset = (parseInt(w.OSInterface_gettime(), 10) || 0) / 1000;
-            } catch (e2) {}
-        }
-        return Math.max(0, Math.floor(offset || 0));
-    }
-    function localVodReadTwitchMeta() {
-        var data = w.Main_values_Play_data || [];
-        var login = '';
-        var vodId = '';
-        var startedAt = '';
-        var durationSeconds = 0;
-        try { login = w.Main_values && w.Main_values.Main_selectedChannel ? String(w.Main_values.Main_selectedChannel).toLowerCase() : ''; } catch (e) {}
-        if (!login && data[6]) login = String(data[6]).toLowerCase();
-        try { vodId = w.Main_values && w.Main_values.ChannelVod_vodId ? String(w.Main_values.ChannelVod_vodId) : ''; } catch (e2) {}
-        if (!vodId && data[7]) vodId = String(data[7]);
-        if (data[12]) startedAt = String(data[12]);
-        durationSeconds = localVodDurationSeconds(data[15]);
-        if (!durationSeconds) {
-            try { durationSeconds = localVodDurationSeconds(w.Play_DurationSeconds); } catch (e3) {}
-        }
-        var startedAtMs = localVodParseTimeMs(startedAt);
-        if (!login || !vodId || !startedAtMs || !durationSeconds) return null;
-        return {
-            login: login,
-            vodId: vodId,
-            startedAt: startedAt,
-            startedAtMs: startedAtMs,
-            durationSeconds: durationSeconds,
-            positionSeconds: localVodCurrentTwitchOffsetSeconds(),
-            toleranceSeconds: LOCAL_VOD_MATCH_TOLERANCE_SECONDS
-        };
-    }
     function localVodIsPlayableStatus(status) {
         return status === 'open' || status === 'closing' || status === 'finalizing' || status === 'finalized' || !status;
     }
@@ -577,10 +529,14 @@
         if (channel !== meta.login) return null;
         var sourceStartMs = localVodParseTimeMs(vod.source_started_at || vod.started_at);
         if (!sourceStartMs) return null;
-        var localEndMs = localVodParseTimeMs(vod.last_ended_at);
         var durationSeconds = localVodDurationSeconds(vod.duration_seconds);
-        if (!localEndMs && durationSeconds) localEndMs = sourceStartMs + durationSeconds * 1000;
-        if (!localEndMs && (vod.growing || vod.active || vod.status === 'open')) localEndMs = Date.now();
+        var localEndMs = 0;
+        if (vod.growing || vod.active || vod.status === 'open' || vod.status === 'closing' || vod.status === 'finalizing') {
+            localEndMs = Date.now();
+        } else {
+            localEndMs = localVodParseTimeMs(vod.last_ended_at);
+            if (!localEndMs && durationSeconds) localEndMs = sourceStartMs + durationSeconds * 1000;
+        }
         if (!localEndMs) return null;
         var toleranceMs = meta.toleranceSeconds * 1000;
         var twitchStartMs = meta.startedAtMs;
@@ -692,202 +648,223 @@
         } catch (e) {}
         return getMainDurationMs();
     }
-    function localVodRefreshControlLabel() {
-        var pos = localVodOverride.controlsPosition;
-        if (pos < 0 || !w.Play_controls || !w.Play_controls[pos]) return;
-        var control = w.Play_controls[pos];
-        if (!control.doc_title || !control.doc_name) return;
+    function localVodNormalizeMeta(input) {
+        var meta = input || {};
+        var login = meta.login || meta.channel || '';
+        login = String(login || '').toLowerCase().trim();
+        var vodId = meta.vodId || meta.vod_id || '';
+        vodId = String(vodId || '').replace(/^v/i, '').trim();
+        var startedAt = meta.startedAt || meta.started_at || '';
+        var startedAtMs = localVodParseTimeMs(startedAt);
+        var durationSeconds = localVodDurationSeconds(meta.durationSeconds || meta.duration_seconds || meta.duration || 0);
+        var positionSeconds = localVodDurationSeconds(meta.positionSeconds || meta.position_seconds || 0);
+        var playerPositionSeconds = localVodDurationSeconds(meta.playerPositionSeconds || meta.player_position_seconds || positionSeconds);
+        if (localVodOverride.source === 'local' && localVodOverride.match) {
+            positionSeconds = Math.floor(localVodLocalToTwitchMs(playerPositionSeconds * 1000) / 1000);
+        }
+        if (!positionSeconds && meta.resumeSeconds) positionSeconds = localVodDurationSeconds(meta.resumeSeconds);
+        if (!login || !startedAtMs || !durationSeconds) return null;
+        return {
+            login: login,
+            vodId: vodId,
+            startedAt: startedAt,
+            startedAtMs: startedAtMs,
+            durationSeconds: durationSeconds,
+            positionSeconds: positionSeconds,
+            playerPositionSeconds: playerPositionSeconds,
+            toleranceSeconds: localVodDurationSeconds(meta.toleranceSeconds || meta.tolerance_seconds || LOCAL_VOD_MATCH_TOLERANCE_SECONDS)
+        };
+    }
+    function localVodRememberCallbacks(actions) {
+        localVodOverride.actions = actions || localVodOverride.actions || null;
+        return localVodOverride.actions;
+    }
+    function localVodNotify(actions, message) {
+        actions = actions || localVodOverride.actions;
+        if (!message || !actions || typeof actions.notify !== 'function') return;
+        try { actions.notify(message); } catch (e) {}
+    }
+    function localVodControlState() {
+        var enabled = !!localArchiveEndpoint();
         var hasMatch = localVodHasUsableCurrentMatch();
-        var source = localVodOverride.source === 'local' && hasMatch ? 'Local archive' : 'Twitch VOD';
-        try {
-            w.Main_textContentWithEle(control.doc_title, 'VOD source');
-            w.Main_textContentWithEle(control.doc_name, hasMatch ? source : 'Twitch VOD (no local match)');
-        } catch (e) {}
+        var source = localVodOverride.source === 'local' && hasMatch ? 'local' : 'twitch';
+        var label = 'Twitch VOD';
+        if (!enabled) label = 'Local archive disabled';
+        else if (localVodOverride.matching) label = 'Checking local archive...';
+        else if (source === 'local') label = 'Local archive';
+        else if (hasMatch) label = 'Twitch VOD (local available)';
+        else if (localVodOverride.lastError) label = 'Local archive: ' + localVodOverride.lastError;
+        return {
+            enabled: enabled,
+            matching: localVodOverride.matching,
+            hasMatch: hasMatch,
+            source: source,
+            canSwitch: enabled && hasMatch,
+            label: label,
+            reason: localVodOverride.lastError || ''
+        };
     }
-    function localVodShowWarning(message) {
-        if (!message) return;
-        try {
-            if (typeof w.Play_showWarningMiddleDialog === 'function') {
-                w.Play_showWarningMiddleDialog(message, 2500);
-                return;
-            }
-            if (typeof w.Play_showWarningDialog === 'function') {
-                w.Play_showWarningDialog(message, 2500);
-            }
-        } catch (e) {}
+    function localVodEmitState(actions) {
+        actions = actions || localVodOverride.actions;
+        if (actions && typeof actions.updateState === 'function') {
+            try { actions.updateState(localVodControlState()); } catch (e) {}
+        }
     }
-    function localVodStartLocalMatch(match, twitchResumeSeconds) {
+    function localVodStartLocalMatch(match, meta, actions, message) {
         var url = localVodPlaybackUrl(match);
         if (!url) return false;
+        actions = localVodRememberCallbacks(actions);
         localVodOverride.match = match;
+        localVodOverride.twitchMeta = meta || localVodOverride.twitchMeta;
         localVodOverride.source = 'local';
-        w.PlayVod_autoUrl = url;
-        w.PlayVod_playlist = '';
-        w.PlayVod_currentTime = twitchResumeSeconds * 1000;
-        if (typeof w.PlayVod_loadDataSuccessEnd === 'function') {
-            w.PlayVod_loadDataSuccessEnd('');
-        } else if (typeof w.PlayVod_onPlayer === 'function') {
-            w.PlayVod_onPlayer();
+        localVodOverride.lastError = '';
+        localVodEmitState(actions);
+        if (actions && typeof actions.playLocal === 'function') {
+            try {
+                actions.playLocal({
+                    url: url,
+                    playlist: '',
+                    offsetSeconds: Math.max(0, Math.floor(match.offset_seconds || 0)),
+                    twitchOffsetSeconds: meta ? Math.max(0, Math.floor(meta.positionSeconds || 0)) : 0,
+                    match: match
+                });
+            } catch (e) {
+                return false;
+            }
         }
-        localVodRefreshControlLabel();
-        localVodShowWarning('Playing local archive');
+        localVodNotify(actions, message || 'Playing local archive');
         return true;
     }
-    function localVodRunOriginalLoad() {
-        var original = localVodOverride.pendingOriginalLoad;
-        localVodOverride.pendingOriginalLoad = null;
+    function localVodStartTwitch(actions, reason, suppressLocal) {
+        actions = localVodRememberCallbacks(actions);
         localVodOverride.source = 'twitch';
-        localVodRefreshControlLabel();
-        if (typeof original === 'function') original.call(w);
+        localVodOverride.suppressMatch = !!suppressLocal;
+        localVodEmitState(actions);
+        if (actions && typeof actions.playTwitch === 'function') {
+            try {
+                actions.playTwitch({
+                    reason: reason || '',
+                    suppressLocal: !!suppressLocal,
+                    offsetSeconds: Math.max(0, Math.floor(localVodLocalToTwitchMs(mtime()) / 1000))
+                });
+            } catch (e) {}
+        }
+        localVodOverride.suppressMatch = false;
+        if (reason) localVodNotify(actions, reason);
     }
-    function localVodLoadDataWithMatch(original) {
-        if (localVodOverride.suppressMatch || !localArchiveEndpoint()) {
-            localVodOverride.source = 'twitch';
-            return original.call(w);
+    function localVodLoadWithActions(inputMeta, actions) {
+        actions = localVodRememberCallbacks(actions);
+        if (localVodOverride.suppressMatch) {
+            localVodOverride.suppressMatch = false;
+            localVodStartTwitch(actions, '', false);
+            return true;
         }
-        var meta = localVodReadTwitchMeta();
+        if (!localArchiveEndpoint()) {
+            localVodOverride.match = null;
+            localVodOverride.lastError = 'endpoint_disabled';
+            localVodStartTwitch(actions, '', false);
+            return true;
+        }
+        var meta = localVodNormalizeMeta(inputMeta);
         if (!meta) {
-            localVodOverride.source = 'twitch';
-            return original.call(w);
+            localVodOverride.match = null;
+            localVodOverride.lastError = 'missing_vod_metadata';
+            localVodStartTwitch(actions, '', false);
+            return true;
         }
-        if (!localVodOverride.twitchMeta || localVodOverride.twitchMeta.vodId !== meta.vodId) {
+        var metaKey = meta.vodId || (meta.login + ':' + meta.startedAt);
+        var previousMetaKey = localVodOverride.twitchMeta ? localVodOverride.twitchMeta.vodId || (localVodOverride.twitchMeta.login + ':' + localVodOverride.twitchMeta.startedAt) : '';
+        if (!localVodOverride.twitchMeta || previousMetaKey !== metaKey) {
             localVodOverride.defaultSource = 'local';
+            localVodOverride.match = null;
         }
         localVodOverride.twitchMeta = meta;
-        localVodOverride.pendingOriginalLoad = original;
         localVodOverride.matching = true;
         localVodOverride.lastError = '';
+        localVodEmitState(actions);
         localVodFetchMatch(meta, function (match) {
             localVodOverride.matching = false;
             localVodOverride.match = match && match.matched ? match : null;
             if (match && match.matched && match.position_within_recording && localVodPlaybackUrl(match)) {
-                var twitchResume = meta.positionSeconds || 0;
+                localVodOverride.lastError = '';
                 if (localVodOverride.defaultSource === 'local') {
-                    localVodStartLocalMatch(match, twitchResume);
+                    localVodStartLocalMatch(match, meta, actions, 'Playing local archive');
                     return;
                 }
-            } else if (match && match.reason) {
-                localVodOverride.lastError = match.reason;
+            } else {
+                localVodOverride.lastError = match && match.reason ? match.reason : 'no_match';
             }
-            localVodRunOriginalLoad();
+            localVodStartTwitch(actions, localVodOverride.lastError ? 'Local archive unavailable: ' + localVodOverride.lastError : '', false);
         });
-        return null;
+        return true;
     }
-    function localVodSwitchSource() {
-        if (!w.PlayVod_isOn) return;
+    function localVodSwitchWithActions(inputMeta, actions) {
+        actions = localVodRememberCallbacks(actions);
+        var meta = localVodNormalizeMeta(inputMeta) || localVodOverride.twitchMeta;
+        if (!localArchiveEndpoint()) {
+            localVodOverride.lastError = 'endpoint_disabled';
+            localVodEmitState(actions);
+            localVodNotify(actions, 'Local archive endpoint is disabled');
+            return false;
+        }
         if (!localVodHasUsableCurrentMatch()) {
-            localVodShowWarning('No matching local archive for this VOD position');
-            localVodRefreshControlLabel();
-            return;
-        }
-        var twitchMs = localVodIsActivePlayback() ? getMainCurrentTimeMs() : mtime();
-        if (localVodIsActivePlayback()) twitchMs = localVodLocalToTwitchMs(twitchMs);
-        try { w.Main_vodOffset = Math.max(0, Math.floor(twitchMs / 1000)); } catch (e) {}
-        try { if (typeof w.Main_setItem === 'function') w.Main_setItem('Main_vodOffset', Math.max(0, Math.floor(twitchMs / 1000))); } catch (e2) {}
-        localVodOverride.switching = true;
-        if (localVodOverride.source === 'local') {
-            localVodOverride.source = 'twitch';
-            localVodOverride.defaultSource = 'twitch';
-            localVodOverride.suppressMatch = true;
-            clear(mv);
-            resetMainState();
-            if (typeof w.PlayVod_loadData === 'function') w.PlayVod_loadData();
-            localVodOverride.suppressMatch = false;
-            localVodShowWarning('Switched to Twitch VOD');
-        } else {
-            localVodOverride.defaultSource = 'local';
-            localVodStartLocalMatch(localVodOverride.match, Math.floor(twitchMs / 1000));
-        }
-        localVodOverride.switching = false;
-        localVodRefreshControlLabel();
-    }
-    function patchLocalVodControls() {
-        if (localVodOverride.controlsPatched) return true;
-        if (typeof w.Play_MakeControls !== 'function' || !w.Play_controls || typeof w.temp_controls_pos === 'undefined') return false;
-        if (!w.Play_MakeControls.__sttvLocalVodPatched) {
-            var originalMakeControls = w.Play_MakeControls;
-            w.Play_MakeControls = function () {
-                if (localVodOverride.controlsPosition < 0) {
-                    localVodOverride.controlsPosition = w.temp_controls_pos++;
-                }
-                if (!w.Play_controls[localVodOverride.controlsPosition]) {
-                    w.Play_controls[localVodOverride.controlsPosition] = {
-                        ShowInLive: false,
-                        ShowInVod: true,
-                        ShowInClip: false,
-                        ShowInPP: false,
-                        ShowInMulti: false,
-                        ShowInChat: false,
-                        ShowInAudio: false,
-                        ShowInAudioPP: false,
-                        ShowInAudioMulti: false,
-                        ShowInPreview: false,
-                        ShowInStay: false,
-                        icons: 'refresh',
-                        offsetY: -7,
-                        string: 'VOD source',
-                        values: ['Twitch VOD', 'Local archive'],
-                        defaultValue: 0,
-                        enterKey: function (PlayVodClip) {
-                            if (PlayVodClip !== 2) return;
-                            localVodSwitchSource();
-                            if (typeof w.Play_ResetPanel === 'function') w.Play_ResetPanel(PlayVodClip);
-                        },
-                        updown: function () {
-                            localVodSwitchSource();
-                        },
-                        setLabel: localVodRefreshControlLabel,
-                        bottomArrows: function () {
-                            try { w.Play_BottomArrows(this.position); } catch (e) {}
-                        }
-                    };
-                }
-                return originalMakeControls.apply(this, arguments);
-            };
-            w.Play_MakeControls.__sttvLocalVodPatched = true;
-        }
-        localVodOverride.controlsPatched = true;
-        return true;
-    }
-    function patchLocalVodPlayback() {
-        if (localVodOverride.vodPatched) return true;
-        if (typeof w.PlayVod_loadData !== 'function' || typeof w.PlayVod_shutdownStream !== 'function') return false;
-        if (!w.PlayVod_loadData.__sttvLocalVodPatched) {
-            var originalLoadData = w.PlayVod_loadData;
-            w.PlayVod_loadData = function () {
-                return localVodLoadDataWithMatch.call(this, originalLoadData);
-            };
-            w.PlayVod_loadData.__sttvLocalVodPatched = true;
-        }
-        if (!w.PlayVod_shutdownStream.__sttvLocalVodPatched) {
-            var originalShutdown = w.PlayVod_shutdownStream;
-            w.PlayVod_shutdownStream = function () {
-                localVodOverride.source = 'twitch';
+            if (!meta) {
+                localVodOverride.lastError = 'missing_vod_metadata';
+                localVodEmitState(actions);
+                localVodNotify(actions, 'No matching local archive for this VOD position');
+                return false;
+            }
+            localVodOverride.matching = true;
+            localVodEmitState(actions);
+            localVodFetchMatch(meta, function (match) {
                 localVodOverride.matching = false;
-                localVodOverride.pendingOriginalLoad = null;
-                localVodOverride.suppressMatch = false;
-                return originalShutdown.apply(this, arguments);
-            };
-            w.PlayVod_shutdownStream.__sttvLocalVodPatched = true;
+                localVodOverride.match = match && match.matched ? match : null;
+                if (match && match.matched && match.position_within_recording && localVodPlaybackUrl(match)) {
+                    localVodOverride.defaultSource = 'local';
+                    localVodStartLocalMatch(match, meta, actions, 'Switched to local archive');
+                    return;
+                }
+                localVodOverride.lastError = match && match.reason ? match.reason : 'no_match';
+                localVodEmitState(actions);
+                localVodNotify(actions, 'No matching local archive for this VOD position');
+            });
+            return true;
         }
-        localVodOverride.vodPatched = true;
+        if (localVodOverride.source === 'local') {
+            localVodOverride.defaultSource = 'twitch';
+            localVodStartTwitch(actions, 'Switched to Twitch VOD', true);
+            return true;
+        }
+        localVodOverride.defaultSource = 'local';
+        localVodStartLocalMatch(localVodOverride.match, meta || localVodOverride.twitchMeta, actions, 'Switched to local archive');
         return true;
     }
-    function localVodPatchTick() {
-        localVodOverride.patchAttempts += 1;
-        patchLocalVodControls();
-        patchLocalVodPlayback();
-        if (localVodOverride.controlsPatched && localVodOverride.vodPatched && localVodOverride.patchAttempts >= LOCAL_VOD_MAX_PATCH_ATTEMPTS) {
-            if (localVodOverride.patchTimerId) w.clearInterval(localVodOverride.patchTimerId);
-            localVodOverride.patchTimerId = 0;
-        }
+    function localVodTryFallbackToTwitch(reason) {
+        if (!localVodIsActivePlayback()) return false;
+        localVodOverride.defaultSource = 'twitch';
+        localVodStartTwitch(localVodOverride.actions, reason || 'Local archive stalled, switching to Twitch VOD', true);
+        return true;
+    }
+    function localVodShutdown() {
+        localVodOverride.source = 'twitch';
+        localVodOverride.matching = false;
+        localVodOverride.actions = null;
+        localVodOverride.suppressMatch = false;
+        localVodEmitState(null);
     }
     function initLocalVodOverrideIntegration() {
         localArchiveEndpoint();
-        localVodPatchTick();
-        if (!localVodOverride.patchTimerId) {
-            localVodOverride.patchTimerId = w.setInterval(localVodPatchTick, LOCAL_VOD_PATCH_INTERVAL_MS);
-        }
+        w.STTVWebOSLocalVod = {
+            load: localVodLoadWithActions,
+            switchSource: localVodSwitchWithActions,
+            shutdown: localVodShutdown,
+            getState: localVodControlState,
+            updateEndpoint: function () {
+                localArchiveEndpoint();
+                localVodEmitState(localVodOverride.actions);
+                return localVodControlState();
+            }
+        };
     }
     function bridgeDebugLog(event, extra) {
         if (!BRIDGE_DEBUG_ENABLED) return;
@@ -2722,6 +2699,7 @@
         var ft = parseInt(failType, 10) || 0;
         var ec = parseInt(errorCode, 10) || 0;
         var type = ms.type || 1;
+        if (type === 2 && ft === 0 && localVodTryFallbackToTwitch('Local archive ended, switching to Twitch VOD')) return;
         mainPauseRequested = false;
         setMainLoading(false);
         clearMainLoadingShowTimer();
@@ -2735,6 +2713,7 @@
     function handleMainPlaybackFailure(failType, errorCode) {
         var ft = parseInt(failType, 10) || 1;
         var ec = parseInt(errorCode, 10) || 0;
+        if (localVodTryFallbackToTwitch('Local archive stalled, switching to Twitch VOD')) return;
         handleMainPlaybackFinished(ft, ec);
     }
     // Schedules an 8-second stall check for main player. If unresolved, retries or fails.
@@ -2760,11 +2739,13 @@
                 return;
             }
             if (classification === 'decoder_jam') {
+                if (localVodTryFallbackToTwitch('Local archive stalled, switching to Twitch VOD')) return;
                 if (maybeAutoClearMainLoading('stall_timer', 1000)) return;
                 if (attemptDecoderJamRecovery()) return;
                 handleMainPlaybackFailure(1, 0);
                 return;
             }
+            if (localVodTryFallbackToTwitch('Local archive stalled, switching to Twitch VOD')) return;
             if (maybeAutoClearMainLoading('stall_timer', 1000)) return;
             if (retryMainPlayback()) return;
             handleMainPlaybackFailure(1, 0);

@@ -1619,7 +1619,7 @@ function Main_isScene2DocVisible() {
 }
 
 function Main_OPenAsVod(historyPos) {
-    if (!historyPos.vodid) {
+    if (!historyPos.vodid && !(window.STTVWebOSLocalVod && window.STTVWebOSLocalVod.getState && window.STTVWebOSLocalVod.getState().enabled)) {
         Main_openStream();
         return;
     }

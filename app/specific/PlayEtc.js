@@ -222,6 +222,31 @@ function Play_A_Control(value, control) {
     Play_controls[control].setLabel();
 }
 
+function Play_WebOSLocalArchiveEnabled() {
+    return !!(
+        window.STTVWebOSLocalVod &&
+        window.STTVWebOSLocalVod.getState &&
+        window.STTVWebOSLocalVod.getState().enabled
+    );
+}
+
+function Play_PrepareLiveAsLocalVod(rewindId) {
+    Main_values_Play_data = Play_data.data;
+    Main_values.Main_selectedChannelDisplayname = Play_data.data[1];
+    Main_values.Main_selectedChannel = Play_data.data[6];
+    Main_values.Main_selectedChannelLogo = Play_data.data[9];
+    Main_values.Main_selectedChannelPartner = Play_data.data[10];
+    Main_values.Main_selectedChannel_id = Play_data.data[14];
+    Main_values.ChannelVod_vodId = rewindId || '';
+    ChannelVod_createdAt = Play_data.data[11] || '';
+    ChannelVod_language = Play_data.data[15] || '';
+    ChannelVod_title = Play_data.data[2] || Play_data.data[1] || '';
+    ChannelVod_game = Play_data.data[3] ? STR_STARTED + STR_PLAYING + Play_data.data[3] : '';
+    ChannelVod_views = Play_data.data[13] ? Main_formatNumber(Play_data.data[13]) : '';
+    if (Play_data.data[12]) Play_DurationSeconds = parseInt((Date.now() - new Date(Play_data.data[12]).getTime()) / 1000);
+    if (!Play_DurationSeconds || Play_DurationSeconds < 0) Play_DurationSeconds = 0;
+}
+
 function Play_SetFullScreen(isFull) {
     var changed = Play_isFullScreenOld !== Play_isFullScreen;
     Play_isFullScreenOld = Play_isFullScreen;
@@ -797,8 +822,8 @@ function Play_EndSet(PlayVodClip) {
             if (historyPos) {
                 Play_VodObj = historyPos;
 
-                if (Play_VodObj.vodid) {
-                    Main_textContent('dialog_end_vod_text_2', STR_OPEN_LAST_BROADCAST);
+                if (Play_VodObj.vodid || (window.STTVWebOSLocalVod && window.STTVWebOSLocalVod.getState && window.STTVWebOSLocalVod.getState().enabled)) {
+                    Main_textContent('dialog_end_vod_text_2', Play_VodObj.vodid ? STR_OPEN_LAST_BROADCAST : 'Open local archive');
                     Main_getElementById('dialog_end_2').style.display = 'inline-block';
                     Main_innerHTML('end_vod_name_text_2', Play_VodObj.data[1]);
                     Main_textContent('end_vod_title_text_2', Play_VodObj.data[2]);
@@ -1984,6 +2009,7 @@ var Play_controlsOpenVod = temp_controls_pos++;
 var Play_controlsFollow = temp_controls_pos++;
 var Play_controlsSpeed = temp_controls_pos++;
 var Play_controlsExternal = temp_controls_pos++;
+var Play_controlsLocalVodSource = temp_controls_pos++;
 var Play_controlsRewind = temp_controls_pos++;
 var Play_controlsQuality = temp_controls_pos++;
 var Play_controlsQualityMini = temp_controls_pos++;
@@ -2353,6 +2379,40 @@ function Play_MakeControls() {
         }
     };
 
+    Play_controls[Play_controlsLocalVodSource] = {
+        //webOS local archive VOD source switch
+        ShowInLive: false,
+        ShowInVod: true,
+        ShowInClip: false,
+        ShowInPP: false,
+        ShowInMulti: false,
+        ShowInChat: false,
+        ShowInAudio: false,
+        ShowInAudioPP: false,
+        ShowInAudioMulti: false,
+        ShowInPreview: false,
+        ShowInStay: false,
+        icons: 'refresh',
+        offsetY: -7,
+        string: 'VOD source',
+        values: ['Twitch VOD'],
+        defaultValue: 0,
+        enterKey: function (PlayVodClip) {
+            if (PlayVodClip !== 2) return;
+            PlayVod_WebOSLocalSwitchSource();
+            Play_ResetPanel(PlayVodClip);
+        },
+        updown: function () {
+            PlayVod_WebOSLocalSwitchSource();
+        },
+        setLabel: function () {
+            PlayVod_WebOSLocalUpdateControlLabel();
+        },
+        bottomArrows: function () {
+            Play_BottomArrows(this.position);
+        }
+    };
+
     Play_controls[Play_controlsRewind] = {
         //open rewind
         ShowInLive: true,
@@ -2374,13 +2434,12 @@ function Play_MakeControls() {
         enterKey: function () {
             var rewindId = Play_RewindId[Play_data.data[7]];
 
-            if (rewindId) {
-                Main_values.ChannelVod_vodId = rewindId;
-            } else {
+            if (!rewindId && !Play_WebOSLocalArchiveEnabled()) {
                 Play_showWarningMiddleDialog(STR_OPEN_REWIND_FAIL, 3000);
                 return;
             }
 
+            Play_PrepareLiveAsLocalVod(rewindId);
             Play_ForceHidePannel();
             Main_vodOffset = 0;
 

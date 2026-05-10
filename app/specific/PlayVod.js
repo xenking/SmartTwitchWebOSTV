@@ -349,9 +349,119 @@ function PlayVod_loadDataSuccessFake() {
     Main_setTimeout(Play_HideBufferDialog, 1000);
 }
 
-var PlayVod_autoUrl;
-var PlayVod_loadDataId = 0;
-function PlayVod_loadData() {
+function PlayVod_WebOSLocalBridge() {
+    return window.STTVWebOSLocalVod && Main_IsOn_OSInterface ? window.STTVWebOSLocalVod : null;
+}
+
+function PlayVod_WebOSLocalCurrentSeconds() {
+    var position = Main_vodOffset || PlayVod_ResumeTime || 0;
+    if (!position && Main_IsOn_OSInterface) position = OSInterface_gettime() / 1000;
+    return position > 0 ? position : 0;
+}
+
+function PlayVod_WebOSLocalDurationSeconds(startedAt) {
+    var durationSeconds = Play_DurationSeconds || 0;
+    if (!durationSeconds && Main_values_Play_data && Main_values_Play_data.length > 11) {
+        if (typeof Main_values_Play_data[11] === 'number') durationSeconds = Main_values_Play_data[11];
+        else if (typeof Main_values_Play_data[11] === 'string' && Main_values_Play_data[11].indexOf('h') > -1) durationSeconds = Play_timeHMS(Main_values_Play_data[11]);
+    }
+    if (!durationSeconds && Main_values_Play_data && Main_values_Play_data.length > 15 && typeof Main_values_Play_data[15] === 'string') {
+        durationSeconds = Play_timeHMS(Main_values_Play_data[15]);
+    }
+    if (!durationSeconds && startedAt) {
+        durationSeconds = parseInt((Date.now() - new Date(startedAt).getTime()) / 1000);
+    }
+    return durationSeconds > 0 ? durationSeconds : 0;
+}
+
+function PlayVod_WebOSLocalMeta() {
+    var startedAt = Main_values_Play_data && Main_values_Play_data.length > 12 ? Main_values_Play_data[12] : '';
+    var durationSeconds = PlayVod_WebOSLocalDurationSeconds(startedAt);
+    var login = Main_values.Main_selectedChannel || Main_values.Main_selectedChannelDisplayname || '';
+
+    if (!login || !startedAt || !durationSeconds) return null;
+
+    return {
+        login: login,
+        vodId: Main_values.ChannelVod_vodId,
+        startedAt: startedAt,
+        durationSeconds: durationSeconds,
+        positionSeconds: PlayVod_WebOSLocalCurrentSeconds(),
+        playerPositionSeconds: Main_IsOn_OSInterface ? OSInterface_gettime() / 1000 : PlayVod_WebOSLocalCurrentSeconds(),
+        toleranceSeconds: 600
+    };
+}
+
+function PlayVod_WebOSLocalNotify(message) {
+    if (message) Play_showWarningMiddleDialog(message, 2500);
+}
+
+function PlayVod_WebOSLocalUpdateControlLabel(state) {
+    var control = Play_controls[Play_controlsLocalVodSource];
+    if (!control || !control.doc_title || !control.doc_name) return;
+    if (!state && PlayVod_WebOSLocalBridge()) state = PlayVod_WebOSLocalBridge().getState();
+    if (!state) state = {label: 'Twitch VOD'};
+    Main_textContentWithEle(control.doc_title, 'VOD source');
+    Main_textContentWithEle(control.doc_name, state.label || 'Twitch VOD');
+}
+
+function PlayVod_WebOSLocalActions() {
+    return {
+        updateState: function (state) {
+            PlayVod_WebOSLocalUpdateControlLabel(state);
+        },
+        notify: function (message) {
+            PlayVod_WebOSLocalNotify(message);
+        },
+        playLocal: function (result) {
+            if (!PlayVod_isOn || !result || !result.url) return;
+            Play_showBufferDialog();
+            PlayVod_autoUrl = result.url;
+            PlayVod_playlist = result.playlist || '';
+            Main_vodOffset = result.twitchOffsetSeconds > 0 ? result.twitchOffsetSeconds : 0.001;
+            PlayVod_currentTime = Main_vodOffset * 1000;
+            PlayVod_loadDataSuccessEnd(PlayVod_playlist);
+        },
+        playTwitch: function (result) {
+            if (!PlayVod_isOn) return;
+            if (result && result.offsetSeconds > 0) Main_vodOffset = result.offsetSeconds;
+            if (!Main_values.ChannelVod_vodId) {
+                PlayVod_WarnEnd((result && result.reason) || 'Local archive unavailable');
+                return;
+            }
+            Play_showBufferDialog();
+            PlayVod_loadDataTwitch();
+        }
+    };
+}
+
+function PlayVod_WebOSLocalLoadData() {
+    var bridge = PlayVod_WebOSLocalBridge();
+    if (!bridge || Play_PreviewId || PlayVod_replay) return false;
+
+    var meta = PlayVod_WebOSLocalMeta();
+    if (!meta) return false;
+
+    return bridge.load(meta, PlayVod_WebOSLocalActions());
+}
+
+function PlayVod_WebOSLocalSwitchSource() {
+    var bridge = PlayVod_WebOSLocalBridge();
+    if (!bridge || !PlayVod_isOn) {
+        PlayVod_WebOSLocalNotify('Local archive integration is not available');
+        return;
+    }
+
+    var meta = PlayVod_WebOSLocalMeta();
+    if (!meta) {
+        PlayVod_WebOSLocalNotify('No VOD metadata for local archive match');
+        return;
+    }
+
+    bridge.switchSource(meta, PlayVod_WebOSLocalActions());
+}
+
+function PlayVod_loadDataTwitch() {
     //Main_Log('PlayVod_loadData');
 
     if (Main_IsOn_OSInterface) {
@@ -359,6 +469,14 @@ function PlayVod_loadData() {
 
         PlayHLS_GetPlayListAsync(false, Main_values.ChannelVod_vodId, PlayVod_loadDataId, null, PlayVod_loadDataResult);
     } else PlayVod_loadDataSuccessFake();
+}
+
+var PlayVod_autoUrl;
+var PlayVod_loadDataId = 0;
+function PlayVod_loadData() {
+    if (PlayVod_WebOSLocalLoadData()) return;
+
+    PlayVod_loadDataTwitch();
 }
 
 function PlayVod_loadDataResult(response) {
@@ -498,6 +616,8 @@ function PlayVod_onPlayerStartPlay(time) {
 
 function PlayVod_shutdownStream(SkipSaveOffset) {
     // Main_Log('PlayVod_shutdownStream ' + PlayVod_isOn);
+
+    if (PlayVod_WebOSLocalBridge()) PlayVod_WebOSLocalBridge().shutdown();
 
     if (!Main_IsOn_OSInterface) {
         BrowserTestPlayerEnded(true);

@@ -1754,6 +1754,12 @@ function Settings_GetLocalArchiveEndpoint() {
     return Main_getItemString('sttv_webos_local_archive_endpoint', '');
 }
 
+function Settings_NormalizeEndpointUrl(value) {
+    value = String(value || '').replace(/\r|\n/g, '').trim().replace(/\/+$/, '');
+    if (value && !/^https?:\/\//i.test(value)) value = 'http://' + value;
+    return value;
+}
+
 function Settings_LocalArchiveEndpointPrompt() {
     var currentValue = Settings_GetLocalArchiveEndpoint();
     Settings_TextInputShow(
@@ -1761,9 +1767,10 @@ function Settings_LocalArchiveEndpointPrompt() {
         currentValue,
         'http://192.168.1.50:8080',
         function (nextValue) {
-            nextValue = String(nextValue || '').replace(/[\r\n]+/g, '').trim().replace(/\/+$/, '');
+            nextValue = Settings_NormalizeEndpointUrl(nextValue);
             Main_setItem('sttv_webos_local_archive_endpoint', nextValue);
             Main_setItem('localArchiveEndpoint', nextValue);
+            if (window.STTVWebOSLocalVod && window.STTVWebOSLocalVod.updateEndpoint) window.STTVWebOSLocalVod.updateEndpoint();
             OSInterface_showToast(nextValue ? 'Local VOD archive endpoint saved' : 'Local VOD archive disabled');
             Settings_DialogShowLocalArchive(false);
         },
