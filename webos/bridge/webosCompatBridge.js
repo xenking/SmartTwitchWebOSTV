@@ -119,6 +119,7 @@
     var LOCAL_ARCHIVE_ENDPOINT_LEGACY_KEY = 'localArchiveEndpoint';
     var LOCAL_VOD_MATCH_TOLERANCE_SECONDS = 600;
     var LOCAL_VOD_REQUEST_TIMEOUT_MS = 5500;
+    var LOCAL_VOD_GROWING_DURATION_MARGIN_MS = 2000;
     // Multi-stream rejection notices. Android: supports multi-stream natively.
     // webOS: single hardware decoder, so multi/PiP/side-panel are rejected.
     var MULTISTREAM_NOTICE_COOLDOWN_MS = 3000;
@@ -629,8 +630,13 @@
         var match = localVodOverride.match;
         if (!match) return twitchMs;
         var localSeconds = Math.max(0, (twitchMs / 1000) - (match.delta_seconds || 0));
-        if (match.vod && match.vod.duration_seconds && localSeconds > match.vod.duration_seconds) {
-            localSeconds = Math.max(0, match.vod.duration_seconds - 1);
+        var availableSeconds = match.vod && match.vod.duration_seconds ? match.vod.duration_seconds : 0;
+        if (localVodIsGrowingMatch(match)) {
+            var availableMs = localVodAvailableLocalDurationMs();
+            if (availableMs > availableSeconds * 1000) availableSeconds = Math.floor(availableMs / 1000);
+        }
+        if (availableSeconds && localSeconds > availableSeconds) {
+            localSeconds = Math.max(0, availableSeconds - 1);
         }
         return Math.round(localSeconds * 1000);
     }
@@ -639,9 +645,64 @@
         if (!match) return localMs;
         return Math.max(0, Math.round(localMs + (match.delta_seconds || 0) * 1000));
     }
+    function localVodMatchDeltaMs(match) {
+        var value = parseFloat(match && match.delta_seconds);
+        return isFinite(value) ? Math.round(value * 1000) : 0;
+    }
+    function localVodMatchDurationMs(match) {
+        if (!match) return 0;
+        var vod = match.vod || {};
+        var seconds = localVodDurationSeconds(vod.duration_seconds || match.duration_seconds || 0);
+        return seconds > 0 ? Math.round(seconds * 1000) : 0;
+    }
+    function localVodMatchSourceStartedAtMs(match) {
+        if (!match) return 0;
+        var vod = match.vod || {};
+        return localVodParseTimeMs(match.source_started_at || vod.source_started_at || vod.started_at || '');
+    }
+    function localVodIsGrowingMatch(match) {
+        if (!match || !match.vod) return false;
+        var vod = match.vod;
+        var status = String(vod.status || '').toLowerCase();
+        return !!(vod.active || vod.growing || status === 'open' || status === 'recording' || status === 'closing' || status === 'finalizing');
+    }
+    function localVodAvailableLocalDurationMs() {
+        var match = localVodOverride.match;
+        var durationMs = localVodMatchDurationMs(match);
+        var media = getVideoTimelineState(mv);
+        if (media.durationMs > durationMs) durationMs = media.durationMs;
+        if (localVodIsGrowingMatch(match)) {
+            var sourceStartedAtMs = localVodMatchSourceStartedAtMs(match);
+            if (sourceStartedAtMs > 0) {
+                var wallDurationMs = Date.now() - sourceStartedAtMs;
+                if (wallDurationMs > durationMs) durationMs = wallDurationMs;
+            }
+            var currentMs = mtime();
+            if (currentMs > 0 && currentMs + LOCAL_VOD_GROWING_DURATION_MARGIN_MS > durationMs) {
+                durationMs = currentMs + LOCAL_VOD_GROWING_DURATION_MARGIN_MS;
+            }
+        }
+        return durationMs > 0 ? durationMs : 0;
+    }
     function localVodReportedDurationMs() {
-        if (localVodIsActivePlayback() && localVodOverride.twitchMeta && localVodOverride.twitchMeta.durationSeconds) {
-            return localVodOverride.twitchMeta.durationSeconds * 1000;
+        if (localVodIsActivePlayback()) {
+            var match = localVodOverride.match;
+            var reportedMs = 0;
+            var localDurationMs = localVodAvailableLocalDurationMs();
+            if (localDurationMs > 0) reportedMs = localDurationMs + localVodMatchDeltaMs(match);
+            if (localVodOverride.twitchMeta && localVodOverride.twitchMeta.durationSeconds) {
+                var twitchMetaDurationMs = localVodOverride.twitchMeta.durationSeconds * 1000;
+                if (twitchMetaDurationMs > reportedMs) reportedMs = twitchMetaDurationMs;
+            }
+            if (localVodIsGrowingMatch(match) && localVodOverride.twitchMeta && localVodOverride.twitchMeta.startedAtMs) {
+                var twitchWallDurationMs = Date.now() - localVodOverride.twitchMeta.startedAtMs;
+                if (twitchWallDurationMs > reportedMs) reportedMs = twitchWallDurationMs;
+                var currentTwitchMs = localVodLocalToTwitchMs(mtime());
+                if (currentTwitchMs > 0 && currentTwitchMs + LOCAL_VOD_GROWING_DURATION_MARGIN_MS > reportedMs) {
+                    reportedMs = currentTwitchMs + LOCAL_VOD_GROWING_DURATION_MARGIN_MS;
+                }
+            }
+            if (reportedMs > 0) return reportedMs;
         }
         try {
             if (localVodIsActivePlayback() && w.Play_DurationSeconds) return Math.round(w.Play_DurationSeconds * 1000);
@@ -2137,6 +2198,10 @@
     // Returns main player position in ms (used by gettime/getsavedtime bridge methods).
     // Android: ExoPlayer.getCurrentPosition(). webOS: video.currentTime * 1000.
     function getMainCurrentTimeMs() {
+        if (localVodIsActivePlayback()) {
+            var localNow = mtime();
+            if (localNow > 0) return localNow;
+        }
         var mt = getVideoTimelineState(mv);
         if (mt.positionMs > 0) return mt.positionMs;
         var now = mtime();
@@ -2358,8 +2423,12 @@
         var timeline = getVideoTimelineState(video);
         var durationMs = timeline.durationMs > 0 ? timeline.durationMs : video === pv ? getPreviewDurationMs() : getMainDurationMs();
         var positionMs = timeline.positionMs > 0 ? timeline.positionMs : video === pv ? getPreviewCurrentTimeMs() : getMainCurrentTimeMs();
+        if (video === mv && localVodIsActivePlayback()) {
+            durationMs = localVodReportedDurationMs();
+            positionMs = localVodLocalToTwitchMs(mtime());
+        }
         if (video === pv && durationMs > 0) previewDurationMsCached = durationMs;
-        if (video === mv && durationMs > 0) mainDurationMsCached = durationMs;
+        if (video === mv && durationMs > 0 && !localVodIsActivePlayback()) mainDurationMsCached = durationMs;
         var bufferSeconds = getBufferedAheadSeconds(video);
         var bufferMs = Math.round(bufferSeconds * 1000);
         var liveOffsetMs = showLatency ? getCurrentLiveOffsetMs(video, durationMs, positionMs, !!usePreviewList) : 0;
@@ -2411,6 +2480,10 @@
         var timeline = getVideoTimelineState(mv);
         var jumpPosition = positionMs > 0 ? positionMs : 0;
         var duration = timeline.durationMs > 0 ? timeline.durationMs : getMainDurationMs();
+        if (localVodIsActivePlayback()) {
+            var localDuration = localVodAvailableLocalDurationMs();
+            if (localDuration > duration) duration = localDuration;
+        }
         if (duration > 0 && jumpPosition >= duration) jumpPosition = Math.max(0, duration - 1000);
         var seekSeconds = jumpPosition / 1000;
         if (timeline.useSeekableWindow && isFinite(timeline.seekStartSeconds) && isFinite(timeline.seekEndSeconds) && timeline.seekEndSeconds > timeline.seekStartSeconds) {
