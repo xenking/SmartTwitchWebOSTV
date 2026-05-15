@@ -771,9 +771,18 @@
             try { actions.updateState(localVodControlState()); } catch (e) {}
         }
     }
+    function localVodTargetTwitchSeconds(match, meta) {
+        var metaPositionSeconds = meta ? localVodDurationSeconds(meta.positionSeconds || 0) : 0;
+        if (metaPositionSeconds > 0) return Math.floor(metaPositionSeconds);
+        var localOffsetSeconds = match ? localVodDurationSeconds(match.offset_seconds || 0) : 0;
+        if (localOffsetSeconds > 0) return Math.floor(localVodLocalToTwitchMs(localOffsetSeconds * 1000) / 1000);
+        return 0;
+    }
     function localVodStartLocalMatch(match, meta, actions, message) {
         var url = localVodPlaybackUrl(match);
         if (!url) return false;
+        var localOffsetSeconds = Math.max(0, Math.floor(match.offset_seconds || 0));
+        var twitchOffsetSeconds = localVodTargetTwitchSeconds(match, meta);
         actions = localVodRememberCallbacks(actions);
         localVodOverride.match = match;
         localVodOverride.twitchMeta = meta || localVodOverride.twitchMeta;
@@ -785,8 +794,8 @@
                 actions.playLocal({
                     url: url,
                     playlist: '',
-                    offsetSeconds: Math.max(0, Math.floor(match.offset_seconds || 0)),
-                    twitchOffsetSeconds: meta ? Math.max(0, Math.floor(meta.positionSeconds || 0)) : 0,
+                    offsetSeconds: localOffsetSeconds,
+                    twitchOffsetSeconds: twitchOffsetSeconds,
                     match: match
                 });
             } catch (e) {
@@ -868,36 +877,32 @@
             localVodNotify(actions, 'Local archive endpoint is disabled');
             return false;
         }
-        if (!localVodHasUsableCurrentMatch()) {
-            if (!meta) {
-                localVodOverride.lastError = 'missing_vod_metadata';
-                localVodEmitState(actions);
-                localVodNotify(actions, 'No matching local archive for this VOD position');
-                return false;
-            }
-            localVodOverride.matching = true;
-            localVodEmitState(actions);
-            localVodFetchMatch(meta, function (match) {
-                localVodOverride.matching = false;
-                localVodOverride.match = match && match.matched ? match : null;
-                if (match && match.matched && match.position_within_recording && localVodPlaybackUrl(match)) {
-                    localVodOverride.defaultSource = 'local';
-                    localVodStartLocalMatch(match, meta, actions, 'Switched to local archive');
-                    return;
-                }
-                localVodOverride.lastError = match && match.reason ? match.reason : 'no_match';
-                localVodEmitState(actions);
-                localVodNotify(actions, 'No matching local archive for this VOD position');
-            });
-            return true;
-        }
         if (localVodOverride.source === 'local') {
             localVodOverride.defaultSource = 'twitch';
             localVodStartTwitch(actions, 'Switched to Twitch VOD', true);
             return true;
         }
-        localVodOverride.defaultSource = 'local';
-        localVodStartLocalMatch(localVodOverride.match, meta || localVodOverride.twitchMeta, actions, 'Switched to local archive');
+        if (!meta) {
+            localVodOverride.lastError = 'missing_vod_metadata';
+            localVodEmitState(actions);
+            localVodNotify(actions, 'No matching local archive for this VOD position');
+            return false;
+        }
+        localVodOverride.twitchMeta = meta;
+        localVodOverride.matching = true;
+        localVodEmitState(actions);
+        localVodFetchMatch(meta, function (match) {
+            localVodOverride.matching = false;
+            localVodOverride.match = match && match.matched ? match : null;
+            if (match && match.matched && match.position_within_recording && localVodPlaybackUrl(match)) {
+                localVodOverride.defaultSource = 'local';
+                localVodStartLocalMatch(match, meta, actions, 'Switched to local archive');
+                return;
+            }
+            localVodOverride.lastError = match && match.reason ? match.reason : 'no_match';
+            localVodEmitState(actions);
+            localVodNotify(actions, 'No matching local archive for this VOD position');
+        });
         return true;
     }
     function localVodTryFallbackToTwitch(reason) {
