@@ -26841,6 +26841,29 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
         Play_showExitDialog();
     }
 
+    function Play_ChannelRockerSwitchLive(direction) {
+        if (Play_isEndDialogVisible() || Play_MultiDialogVisible()) return;
+        if (UserLiveFeed_loadingData[UserLiveFeedobj_UserLivePos]) return;
+        if (!UserLiveFeed_DataObj[UserLiveFeedobj_UserLivePos]) return;
+
+        var size = UserLiveFeed_itemsCount[UserLiveFeedobj_UserLivePos] || Sidepannel_GetSize();
+        var currentId = Play_data && Play_data.data ? Play_data.data[14] : null;
+        var currentPos = currentId && Sidepannel_Positions.hasOwnProperty(currentId) ? Sidepannel_Positions[currentId] : Sidepannel_PosFeed;
+        var nextPos = currentPos + direction;
+        var nextData;
+
+        while (nextPos >= 0 && nextPos < size) {
+            nextData = UserLiveFeed_DataObj[UserLiveFeedobj_UserLivePos][nextPos];
+            if (nextData && !nextData.image && nextData[14]) {
+                Sidepannel_PosFeed = nextPos;
+                Main_values.Play_isHost = false;
+                Main_OpenLiveStream(nextData, nextPos, UserLiveFeed_side_ids, Sidepannel_handleKeyDown, false, 'Side_Panel');
+                return;
+            }
+            nextPos += direction;
+        }
+    }
+
     function Play_CheckPreview() {
         if (Play_isOn && Play_data.data.length > 0 && !Play_isEndDialogVisible() && !Play_StayDialogVisible()) {
             if (OSInterface_getPlaybackState()) {
@@ -27343,14 +27366,10 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
                 Play_controls[Play_controlsChat].enterKey(1);
                 break;
             case KEY_PG_UP:
-                if (UserLiveFeed_isPreviewShowing()) UserLiveFeed_KeyUpDown(-1);
-                else if (Play_isFullScreen && Play_isChatShown()) Play_KeyChatPosChage();
-                else UserLiveFeed_ShowFeed();
+                Play_ChannelRockerSwitchLive(-1);
                 break;
             case KEY_PG_DOWN:
-                if (UserLiveFeed_isPreviewShowing()) UserLiveFeed_KeyUpDown(1);
-                else if (Play_isFullScreen && Play_isChatShown()) Play_KeyChatSizeChage();
-                else UserLiveFeed_ShowFeed();
+                Play_ChannelRockerSwitchLive(1);
                 break;
             case KEY_2:
             case KEY_MEDIA_FAST_FORWARD:
