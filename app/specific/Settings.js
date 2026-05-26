@@ -1627,7 +1627,7 @@ function Settings_get_enabled_Proxy() {
 }
 
 
-var Settings_WebOsTtvLolProxyDefault = 'firefox.api.cdn-perfprod.com:2023';
+var Settings_WebOsTtvLolProxyDefault = 'chromium.api.cdn-perfprod.com:2023,firefox.api.cdn-perfprod.com:2023';
 
 function Settings_GetWebOsTtvLolProxyUrl() {
     return Main_getItemString('webos_ttv_lol_proxy_url_value', Settings_WebOsTtvLolProxyDefault);

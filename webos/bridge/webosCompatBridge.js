@@ -254,7 +254,7 @@
     var USHER_PLAYLIST_CACHE_TTL_MS = 45000;           // In-memory TTL for service-fetched playlists.
     var USHER_PLAYLIST_CACHE_MAX = 24;                 // Max cached service playlist entries.
     var USHER_PLAYLIST_INFLIGHT_MAX_AGE_MS = 20000;    // Safety prune age for stale in-flight entries.
-    var TTVLOL_DEFAULT_OPTIMIZED_PROXIES = ['firefox.api.cdn-perfprod.com:2023']; // v2 Firefox extension default.
+    var TTVLOL_DEFAULT_OPTIMIZED_PROXIES = ['chromium.api.cdn-perfprod.com:2023', 'firefox.api.cdn-perfprod.com:2023']; // v2 optimized defaults from archiver.
     var PREVIEW_SET_COOLDOWN_MS = 450;                 // Dedup cooldown for repeated setPrev calls.
     var LIFECYCLE_STOP_MIN_HIDDEN_MS = 12000;          // Min hidden time before stopping playback.
     var STALL_PROGRESS_THRESHOLD_MS = 4000;            // No-progress window before stall is considered persistent.
@@ -3283,6 +3283,18 @@
     function hasUsablePlaylistBody(text) {
         return typeof text === 'string' && text.indexOf('#EXTM3U') !== -1;
     }
+    function playlistHasTwitchStitchedAds(text) {
+        if (typeof text !== 'string' || text.indexOf('#EXT') === -1) return false;
+        return text.indexOf('twitch-stitched-ad') !== -1 || /#EXT-X-DATERANGE:[^\n]*(?:CLASS="?twitch-stitched-ad"?|X-TV-TWITCH-AD)/i.test(text);
+    }
+    function recordTwitchStitchedAdMarker(meta, text) {
+        if (!playlistHasTwitchStitchedAds(text)) return;
+        bridgeDebugLog('twitch_stitched_ad_marker_detected', {
+            host: meta && meta.host ? meta.host : '',
+            url: meta && meta.url ? meta.url : '',
+            requestKey: meta && meta.requestKey ? meta.requestKey : ''
+        });
+    }
     function isUsherPlaylistPath(pathLower) {
         if (!pathLower) return false;
         var normalizedPath = String(pathLower).toLowerCase().split('?')[0];
@@ -3531,6 +3543,7 @@
                 url: meta && meta.url ? meta.url : ''
             });
             if (result && result.status === 200 && hasUsablePlaylistBody(result.responseText)) {
+                recordTwitchStitchedAdMarker(meta, result.responseText);
                 cacheUsherPlaylistResult(meta.requestKey, result.responseText, result.url || meta.url || '');
                 cacheNetworkResponse(meta.requestKey, result.status, result.responseText);
             }
@@ -3883,6 +3896,7 @@
             var finalUrl = responseUrl || '';
             if (!synthetic) {
                 if (finalStatus > 0) {
+                    recordTwitchStitchedAdMarker(meta, finalText);
                     cacheNetworkResponse(meta.requestKey, finalStatus, finalText);
                     recordNetworkRtt(meta.host, Date.now() - requestStartedAt);
                     if (meta.circuitEnabled) recordHostCircuitSuccess(meta.host);
@@ -4016,6 +4030,7 @@
                     x.onloadend = function () {
                         if (meta.dedupeEnabled) clearInFlightRequestByKey(meta.requestKey, x);
                         if ((x.status || 0) > 0) {
+                            recordTwitchStitchedAdMarker(meta, x.responseText || '');
                             cacheNetworkResponse(meta.requestKey, x.status || 0, x.responseText || '');
                             recordNetworkRtt(meta.host, Date.now() - requestStartedAt);
                             if (meta.circuitEnabled) recordHostCircuitSuccess(meta.host);
@@ -4051,6 +4066,7 @@
                     return buildUsherPlaylistCorsFallbackResult(meta, ck, 'status0_sync');
                 }
                 if (syncStatus > 0) {
+                    recordTwitchStitchedAdMarker(meta, syncText);
                     cacheNetworkResponse(meta.requestKey, syncStatus, syncText);
                     recordNetworkRtt(meta.host, Date.now() - requestStartedAt);
                     if (meta.circuitEnabled) recordHostCircuitSuccess(meta.host);
@@ -4448,6 +4464,39 @@
         if (patchVodSafetyFlow()) return;
         w.setTimeout(patchVodSafetyFlow, 1000);
         w.setTimeout(patchVodSafetyFlow, 2500);
+    }
+    function patchLiveProxyAsyncLoadFlow() {
+        if (w.__sttvLiveProxyAsyncLoadPatched) return true;
+        var patched = 0;
+        var wrap = function (name) {
+            var original = w[name];
+            if (typeof original !== 'function') return;
+            if (original.__sttvLiveProxyAsyncLoadPatched) {
+                patched += 1;
+                return;
+            }
+            w[name] = function (synchronous) {
+                if (synchronous && isBridgePolyfillActive() && isTtvLolPlaylistProxyEnabled() && w.Main_IsOn_OSInterface) {
+                    bridgeDebugLog('live_sync_load_forced_async_proxy', {name: name});
+                    return original.call(this, false);
+                }
+                return original.apply(this, arguments);
+            };
+            w[name].__sttvLiveProxyAsyncLoadPatched = true;
+            patched += 1;
+        };
+        wrap('Play_loadData');
+        wrap('PlayExtra_Resume');
+        if (patched >= 1) {
+            w.__sttvLiveProxyAsyncLoadPatched = true;
+            return true;
+        }
+        return false;
+    }
+    function ensureLiveProxyAsyncLoadFlow() {
+        if (patchLiveProxyAsyncLoadFlow()) return;
+        w.setTimeout(patchLiveProxyAsyncLoadFlow, 1000);
+        w.setTimeout(patchLiveProxyAsyncLoadFlow, 2500);
     }
     // =========================================================================
     // Player Scene Optimizer (webOS-only)
@@ -5650,6 +5699,7 @@
     patchMainUpdateFlow();
     patchUpdateResultFlow();
     ensureVodSafetyPatches();
+    ensureLiveProxyAsyncLoadFlow();
     // Keep upstream proxy selection behavior. Bridge does not force provider defaults.
     // 9) Install launch/relaunch event bridge.
     initLaunch();

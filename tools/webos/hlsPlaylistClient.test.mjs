@@ -17,14 +17,23 @@ const vodPlaybackTokenBody =
   '{"operationName":"PlaybackAccessToken","variables":{"isLive":false,"isVod":true,"login":"","platform":"web","playerType":"site","vodID":"12345"}}';
 
 {
+  assert.deepEqual(client.DEFAULT_OPTIMIZED_PROXIES, [
+    'chromium.api.cdn-perfprod.com:2023',
+    'firefox.api.cdn-perfprod.com:2023'
+  ]);
+}
+
+{
   const attempts = client.buildFetchAttempts(parse(liveUrl), liveUrl, {});
-  assert.equal(attempts.length, 2);
+  assert.equal(attempts.length, 3);
   assert.equal(attempts[0].type, 'ttvlol_proxy');
-  assert.equal(attempts[0].proxy.source, 'firefox.api.cdn-perfprod.com:2023');
+  assert.equal(attempts[0].proxy.source, 'chromium.api.cdn-perfprod.com:2023');
   assert.equal(attempts[0].proxy.protocol, 'http:');
-  assert.equal(attempts[0].proxy.hostname, 'firefox.api.cdn-perfprod.com');
+  assert.equal(attempts[0].proxy.hostname, 'chromium.api.cdn-perfprod.com');
   assert.equal(attempts[0].proxy.port, 2023);
-  assert.equal(attempts[1].type, 'direct');
+  assert.equal(attempts[1].type, 'ttvlol_proxy');
+  assert.equal(attempts[1].proxy.source, 'firefox.api.cdn-perfprod.com:2023');
+  assert.equal(attempts[2].type, 'direct');
 }
 
 {
@@ -137,6 +146,12 @@ const vodPlaybackTokenBody =
   assert.match(bridgeSource, /isLiveGqlPlaybackAccessTokenRequest/);
   assert.match(bridgeSource, /callTwitchProxyService/);
   assert.match(bridgeSource, /function normalizeServiceTwitchResult/);
+  assert.match(bridgeSource, /function patchLiveProxyAsyncLoadFlow/);
+  assert.match(bridgeSource, /live_sync_load_forced_async_proxy/);
+  assert.match(bridgeSource, /wrap\('Play_loadData'\)/);
+  assert.match(bridgeSource, /wrap\('PlayExtra_Resume'\)/);
+  assert.match(bridgeSource, /function playlistHasTwitchStitchedAds/);
+  assert.match(bridgeSource, /twitch_stitched_ad_marker_detected/);
   assert.match(bridgeSource, /isUsherPlaylistRequest\(meta\) && !hasUsablePlaylistBody\(text\)/);
   assert.match(bridgeSource, /3\.0\.379/);
   assert.match(bridgeSource, /remoteWebTag <= localWebTag/);

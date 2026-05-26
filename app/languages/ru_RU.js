@@ -852,7 +852,7 @@ function ru_RULang() {
     STR_WEBOS_TTVLOL_PROXY_ENABLED = 'Включить playlist proxy';
     STR_WEBOS_TTVLOL_PROXY_ENABLED_SUMMARY = 'Отключи, если стримы не открываются, сильно буферятся или нужны прямые плейлисты Twitch.';
     STR_WEBOS_TTVLOL_PROXY_URL = 'Прокси-сервер';
-    STR_WEBOS_TTVLOL_PROXY_URL_SUMMARY = 'По умолчанию: firefox.api.cdn-perfprod.com:2023. Можно указать один прокси или несколько через запятую, точку с запятой или новую строку.';
+    STR_WEBOS_TTVLOL_PROXY_URL_SUMMARY = 'По умолчанию: chromium.api.cdn-perfprod.com:2023,firefox.api.cdn-perfprod.com:2023. Можно указать один прокси или несколько через запятую, точку с запятой или новую строку.';
     STR_WEBOS_TTVLOL_PROXY_URL_PROMPT = 'Укажи HTTP(S) proxy server(s) для TTV LOL. Несколько значений можно разделить запятой, точкой с запятой или новой строкой.';
     SEEK_PREVIEW = 'Предпросмотр при перемотке';
     SEEK_PREVIEW_SUMMARY = 'Позволяет управлять изображением предпросмотра при перемотке VOD, предпросмотр перемотки доступен не для всех VOD.';

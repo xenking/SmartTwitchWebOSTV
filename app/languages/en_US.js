@@ -840,7 +840,7 @@ function en_USLang() {
     STR_WEBOS_TTVLOL_PROXY_ENABLED = 'Enable playlist proxy';
     STR_WEBOS_TTVLOL_PROXY_ENABLED_SUMMARY = 'Disable this if live streams fail, buffer too much, or you want direct Twitch playlists.';
     STR_WEBOS_TTVLOL_PROXY_URL = 'Proxy server';
-    STR_WEBOS_TTVLOL_PROXY_URL_SUMMARY = 'Default: firefox.api.cdn-perfprod.com:2023. You can enter one proxy or multiple proxies separated by comma, semicolon, or new line.';
+    STR_WEBOS_TTVLOL_PROXY_URL_SUMMARY = 'Default: chromium.api.cdn-perfprod.com:2023,firefox.api.cdn-perfprod.com:2023. You can enter one proxy or multiple proxies separated by comma, semicolon, or new line.';
     STR_WEBOS_TTVLOL_PROXY_URL_PROMPT = 'Enter TTV LOL HTTP(S) proxy server(s). Multiple values can be separated by comma, semicolon, or new line.';
     SEEK_PREVIEW = 'Seek Preview';
     SEEK_PREVIEW_SUMMARY =

@@ -2233,7 +2233,7 @@
         STR_WEBOS_TTVLOL_PROXY_ENABLED_SUMMARY = 'Disable this if live streams fail, buffer too much, or you want direct Twitch playlists.';
         STR_WEBOS_TTVLOL_PROXY_URL = 'Proxy server';
         STR_WEBOS_TTVLOL_PROXY_URL_SUMMARY =
-            'Default: firefox.api.cdn-perfprod.com:2023. You can enter one proxy or multiple proxies separated by comma, semicolon, or new line.';
+            'Default: chromium.api.cdn-perfprod.com:2023,firefox.api.cdn-perfprod.com:2023. You can enter one proxy or multiple proxies separated by comma, semicolon, or new line.';
         STR_WEBOS_TTVLOL_PROXY_URL_PROMPT =
             'Enter TTV LOL HTTP(S) proxy server(s). Multiple values can be separated by comma, semicolon, or new line.';
         SEEK_PREVIEW = 'Seek Preview';
@@ -5815,7 +5815,7 @@
         STR_WEBOS_TTVLOL_PROXY_ENABLED_SUMMARY = 'Отключи, если стримы не открываются, сильно буферятся или нужны прямые плейлисты Twitch.';
         STR_WEBOS_TTVLOL_PROXY_URL = 'Прокси-сервер';
         STR_WEBOS_TTVLOL_PROXY_URL_SUMMARY =
-            'По умолчанию: firefox.api.cdn-perfprod.com:2023. Можно указать один прокси или несколько через запятую, точку с запятой или новую строку.';
+            'По умолчанию: chromium.api.cdn-perfprod.com:2023,firefox.api.cdn-perfprod.com:2023. Можно указать один прокси или несколько через запятую, точку с запятой или новую строку.';
         STR_WEBOS_TTVLOL_PROXY_URL_PROMPT =
             'Укажи HTTP(S) proxy server(s) для TTV LOL. Несколько значений можно разделить запятой, точкой с запятой или новой строкой.';
         SEEK_PREVIEW = 'Предпросмотр при перемотке';
@@ -43637,7 +43637,7 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
         return 3;
     }
 
-    var Settings_WebOsTtvLolProxyDefault = 'firefox.api.cdn-perfprod.com:2023';
+    var Settings_WebOsTtvLolProxyDefault = 'chromium.api.cdn-perfprod.com:2023,firefox.api.cdn-perfprod.com:2023';
 
     function Settings_GetWebOsTtvLolProxyUrl() {
         return Main_getItemString('webos_ttv_lol_proxy_url_value', Settings_WebOsTtvLolProxyDefault);

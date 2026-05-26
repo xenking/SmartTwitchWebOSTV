@@ -20,7 +20,7 @@ var DEFAULT_TIMEOUT_MS = 4500;
 var MIN_TIMEOUT_MS = 1200;
 var MAX_TIMEOUT_MS = 7000;
 var DEFAULT_ACCEPT_LANGUAGE = 'en-US,en;q=0.9';
-var DEFAULT_OPTIMIZED_PROXIES = ['firefox.api.cdn-perfprod.com:2023'];
+var DEFAULT_OPTIMIZED_PROXIES = ['chromium.api.cdn-perfprod.com:2023', 'firefox.api.cdn-perfprod.com:2023'];
 var MAX_PROXY_COUNT = 12;
 var MAX_PROXY_LENGTH = 512;
 
