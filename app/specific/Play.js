@@ -54,6 +54,7 @@ var Play_exitID = null;
 
 var Play_ResumeAfterOnlineCounter = 0;
 var Play_ResumeAfterOnlineId;
+var Play_WebOSLocalLiveResumeFallback = false;
 var Play_isOn = false;
 var Play_ChatBackgroundID = null;
 var Play_Playing = false;
@@ -486,6 +487,7 @@ function Play_ResumeAfterOnline() {
             if (PlayExtra_PicturePicture) {
                 PlayExtra_Resume(true);
             }
+            Play_WebOSLocalLiveResumeFallback = true;
             Play_loadData();
         }
     }
@@ -817,6 +819,7 @@ function Play_loadDataResult(response) {
 
 function Play_loadDataResultEnd(responseObj) {
     if (responseObj.status === 200) {
+        Play_WebOSLocalLiveResumeFallback = false;
         Play_data.AutoUrl = responseObj.url;
         Play_loadDataSuccessEnd(responseObj.responseText, true);
         return;
@@ -824,7 +827,7 @@ function Play_loadDataResultEnd(responseObj) {
         //404 = off line
         //403 = forbidden access
         //410 = api v3 is gone use v5 bug
-        Play_loadDataErrorFinish(responseObj.status === 410, responseObj.status === 403 || responseObj.status === 1);
+        Play_loadDataErrorFinish(responseObj.status === 410, responseObj.status === 403 || responseObj.status === 1, responseObj.status);
         return;
     }
 
@@ -864,7 +867,7 @@ function Play_loadDataSuccessEnd(playlist, startChat, SkipSaveHistory) {
     Main_Log('Play_data.playlist\n' + Play_data.playlist);
 }
 
-function Play_loadDataErrorFinish(error_410, Isforbiden) {
+function Play_loadDataErrorFinish(error_410, Isforbiden, status) {
     if (Play_EndDialogEnter) {
         Play_EndDialogEnter = 0;
         Play_HideBufferDialog();
@@ -877,9 +880,13 @@ function Play_loadDataErrorFinish(error_410, Isforbiden) {
         Play_RestorePlayDataValues();
         Main_values.Play_WasPlaying = 0;
         Main_SaveValues();
+    } else if (!PlayExtra_PicturePicture && Play_WebOSLocalLiveResumeFallback && status === 404 && Play_WebOSLocalOpenLiveResumePoint()) {
+        Play_WebOSLocalLiveResumeFallback = false;
     } else if (Play_OlddataSet()) {
+        Play_WebOSLocalLiveResumeFallback = false;
         Play_RestorePlayData(error_410, Isforbiden);
     } else if (!PlayExtra_PicturePicture) {
+        Play_WebOSLocalLiveResumeFallback = false;
         if (Isforbiden) {
             Play_ForbiddenLive();
         } else {
@@ -1978,6 +1985,10 @@ function Play_PannelEndStart(PlayVodClip, fail_type, errorCode) {
     //Stop all players to make sure no more end call happen
     if (Main_IsOn_OSInterface && fail_type) {
         OSInterface_stopVideo();
+        if (PlayVodClip === 1 && Play_WebOSLocalLiveResumeFallback && Play_WebOSLocalOpenLiveResumePoint()) {
+            Play_WebOSLocalLiveResumeFallback = false;
+            return;
+        }
         Play_showWarningDialog((fail_type === 1 ? STR_PLAYER_ERROR : STR_PLAYER_LAG_ERRO) + Play_GetErrorCode(errorCode), 2000);
     }
 

@@ -19807,12 +19807,10 @@
         Main_clearInterval(PlayVod_SaveOffsetId);
 
         if (PlayVod_isOn) {
-            var vodOffset = OSInterface_getsavedtime() / 1000;
-            if (vodOffset) {
-                Main_setItem('Main_vodOffset', vodOffset);
-            }
+            if (typeof PlayVod_SaveCurrentOffset === 'function') PlayVod_SaveCurrentOffset();
         } else if (PlayClip_isOn) PlayClip_Resume();
         else if (Play_isOn && !Play_isEndDialogVisible() && !Play_StayDialogVisible()) {
+            Play_WebOSLocalSaveLiveResumePoint();
             if (Play_MultiEnable) {
                 var i = 0;
 
@@ -22033,6 +22031,7 @@
 
     var Play_ResumeAfterOnlineCounter = 0;
     var Play_ResumeAfterOnlineId;
+    var Play_WebOSLocalLiveResumeFallback = false;
     var Play_isOn = false;
     var Play_ChatBackgroundID = null;
     var Play_Playing = false;
@@ -22465,6 +22464,7 @@
                 if (PlayExtra_PicturePicture) {
                     PlayExtra_Resume(true);
                 }
+                Play_WebOSLocalLiveResumeFallback = true;
                 Play_loadData();
             }
         }
@@ -22798,6 +22798,7 @@
 
     function Play_loadDataResultEnd(responseObj) {
         if (responseObj.status === 200) {
+            Play_WebOSLocalLiveResumeFallback = false;
             Play_data.AutoUrl = responseObj.url;
             Play_loadDataSuccessEnd(responseObj.responseText, true);
             return;
@@ -22805,7 +22806,7 @@
             //404 = off line
             //403 = forbidden access
             //410 = api v3 is gone use v5 bug
-            Play_loadDataErrorFinish(responseObj.status === 410, responseObj.status === 403 || responseObj.status === 1);
+            Play_loadDataErrorFinish(responseObj.status === 410, responseObj.status === 403 || responseObj.status === 1, responseObj.status);
             return;
         }
 
@@ -22845,7 +22846,7 @@
         Main_Log('Play_data.playlist\n' + Play_data.playlist);
     }
 
-    function Play_loadDataErrorFinish(error_410, Isforbiden) {
+    function Play_loadDataErrorFinish(error_410, Isforbiden, status) {
         if (Play_EndDialogEnter) {
             Play_EndDialogEnter = 0;
             Play_HideBufferDialog();
@@ -22858,9 +22859,13 @@
             Play_RestorePlayDataValues();
             Main_values.Play_WasPlaying = 0;
             Main_SaveValues();
+        } else if (!PlayExtra_PicturePicture && Play_WebOSLocalLiveResumeFallback && status === 404 && Play_WebOSLocalOpenLiveResumePoint()) {
+            Play_WebOSLocalLiveResumeFallback = false;
         } else if (Play_OlddataSet()) {
+            Play_WebOSLocalLiveResumeFallback = false;
             Play_RestorePlayData(error_410, Isforbiden);
         } else if (!PlayExtra_PicturePicture) {
+            Play_WebOSLocalLiveResumeFallback = false;
             if (Isforbiden) {
                 Play_ForbiddenLive();
             } else {
@@ -23961,6 +23966,10 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
         //Stop all players to make sure no more end call happen
         if (Main_IsOn_OSInterface && fail_type) {
             OSInterface_stopVideo();
+            if (PlayVodClip === 1 && Play_WebOSLocalLiveResumeFallback && Play_WebOSLocalOpenLiveResumePoint()) {
+                Play_WebOSLocalLiveResumeFallback = false;
+                return;
+            }
             Play_showWarningDialog((fail_type === 1 ? STR_PLAYER_ERROR : STR_PLAYER_LAG_ERRO) + Play_GetErrorCode(errorCode), 2000);
         }
 
@@ -25562,6 +25571,64 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
 
     function Play_WebOSLocalArchiveEnabled() {
         return !!(window.STTVWebOSLocalVod && window.STTVWebOSLocalVod.getState && window.STTVWebOSLocalVod.getState().enabled);
+    }
+
+    var Play_WebOSLocalLiveResumeItem = 'webos_local_live_resume_point';
+
+    function Play_WebOSLocalSaveLiveResumePoint() {
+        if (!Play_WebOSLocalArchiveEnabled() || !Play_isOn || !Play_data || !Play_data.data || !Play_data.data[12]) return;
+        var liveId = Play_data.data[7] || Play_data.data[6] || '';
+        if (!liveId) return;
+        Main_setItem(
+            Play_WebOSLocalLiveResumeItem,
+            JSON.stringify({
+                id: liveId,
+                date: new Date().getTime(),
+                data: Main_Slice(Play_data.data),
+                vodid: ''
+            })
+        );
+    }
+
+    function Play_WebOSLocalGetLiveResumePoint() {
+        if (!Play_WebOSLocalArchiveEnabled() || !Play_data || !Play_data.data || !Play_data.data[12]) return null;
+        var liveId = Play_data.data[7] || Play_data.data[6] || '';
+        var historyPos = AddUser_IsUserSet() && liveId ? Main_history_GetById('live', liveId) : null;
+        var stored = null;
+        try {
+            stored = Main_getItemJson(Play_WebOSLocalLiveResumeItem, null);
+        } catch (e) {}
+        if ((!historyPos || !historyPos.date) && stored && stored.id && String(stored.id) === String(liveId)) {
+            historyPos = stored;
+        }
+        if (!historyPos) {
+            historyPos = {
+                id: liveId,
+                date: new Date().getTime(),
+                data: Play_data.data,
+                vodid: ''
+            };
+        }
+        var startedAtMs = new Date(Play_data.data[12]).getTime();
+        var resumeDate = parseInt(historyPos.date);
+        if (!startedAtMs || !resumeDate || resumeDate <= startedAtMs) return null;
+        return {
+            id: historyPos.id || liveId,
+            date: resumeDate,
+            data: Main_Slice(historyPos.data && historyPos.data.length ? historyPos.data : Play_data.data),
+            vodid: historyPos.vodid || ''
+        };
+    }
+
+    function Play_WebOSLocalOpenLiveResumePoint() {
+        var historyPos = Play_WebOSLocalGetLiveResumePoint();
+        if (!historyPos) return false;
+        Main_values_Play_data = historyPos.data;
+        Play_VodObj = historyPos;
+        Play_OpenRewind = false;
+        Play_showWarningMiddleDialog('Opening local archive at saved position', 2500);
+        Main_OPenAsVod(historyPos);
+        return true;
     }
 
     function Play_PrepareLiveAsLocalVod(rewindId) {
@@ -32078,6 +32145,27 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
         }
     }
 
+    function PlayVod_CurrentOffsetSeconds() {
+        var vodOffset = Main_IsOn_OSInterface ? parseInt(OSInterface_gettime() / 1000) : Chat_fakeClock;
+        if (vodOffset > 0) return vodOffset;
+        if (PlayVod_ResumeTime > 0) return PlayVod_ResumeTime;
+        if (Main_vodOffset > 0) return Main_vodOffset;
+        return 0;
+    }
+
+    function PlayVod_SaveCurrentOffset() {
+        if (!PlayVod_isOn || Play_PreviewId) return 0;
+
+        var vodOffset = PlayVod_CurrentOffsetSeconds();
+        if (vodOffset > 0) {
+            Main_setItem('Main_vodOffset', vodOffset);
+            PlayVod_SaveVodIds(vodOffset);
+            PlayVod_ResumeTime = vodOffset;
+            PlayVod_currentTime = vodOffset * 1000;
+        }
+        return vodOffset;
+    }
+
     //Browsers crash trying to get the streams link
     function PlayVod_loadDataSuccessFake() {
         PlayVod_qualities = [
@@ -32401,17 +32489,19 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
     function PlayVod_shutdownStream(SkipSaveOffset) {
         // Main_Log('PlayVod_shutdownStream ' + PlayVod_isOn);
 
-        if (PlayVod_WebOSLocalBridge()) PlayVod_WebOSLocalBridge().shutdown();
-
         if (!Main_IsOn_OSInterface) {
             BrowserTestPlayerEnded(true);
         }
 
         if (PlayVod_isOn) {
+            if (!SkipSaveOffset) PlayVod_SaveCurrentOffset();
             PlayVod_PreshutdownStream(!SkipSaveOffset);
+            if (PlayVod_WebOSLocalBridge()) PlayVod_WebOSLocalBridge().shutdown();
             PlayVod_qualities = [];
             PlayVod_playlist = null;
             Play_exitMain();
+        } else if (PlayVod_WebOSLocalBridge()) {
+            PlayVod_WebOSLocalBridge().shutdown();
         }
     }
 
@@ -32851,7 +32941,7 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
     }
 
     function PlayVod_SaveVodIds(time) {
-        if (time > 0) Main_history_UpdateVodClip(Main_values.ChannelVod_vodId, time, 'vod');
+        if (time > 0 && Main_values.ChannelVod_vodId) Main_history_UpdateVodClip(Main_values.ChannelVod_vodId, time, 'vod');
     }
 
     var Play_HideVodDialogId;

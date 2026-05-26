@@ -10,6 +10,11 @@ function parse(url) {
 
 const liveUrl = 'https://usher.ttvnw.net/api/channel/hls/somechannel.m3u8?sig=s&token=t';
 const vodUrl = 'https://usher.ttvnw.net/vod/12345.m3u8?sig=s&token=t';
+const gqlUrl = 'https://gql.twitch.tv/gql';
+const livePlaybackTokenBody =
+  '{"operationName":"PlaybackAccessToken","variables":{"isLive":true,"isVod":false,"login":"somechannel","platform":"web","playerType":"site","vodID":""}}';
+const vodPlaybackTokenBody =
+  '{"operationName":"PlaybackAccessToken","variables":{"isLive":false,"isVod":true,"login":"","platform":"web","playerType":"site","vodID":"12345"}}';
 
 {
   const attempts = client.buildFetchAttempts(parse(liveUrl), liveUrl, {});
@@ -52,6 +57,33 @@ const vodUrl = 'https://usher.ttvnw.net/vod/12345.m3u8?sig=s&token=t';
 }
 
 {
+  const attempts = client.buildFetchAttempts(parse(gqlUrl), gqlUrl, {
+    method: 'POST',
+    body: livePlaybackTokenBody,
+    optimizedProxies: ['custom.test:3128']
+  });
+  assert.equal(attempts.length, 2);
+  assert.equal(attempts[0].type, 'ttvlol_proxy');
+  assert.equal(attempts[0].proxy.hostname, 'custom.test');
+  assert.equal(attempts[1].type, 'direct');
+}
+
+{
+  const attempts = client.buildFetchAttempts(parse(gqlUrl), gqlUrl, {
+    method: 'POST',
+    body: vodPlaybackTokenBody,
+    optimizedProxies: ['custom.test:3128']
+  });
+  assert.equal(attempts.length, 1);
+  assert.equal(attempts[0].type, 'direct');
+}
+
+{
+  assert.equal(client.isLivePlaybackAccessTokenRequest(parse(gqlUrl), { method: 'POST', body: livePlaybackTokenBody }), true);
+  assert.equal(client.isLivePlaybackAccessTokenRequest(parse(gqlUrl), { method: 'POST', body: vodPlaybackTokenBody }), false);
+}
+
+{
   assert.equal(client.isAllowedPlaylistUrl(parse(liveUrl)), true);
   assert.equal(client.isAllowedPlaylistUrl(parse(vodUrl)), true);
   assert.equal(client.isAllowedPlaylistUrl(parse('https://usher.ttvnw.net/api/channel/hls/somechannel.ts')), false);
@@ -79,6 +111,19 @@ const vodUrl = 'https://usher.ttvnw.net/vod/12345.m3u8?sig=s&token=t';
 }
 
 {
+  const headers = client.buildRequestHeaders({
+    headers: [
+      ['Client-ID', 'client123'],
+      ['Authorization', 'Bearer token123'],
+      ['X-Not-Allowed', 'drop-me']
+    ]
+  });
+  assert.equal(headers['Client-ID'], 'client123');
+  assert.equal(headers.Authorization, 'Bearer token123');
+  assert.equal(headers['X-Not-Allowed'], undefined);
+}
+
+{
   const fs = require('node:fs');
   const settingsSource = fs.readFileSync('app/specific/Settings.js', 'utf8');
   assert.match(settingsSource, /webos_ttv_lol_proxy_settings/);
@@ -89,6 +134,10 @@ const vodUrl = 'https://usher.ttvnw.net/vod/12345.m3u8?sig=s&token=t';
   const bridgeSource = fs.readFileSync('webos/bridge/webosCompatBridge.js', 'utf8');
   assert.match(bridgeSource, /webos_ttv_lol_proxy/);
   assert.match(bridgeSource, /webos_ttv_lol_proxy_url_value/);
+  assert.match(bridgeSource, /isLiveGqlPlaybackAccessTokenRequest/);
+  assert.match(bridgeSource, /callTwitchProxyService/);
+  assert.match(bridgeSource, /function normalizeServiceTwitchResult/);
+  assert.match(bridgeSource, /isUsherPlaylistRequest\(meta\) && !hasUsablePlaylistBody\(text\)/);
   assert.match(bridgeSource, /3\.0\.379/);
   assert.match(bridgeSource, /remoteWebTag <= localWebTag/);
 

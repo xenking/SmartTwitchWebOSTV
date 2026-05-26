@@ -616,9 +616,23 @@
             callback({matched: false, reason: result.error || ('HTTP ' + result.status)});
         });
     }
+    function localVodIsTruthy(value) {
+        return value === true || value === 1 || value === '1' || value === 'true';
+    }
+    function localVodShouldUseFilePlayback(match) {
+        if (!match || !match.vod) return false;
+        var vod = match.vod;
+        var fileUrl = match.file_url || vod.file_url || '';
+        if (!fileUrl) return false;
+        if (localVodIsTruthy(vod.source_pruned)) return true;
+        if (!Object.prototype.hasOwnProperty.call(vod, 'source_count')) return false;
+        return String(vod.status || '').toLowerCase() === 'finalized' && parseInt(vod.source_count, 10) === 0;
+    }
     function localVodPlaybackUrl(match) {
         if (!match || !match.vod) return '';
-        return localArchiveUrl(match.playback_url || match.vod.playback_url || match.file_url || match.vod.file_url || '');
+        var fileUrl = match.file_url || match.vod.file_url || '';
+        var playlistUrl = match.playback_url || match.vod.playback_url || '';
+        return localArchiveUrl(localVodShouldUseFilePlayback(match) ? fileUrl : playlistUrl || fileUrl);
     }
     function localVodHasUsableCurrentMatch() {
         return !!(localVodOverride.match && localVodOverride.match.matched && localVodOverride.match.position_within_recording && localVodPlaybackUrl(localVodOverride.match));
@@ -720,9 +734,6 @@
         var durationSeconds = localVodDurationSeconds(meta.durationSeconds || meta.duration_seconds || meta.duration || 0);
         var positionSeconds = localVodDurationSeconds(meta.positionSeconds || meta.position_seconds || 0);
         var playerPositionSeconds = localVodDurationSeconds(meta.playerPositionSeconds || meta.player_position_seconds || positionSeconds);
-        if (localVodOverride.source === 'local' && localVodOverride.match) {
-            positionSeconds = Math.floor(localVodLocalToTwitchMs(playerPositionSeconds * 1000) / 1000);
-        }
         if (!positionSeconds && meta.resumeSeconds) positionSeconds = localVodDurationSeconds(meta.resumeSeconds);
         if (!login || !startedAtMs || !durationSeconds) return null;
         return {
@@ -913,6 +924,7 @@
     }
     function localVodShutdown() {
         localVodOverride.source = 'twitch';
+        localVodOverride.defaultSource = 'local';
         localVodOverride.matching = false;
         localVodOverride.actions = null;
         localVodOverride.suppressMatch = false;
@@ -1659,6 +1671,13 @@
         }
         if (call('Main_CheckStop') !== null) lifecycleSuspended = true;
     }
+    function persistPlaybackPositionForLifecycle() {
+        try {
+            if (w.PlayVod_isOn && typeof w.PlayVod_SaveCurrentOffset === 'function') {
+                w.PlayVod_SaveCurrentOffset();
+            }
+        } catch (e) {}
+    }
     // Resumes playback after app returns to foreground.
     function tryLifecycleResume() {
         if (!shouldLifecycleHandle()) return;
@@ -1726,6 +1745,7 @@
             var hidden = !!w.document[hiddenProp] || w.document.visibilityState === 'hidden' || w.document.webkitVisibilityState === 'hidden';
             if (hidden) {
                 if (!lifecycleHiddenSinceAt) lifecycleHiddenSinceAt = Date.now();
+                persistPlaybackPositionForLifecycle();
                 if (versionRefreshIntervalId) { w.clearInterval(versionRefreshIntervalId); versionRefreshIntervalId = 0; }
                 scheduleLifecycleStop(LIFECYCLE_STOP_MIN_HIDDEN_MS);
             }
@@ -1747,6 +1767,20 @@
                 clearScheduledLifecycleStop();
                 lifecycleHiddenSinceAt = 0;
                 tryLifecycleResume();
+            },
+            true
+        );
+        w.addEventListener(
+            'pagehide',
+            function () {
+                persistPlaybackPositionForLifecycle();
+            },
+            true
+        );
+        w.addEventListener(
+            'blur',
+            function () {
+                persistPlaybackPositionForLifecycle();
             },
             true
         );
@@ -3268,6 +3302,17 @@
         var normalizedPath = String(meta.pathLower || '').toLowerCase().split('?')[0];
         return normalizedPath.indexOf('/api/channel/hls/') === 0;
     }
+    function isLiveGqlPlaybackAccessTokenRequest(meta, method, body) {
+        if (!meta) return false;
+        if (meta.host !== 'gql.twitch.tv') return false;
+        if (String(method || meta.method || 'GET').toUpperCase() !== 'POST') return false;
+        var normalizedPath = String(meta.pathLower || '').toLowerCase().split('?')[0] || '/';
+        if (normalizedPath !== '/gql' && normalizedPath !== '/') return false;
+        var requestBody = typeof body === 'string' ? body : '';
+        if (!requestBody) return false;
+        if (requestBody.indexOf('PlaybackAccessToken') === -1 && requestBody.indexOf('streamPlaybackAccessToken') === -1) return false;
+        return /"isLive"\s*:\s*true/i.test(requestBody) || requestBody.indexOf('streamPlaybackAccessToken') !== -1;
+    }
     function shouldUseUsherPlaylistCorsFallback(meta, status, text, reason) {
         if (!isUsherPlaylistRequest(meta)) return false;
         var st = parseInt(status, 10) || 0;
@@ -3304,6 +3349,9 @@
         if (!appId) return '';
         return appId + USHER_PLAYLIST_SERVICE_ID_SUFFIX;
     }
+    function isTwitchProxyServiceAvailable() {
+        return !!(getUsherPlaylistServiceName() && typeof w.PalmServiceBridge === 'function');
+    }
     function getUsherPlaylistServiceTimeoutMs(timeoutHint) {
         var parsed = parseInt(timeoutHint, 10);
         if (!isFinite(parsed) || parsed <= 0) parsed = USHER_PLAYLIST_SERVICE_TIMEOUT_MS;
@@ -3330,11 +3378,12 @@
         };
         pruneOldestMapEntries(usherPlaylistCacheByKey, USHER_PLAYLIST_CACHE_MAX);
     }
-    function normalizeServicePlaylistResult(rawResult, meta) {
+    function normalizeServiceTwitchResult(rawResult, meta) {
         var payload = rawResult && typeof rawResult === 'object' ? rawResult : {};
         var st = parseInt(payload.status, 10) || 0;
         var text = typeof payload.responseText === 'string' ? payload.responseText : '';
-        if (st !== 200 || !hasUsablePlaylistBody(text)) return null;
+        if (st !== 200 || !text) return null;
+        if (isUsherPlaylistRequest(meta) && !hasUsablePlaylistBody(text)) return null;
         var url = typeof payload.url === 'string' && payload.url ? payload.url : meta && meta.url ? meta.url : '';
         return {
             status: 200,
@@ -3344,7 +3393,7 @@
             proxy: typeof payload.proxy === 'string' ? payload.proxy : ''
         };
     }
-    function callUsherPlaylistService(meta, timeoutMs, done) {
+    function callTwitchProxyService(meta, method, body, headers, timeoutMs, done) {
         var finish = typeof done === 'function' ? done : function () {};
         var serviceName = getUsherPlaylistServiceName();
         if (!serviceName || typeof w.PalmServiceBridge !== 'function') {
@@ -3401,7 +3450,7 @@
         }
         bridge.onservicecallback = function (msg) {
             var parsed = safeParse(msg, null);
-            var normalized = normalizeServicePlaylistResult(parsed, meta);
+            var normalized = normalizeServiceTwitchResult(parsed, meta);
             if (normalized) {
                 safeFinish(normalized, 'service_ok');
                 return;
@@ -3419,6 +3468,9 @@
         try {
             bridge.call('luna://' + serviceName + '/fetchPlaylist', JSON.stringify({
                 url: requestUrl,
+                method: String(method || 'GET').toUpperCase(),
+                body: typeof body === 'string' ? body : '',
+                headers: normalizeHeadersInput(headers),
                 timeoutMs: getUsherPlaylistServiceTimeoutMs(timeoutMs),
                 origin: requestOrigin || '',
                 referer: requestReferer || '',
@@ -3430,6 +3482,9 @@
         } catch (eCall) {
             safeFinish(null, 'service_call_exception');
         }
+    }
+    function callUsherPlaylistService(meta, timeoutMs, done) {
+        callTwitchProxyService(meta, 'GET', '', null, timeoutMs, done);
     }
     function flushUsherPlaylistInFlight(requestKey, result, reason) {
         var inFlight = usherPlaylistInFlightByKey[requestKey];
@@ -3795,6 +3850,7 @@
         var callback = typeof cb === 'function' ? cb : function () {};
         var meta = buildNetworkRequestMeta(u, method, body);
         var forceServiceFetch = isForceHlsServiceFetchEnabled() || (isTtvLolPlaylistProxyEnabled() && isLiveUsherPlaylistRequest(meta));
+        var forceGqlProxyFetch = isTtvLolPlaylistProxyEnabled() && isLiveGqlPlaybackAccessTokenRequest(meta, method, body);
         maybePruneNetworkState();
         var effectiveTimeout = getEffectiveTimeoutMs(to, meta);
         var requestStartedAt = Date.now();
@@ -3848,6 +3904,19 @@
             x = null;
             if (callbackRef) callbackRef(finalStatus, finalText, finalUrl);
         };
+        if (forceGqlProxyFetch && isTwitchProxyServiceAvailable()) {
+            bridgeDebugLog('gql_token_proxy_service_forced', {
+                url: meta && meta.url ? meta.url : ''
+            });
+            callTwitchProxyService(meta, method, body, h, effectiveTimeout, function (serviceResult, serviceReason) {
+                if (serviceResult && serviceResult.status === 200 && serviceResult.responseText) {
+                    finish(serviceResult.status, serviceResult.responseText, 'service_success', serviceResult.url || meta.url || '', true, true);
+                    return;
+                }
+                finish(0, '', serviceReason || 'service_unavailable', meta.url || '', true, true);
+            });
+            return;
+        }
         if (isUsherPlaylistRequest(meta) && (usherPlaylistCorsFailureSeen || forceServiceFetch)) {
             if (forceServiceFetch) {
                 bridgeDebugLog('usher_hls_service_forced', {

@@ -2985,12 +2985,10 @@ function Main_CheckStop() {
     Main_clearInterval(PlayVod_SaveOffsetId);
 
     if (PlayVod_isOn) {
-        var vodOffset = OSInterface_getsavedtime() / 1000;
-        if (vodOffset) {
-            Main_setItem('Main_vodOffset', vodOffset);
-        }
+        if (typeof PlayVod_SaveCurrentOffset === 'function') PlayVod_SaveCurrentOffset();
     } else if (PlayClip_isOn) PlayClip_Resume();
     else if (Play_isOn && !Play_isEndDialogVisible() && !Play_StayDialogVisible()) {
+        Play_WebOSLocalSaveLiveResumePoint();
         if (Play_MultiEnable) {
             var i = 0;
 

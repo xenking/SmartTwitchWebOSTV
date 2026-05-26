@@ -230,6 +230,64 @@ function Play_WebOSLocalArchiveEnabled() {
     );
 }
 
+var Play_WebOSLocalLiveResumeItem = 'webos_local_live_resume_point';
+
+function Play_WebOSLocalSaveLiveResumePoint() {
+    if (!Play_WebOSLocalArchiveEnabled() || !Play_isOn || !Play_data || !Play_data.data || !Play_data.data[12]) return;
+    var liveId = Play_data.data[7] || Play_data.data[6] || '';
+    if (!liveId) return;
+    Main_setItem(
+        Play_WebOSLocalLiveResumeItem,
+        JSON.stringify({
+            id: liveId,
+            date: new Date().getTime(),
+            data: Main_Slice(Play_data.data),
+            vodid: ''
+        })
+    );
+}
+
+function Play_WebOSLocalGetLiveResumePoint() {
+    if (!Play_WebOSLocalArchiveEnabled() || !Play_data || !Play_data.data || !Play_data.data[12]) return null;
+    var liveId = Play_data.data[7] || Play_data.data[6] || '';
+    var historyPos = AddUser_IsUserSet() && liveId ? Main_history_GetById('live', liveId) : null;
+    var stored = null;
+    try {
+        stored = Main_getItemJson(Play_WebOSLocalLiveResumeItem, null);
+    } catch (e) {}
+    if ((!historyPos || !historyPos.date) && stored && stored.id && String(stored.id) === String(liveId)) {
+        historyPos = stored;
+    }
+    if (!historyPos) {
+        historyPos = {
+            id: liveId,
+            date: new Date().getTime(),
+            data: Play_data.data,
+            vodid: ''
+        };
+    }
+    var startedAtMs = new Date(Play_data.data[12]).getTime();
+    var resumeDate = parseInt(historyPos.date);
+    if (!startedAtMs || !resumeDate || resumeDate <= startedAtMs) return null;
+    return {
+        id: historyPos.id || liveId,
+        date: resumeDate,
+        data: Main_Slice(historyPos.data && historyPos.data.length ? historyPos.data : Play_data.data),
+        vodid: historyPos.vodid || ''
+    };
+}
+
+function Play_WebOSLocalOpenLiveResumePoint() {
+    var historyPos = Play_WebOSLocalGetLiveResumePoint();
+    if (!historyPos) return false;
+    Main_values_Play_data = historyPos.data;
+    Play_VodObj = historyPos;
+    Play_OpenRewind = false;
+    Play_showWarningMiddleDialog('Opening local archive at saved position', 2500);
+    Main_OPenAsVod(historyPos);
+    return true;
+}
+
 function Play_PrepareLiveAsLocalVod(rewindId) {
     Main_values_Play_data = Play_data.data;
     Main_values.Main_selectedChannelDisplayname = Play_data.data[1];

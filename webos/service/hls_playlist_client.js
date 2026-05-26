@@ -1,8 +1,8 @@
 /*
  * HLS playlist client for the SmartTwitchWebOSTV webOS service.
- * Fetches Twitch Usher playlists directly or through TTV LOL v2-style
- * HTTP(S) CONNECT proxies. Kept dependency-free so it can be unit tested
- * outside the Luna service runtime.
+ * Fetches Twitch live PlaybackAccessToken GQL requests and Usher playlists
+ * directly or through TTV LOL v2-style HTTP(S) CONNECT proxies. Kept
+ * dependency-free so it can be unit tested outside the Luna service runtime.
  */
 
 'use strict';
@@ -13,7 +13,9 @@ var tls = require('tls');
 var urlLib = require('url');
 
 var ALLOWED_HOST = 'usher.ttvnw.net';
+var GQL_HOST = 'gql.twitch.tv';
 var MAX_RESPONSE_BYTES = 1024 * 1024;
+var MAX_REQUEST_BODY_BYTES = 128 * 1024;
 var DEFAULT_TIMEOUT_MS = 4500;
 var MIN_TIMEOUT_MS = 1200;
 var MAX_TIMEOUT_MS = 7000;
@@ -45,6 +47,23 @@ function isLiveChannelPlaylistUrl(parsedUrl) {
     if (!parsedUrl) return false;
     var path = String(parsedUrl.pathname || '').toLowerCase();
     return path.indexOf('/api/channel/hls/') === 0 && /\.m3u8$/.test(path);
+}
+
+function isLivePlaybackAccessTokenRequest(parsedUrl, payload) {
+    if (!parsedUrl || String(parsedUrl.protocol || '').toLowerCase() !== 'https:') return false;
+    if (String(parsedUrl.hostname || '').toLowerCase() !== GQL_HOST) return false;
+    var method = String(payload && payload.method ? payload.method : 'GET').toUpperCase();
+    if (method !== 'POST') return false;
+    var path = String(parsedUrl.pathname || '/').toLowerCase();
+    if (path !== '/gql' && path !== '/') return false;
+    var body = typeof payload.body === 'string' ? payload.body : '';
+    if (!body || body.length > MAX_REQUEST_BODY_BYTES) return false;
+    if (body.indexOf('PlaybackAccessToken') === -1 && body.indexOf('streamPlaybackAccessToken') === -1) return false;
+    return /"isLive"\s*:\s*true/i.test(body) || body.indexOf('streamPlaybackAccessToken') !== -1;
+}
+
+function isAllowedTwitchProxyRequest(parsedUrl, payload) {
+    return isAllowedPlaylistUrl(parsedUrl) || isLivePlaybackAccessTokenRequest(parsedUrl, payload || {});
 }
 
 function normalizeList(value, fallback) {
@@ -191,18 +210,62 @@ function buildRequestHeaders(payload) {
     if (requestUserAgent) requestHeaders['User-Agent'] = requestUserAgent;
     requestHeaders['Sec-Fetch-Mode'] = 'cors';
     requestHeaders['Sec-Fetch-Site'] = 'cross-site';
+    mergeAllowedRequestHeaders(requestHeaders, payload.headers);
     return requestHeaders;
 }
 
-function requestPlaylistText(targetUrl, parsedUrl, headers, timeoutMs, proxyInfo, callback) {
+function mergeAllowedRequestHeaders(out, headers) {
+    var list = [];
+    var i;
+    if (Array.isArray(headers)) {
+        list = headers;
+    } else if (typeof headers === 'string') {
+        try {
+            var parsed = JSON.parse(headers);
+            if (Array.isArray(parsed)) list = parsed;
+        } catch (eParse) {}
+    } else if (headers && typeof headers === 'object') {
+        for (var key in headers) {
+            if (Object.prototype.hasOwnProperty.call(headers, key)) list.push([key, headers[key]]);
+        }
+    }
+    for (i = 0; i < list.length; i++) {
+        if (!list[i] || list[i].length < 2) continue;
+        var name = normalizeHeaderValue(String(list[i][0] || ''), 64);
+        var lower = name.toLowerCase();
+        if (lower !== 'client-id' && lower !== 'authorization' && lower !== 'accept' && lower !== 'content-type') continue;
+        var value = normalizeHeaderValue(list[i][1] == null ? '' : String(list[i][1]), 2048);
+        if (!value) continue;
+        out[name] = value;
+    }
+}
+
+function requestTwitchText(targetUrl, parsedUrl, headers, timeoutMs, proxyInfo, payload, callback) {
     var finished = false;
+    payload = payload && typeof payload === 'object' ? payload : {};
+    var method = String(payload.method || 'GET').toUpperCase();
+    var body = typeof payload.body === 'string' ? payload.body : '';
+    if (method !== 'POST') body = '';
+    if (body && body.length > MAX_REQUEST_BODY_BYTES) {
+        callback(new Error('REQUEST_BODY_TOO_LARGE'), 413, '', targetUrl);
+        return;
+    }
+    var requestHeaders = {};
+    var headerName;
+    for (headerName in headers) {
+        if (Object.prototype.hasOwnProperty.call(headers, headerName)) requestHeaders[headerName] = headers[headerName];
+    }
+    if (body) {
+        if (!requestHeaders['Content-Type'] && !requestHeaders['content-type']) requestHeaders['Content-Type'] = 'application/json';
+        requestHeaders['Content-Length'] = Buffer.byteLength(body, 'utf8');
+    }
     var reqOptions = {
         protocol: 'https:',
         hostname: parsedUrl.hostname,
         port: parsedUrl.port ? parsedUrl.port : 443,
-        method: 'GET',
+        method: method,
         path: parsedUrl.pathname + (parsedUrl.search || ''),
-        headers: headers
+        headers: requestHeaders
     };
     if (proxyInfo) {
         reqOptions.agent = false;
@@ -237,7 +300,7 @@ function requestPlaylistText(targetUrl, parsedUrl, headers, timeoutMs, proxyInfo
                 callback(new Error('DECODE_ERROR'), 500, '', targetUrl);
                 return;
             }
-            if (body.indexOf('#EXTM3U') === -1) {
+            if (isAllowedPlaylistUrl(parsedUrl) && body.indexOf('#EXTM3U') === -1) {
                 callback(new Error('INVALID_PLAYLIST'), 502, body, targetUrl);
                 return;
             }
@@ -252,7 +315,12 @@ function requestPlaylistText(targetUrl, parsedUrl, headers, timeoutMs, proxyInfo
         finished = true;
         callback(err || new Error('NETWORK_ERROR'), 0, '', targetUrl);
     });
+    if (body) req.write(body);
     req.end();
+}
+
+function requestPlaylistText(targetUrl, parsedUrl, headers, timeoutMs, proxyInfo, callback) {
+    requestTwitchText(targetUrl, parsedUrl, headers, timeoutMs, proxyInfo, {method: 'GET', body: ''}, callback);
 }
 
 function isTtvLolEnabled(payload) {
@@ -261,7 +329,7 @@ function isTtvLolEnabled(payload) {
 
 function buildFetchAttempts(parsedUrl, targetUrl, payload) {
     var attempts = [];
-    if (isTtvLolEnabled(payload) && isLiveChannelPlaylistUrl(parsedUrl)) {
+    if (isTtvLolEnabled(payload) && (isLiveChannelPlaylistUrl(parsedUrl) || isLivePlaybackAccessTokenRequest(parsedUrl, payload || {}))) {
         var optimizedProxies = normalizeList(payload.optimizedProxies, DEFAULT_OPTIMIZED_PROXIES);
         var proxyIndex;
         for (proxyIndex = 0; proxyIndex < optimizedProxies.length; proxyIndex++) {
@@ -305,8 +373,8 @@ function fetchPlaylist(payload, callback) {
         return;
     }
 
-    if (!isAllowedPlaylistUrl(parsedUrl)) {
-        callback({returnValue: false, status: 403, errorCode: 'URL_NOT_ALLOWED', errorText: 'Only usher Twitch playlist URLs are allowed'});
+    if (!isAllowedTwitchProxyRequest(parsedUrl, payload)) {
+        callback({returnValue: false, status: 403, errorCode: 'URL_NOT_ALLOWED', errorText: 'Only live Twitch GQL token and usher playlist URLs are allowed'});
         return;
     }
 
@@ -327,8 +395,8 @@ function fetchPlaylist(payload, callback) {
             return;
         }
         var attempt = attempts[index];
-        requestPlaylistText(attempt.url, parsedUrl, requestHeaders, timeoutMs, attempt.proxy, function (err, status, body, responseUrl) {
-            if (!err && status === 200 && body && body.indexOf('#EXTM3U') !== -1) {
+        requestTwitchText(attempt.url, parsedUrl, requestHeaders, timeoutMs, attempt.proxy, payload, function (err, status, body, responseUrl) {
+            if (!err && status === 200 && body && (!isAllowedPlaylistUrl(parsedUrl) || body.indexOf('#EXTM3U') !== -1)) {
                 finish({
                     returnValue: true,
                     status: 200,
@@ -348,14 +416,18 @@ function fetchPlaylist(payload, callback) {
 
 module.exports = {
     ALLOWED_HOST: ALLOWED_HOST,
+    GQL_HOST: GQL_HOST,
     DEFAULT_OPTIMIZED_PROXIES: DEFAULT_OPTIMIZED_PROXIES,
     clampTimeout: clampTimeout,
     isAllowedPlaylistUrl: isAllowedPlaylistUrl,
     isLiveChannelPlaylistUrl: isLiveChannelPlaylistUrl,
+    isLivePlaybackAccessTokenRequest: isLivePlaybackAccessTokenRequest,
+    isAllowedTwitchProxyRequest: isAllowedTwitchProxyRequest,
     normalizeList: normalizeList,
     parseProxyInfo: parseProxyInfo,
     buildRequestHeaders: buildRequestHeaders,
     buildFetchAttempts: buildFetchAttempts,
+    requestTwitchText: requestTwitchText,
     requestPlaylistText: requestPlaylistText,
     fetchPlaylist: fetchPlaylist
 };
