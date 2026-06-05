@@ -972,6 +972,8 @@ function UserLiveFeedobj_SetBottomText(pos) {
 }
 
 function UserLiveFeedobj_CreateSideFeed(id, data) {
+    var isWTV = typeof WTV_IsData === 'function' && WTV_IsData(data);
+    var statusText = data[4];
     return (
         '<div id="' +
         UserLiveFeed_side_ids[3] +
@@ -1020,12 +1022,14 @@ function UserLiveFeedobj_CreateSideFeed(id, data) {
         UserLiveFeed_side_ids[11] +
         id +
         '" class="icon-' +
-        (!data[8] ? 'circle" style="color: red;' : 'refresh" style="') +
+        (!data[8] ? 'circle" style="color: ' + (isWTV ? '#9146ff' : 'red') + ';' : 'refresh" style="') +
         ' font-size: 55%; "></i><div id="' +
         UserLiveFeed_side_ids[12] +
         id +
-        '" style="font-size: 58%;">' +
-        data[4] +
+        '" style="font-size: 58%;' +
+        (isWTV ? ' color: #b26cff;' : '') +
+        '">' +
+        statusText +
         '</div></div></div></div></div></div></div>'
     );
 }
@@ -1033,6 +1037,8 @@ function UserLiveFeedobj_CreateSideFeed(id, data) {
 function UserLiveFeedobj_CreatFeed(pos, y, id, data, Extra_when, Extra_vodimg, force_VOD) {
     if (!data[1]) data[1] = data[6];
     var div = document.createElement('div');
+    var isWTV = typeof WTV_IsData === 'function' && WTV_IsData(data);
+    var sourceLabel = isWTV ? '<span style="color:#b26cff;">' + data[4] + '</span>' : data[5];
 
     div.setAttribute('id', UserLiveFeed_ids[3] + id);
     UserLiveFeed_DataObj[pos][y] = data;
@@ -1067,14 +1073,16 @@ function UserLiveFeedobj_CreatFeed(pos, y, id, data, Extra_when, Extra_vodimg, f
         ' live_icon strokedeline' +
         (force_VOD ? ' hideimp' : '') +
         '" style="color: ' +
-        (data[8] ? '#FFFFFF' : 'red') +
+        (data[8] ? '#FFFFFF' : isWTV ? '#9146ff' : 'red') +
         ';"></i> ' +
-        (Extra_vodimg || force_VOD
+        (isWTV
+            ? '<div class="partnericon_text" style="background: #9146ff;">&nbsp;&nbsp;W.TV&nbsp;&nbsp;</div>&nbsp;'
+            : Extra_vodimg || force_VOD
             ? '<div class="vodicon_text ' + (force_VOD ? '' : 'hideimp') + '" style="background: #00a94b;">&nbsp;&nbsp;VOD&nbsp;&nbsp;</div>&nbsp;'
             : '<div style="display: none;"></div>') + //empty div to prevent error when childNodes[2].classList.remove
         data[1] +
         '</div><div class="stream_info_live" style="width: 36%; float: right; text-align: right; display: inline-block; font-size: 70%;">' +
-        data[5] +
+        sourceLabel +
         '</div></div><div class="' +
         (Extra_when ? 'stream_info_live_title_single_line' : 'stream_info_live_title') +
         '" id="' +
@@ -1141,6 +1149,7 @@ function UserLiveFeedobj_CreatFeed(pos, y, id, data, Extra_when, Extra_vodimg, f
 
 function UserLiveFeedobj_CreateVodFeed(pos, x, id, data, Extra_when, Extra_until) {
     var div = document.createElement('div');
+    var sourceLabel = WTV_IsData(data) ? '<span style="color:#b26cff;">W.TV</span>' : data[5];
 
     div.setAttribute('id', UserLiveFeed_ids[3] + id);
     UserLiveFeed_DataObj[pos][x] = data;
@@ -1170,7 +1179,7 @@ function UserLiveFeedobj_CreateVodFeed(pos, x, id, data, Extra_when, Extra_until
         '<i class="icon-circle live_icon strokedeline" style="color: #00a94b;"></i> ' +
         data[1] +
         '</div><div class="stream_info_live" style="width:36%; float: right; text-align: right; display: inline-block; font-size: 70%;">' +
-        data[5] +
+        sourceLabel +
         '</div></div><div class="' +
         (Extra_when ? 'stream_info_live_title_single_line' : 'stream_info_live_title') +
         '">' +
@@ -1371,6 +1380,8 @@ function UserLiveFeed_loadDataSuccessEnd(response) {
     Main_innerHTMLWithEle(Sidepannel_ScroolDoc, Sidepannel_Html);
 
     UserLiveFeed_itemsCount[UserLiveFeedobj_UserLivePos] = itemsCount;
+    if (typeof WTV_CheckMappedChannelsForUserFeed === 'function') WTV_CheckMappedChannelsForUserFeed();
+    if (typeof WTV_StartMappedFeedPolling === 'function') WTV_StartMappedFeedPolling();
 
     Main_setTimeout(function () {
         UserLiveFeedobj_AddBanner(UserLiveFeedobj_UserLivePos);
@@ -1448,6 +1459,7 @@ function UserLiveFeedobj_loadUserVod() {
 }
 
 function UserLiveFeedobj_loadUserVodGet() {
+    HttpGetEnsureUserHeader();
     FullxmlHttpGet(
         PlayClip_BaseUrl,
         Main_OAuth_User_Headers,
@@ -1486,14 +1498,24 @@ function UserLiveFeedobj_loadUserVodGetEnd(xmlHttp) {
 }
 
 function UserLiveFeedobj_loadDataBaseVodSuccess(responseText, pos) {
-    var response = JSON.parse(responseText),
+    var response,
         response_items,
         id,
         mArray,
+        node,
+        game,
         i = 0,
         itemsCount = UserLiveFeed_itemsCount[pos],
-        hasData =
-            response.data && response.data.currentUser && response.data.currentUser.followedVideos && response.data.currentUser.followedVideos.edges;
+        hasData;
+
+    try {
+        response = JSON.parse(responseText);
+    } catch (e) {
+        UserLiveFeedobj_loadDataError(pos);
+        return;
+    }
+
+    hasData = response.data && response.data.currentUser && response.data.currentUser.followedVideos && response.data.currentUser.followedVideos.edges;
 
     if (hasData) {
         if (UserLiveFeed_obj[pos].HasMore) {
@@ -1506,7 +1528,11 @@ function UserLiveFeedobj_loadDataBaseVodSuccess(responseText, pos) {
         UserLiveFeed_obj[pos].cursor = response && response && response.length ? response[response.length - 1].cursor : null;
 
         for (i; i < response_items; i++) {
-            mArray = ScreensObj_VodCellArray(response[i].node, true, response[i].node.game.id, response[i].node.game.displayName);
+            node = response[i] ? response[i].node : null;
+            if (!node || !node.id) continue;
+
+            game = node.game || {};
+            mArray = ScreensObj_VodCellArray(node, true, game.id || null, game.displayName || '');
             id = mArray[7];
 
             if (!UserLiveFeed_idObject[pos].hasOwnProperty(id)) {

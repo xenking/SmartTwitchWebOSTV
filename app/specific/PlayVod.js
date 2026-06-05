@@ -173,7 +173,7 @@ function PlayVod_Start() {
         } else {
             if (!Main_vodOffset) {
                 Chat_offset = 0;
-                Chat_Init();
+                if (!WTV_IsData(Main_values_Play_data)) Chat_Init();
             }
 
             PlayVod_PosStart();
@@ -371,6 +371,7 @@ function PlayVod_loadDataSuccessFake() {
 }
 
 function PlayVod_WebOSLocalBridge() {
+    if (WTV_IsData(Main_values_Play_data) || WTV_IsData(Play_data.data)) return null;
     return window.STTVWebOSLocalVod && Main_IsOn_OSInterface ? window.STTVWebOSLocalVod : null;
 }
 
@@ -481,6 +482,10 @@ function PlayVod_WebOSLocalLoadData() {
 
 function PlayVod_WebOSLocalSwitchSource() {
     var bridge = PlayVod_WebOSLocalBridge();
+    if (WTV_IsData(Main_values_Play_data) || WTV_IsData(Play_data.data)) {
+        PlayVod_WebOSLocalNotify('Already using W.TV archive');
+        return;
+    }
     if (!bridge || !PlayVod_isOn) {
         PlayVod_WebOSLocalNotify('Local archive integration is not available');
         return;
@@ -508,6 +513,7 @@ function PlayVod_loadDataTwitch() {
 var PlayVod_autoUrl;
 var PlayVod_loadDataId = 0;
 function PlayVod_loadData() {
+    if (WTV_IsData(Main_values_Play_data) && WTV_PlayVodLoadData()) return;
     if (PlayVod_WebOSLocalLoadData()) return;
 
     PlayVod_loadDataTwitch();
@@ -519,6 +525,10 @@ function PlayVod_loadDataResult(response) {
 
         if (responseObj.checkResult > 0 && responseObj.checkResult === PlayVod_loadDataId) {
             if (responseObj.status === 200) {
+                if (WTV_IsData(Main_values_Play_data)) {
+                    WTV_PlayVodLoadDataSuccess(responseObj);
+                    return;
+                }
                 PlayVod_autoUrl = responseObj.url;
                 PlayVod_loadDataSuccessEnd(responseObj.responseText);
                 return;
@@ -620,7 +630,7 @@ function PlayVod_onPlayer() {
         PlayVod_onPlayerStartPlay(Main_vodOffset * 1000);
 
         Chat_offset = Main_vodOffset;
-        Chat_Init();
+        if (!WTV_IsData(Main_values_Play_data)) Chat_Init();
         Main_setItem('Main_vodOffset', Main_vodOffset);
         PlayVod_ResumeTime = Main_vodOffset;
         Main_vodOffset = 0;
@@ -1157,6 +1167,8 @@ function PlayVod_CheckIfIsLiveResult(response) {
 function PlayVod_CheckIfIsLiveStart() {
     if (UserLiveFeed_DataObj[UserLiveFeed_FeedPosX][UserLiveFeed_FeedPosY[UserLiveFeed_FeedPosX]].image) {
         UserLiveFeed_OpenBanner();
+    } else if (UserLiveFeed_FeedPosX >= UserLiveFeedobj_UserVodPos) {
+        PlayVod_OpenLiveStream();
     } else if (!Main_IsOn_OSInterface || Play_PreviewId) PlayVod_OpenLiveStream();
     else if (Play_CheckLiveThumb()) Play_CheckIfIsLiveStart(PlayVod_CheckIfIsLiveResult);
 }
@@ -1580,6 +1592,11 @@ var fullVodInfoQuery =
     '{"query":"{video(id:\\"%x\\"){seekPreviewsURL,creator{roles{isPartner},id,login,displayName,language,profileImageURL(width:300)},muteInfo{mutedSegmentConnection{nodes{duration,offset}}},game{displayName,id},duration,viewCount,language,title,animatedPreviewURL,createdAt,id,thumbnailURLs(width:640,height:360),creator{id,displayName,login},moments(momentRequestType:VIDEO_CHAPTER_MARKERS types:[GAME_CHANGE]) {edges{...VideoPlayerVideoMomentEdge}}}}fragment VideoPlayerVideoMomentEdge on VideoMomentEdge{node {...VideoPlayerVideoMoment}}fragment VideoPlayerVideoMoment on VideoMoment{durationMilliseconds positionMilliseconds type description details{...VideoPlayerGameChangeDetails}}fragment VideoPlayerGameChangeDetails on GameChangeMomentDetails{game{id displayName}}"}';
 
 function PlayVod_get_vod_info() {
+    if (WTV_IsData(Main_values_Play_data)) {
+        WTV_PlayVodApplyInfo();
+        return;
+    }
+
     FullxmlHttpGet(
         PlayClip_BaseUrl,
         Play_base_backup_headers_Array,

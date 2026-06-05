@@ -691,6 +691,10 @@ function PlayClip_CheckIfIsLiveResult(response) {
 }
 
 function PlayClip_CheckIfIsLiveStart() {
+    if (UserLiveFeed_FeedPosX >= UserLiveFeedobj_UserVodPos) {
+        PlayClip_OpenLiveStream();
+        return;
+    }
     if (!Main_IsOn_OSInterface || Play_PreviewId) PlayClip_OpenLiveStream();
     else Play_CheckIfIsLiveStart(PlayClip_CheckIfIsLiveResult);
 }

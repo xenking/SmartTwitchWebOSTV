@@ -225,6 +225,7 @@ function Main_StartApp() {
                     Main_CheckFullxmlHttpGet: Main_CheckFullxmlHttpGet,
                     PlayHLS_GetTokenResult: PlayHLS_GetTokenResult,
                     PlayHLS_PlayListUrlResult: PlayHLS_PlayListUrlResult,
+                    PlayHLS_ExternalPlayListUrlResult: PlayHLS_ExternalPlayListUrlResult,
                     AddCode_AppTokenResult: AddCode_AppTokenResult,
                     Play_UpdateDurationDiv: Play_UpdateDurationDiv,
                     Screens_PlaybackTimeSetVodDuration: Screens_PlaybackTimeSetVodDuration
@@ -593,6 +594,10 @@ function Main_SetStringsSecondary() {
     Main_innerHTML(
         'channel_content_titley_2',
         '<i class="icon-heart-o" style="color: #FFFFFF; font-size: 100%; "></i>' + STR_SPACE_HTML + STR_SPACE_HTML + STR_FOLLOW
+    );
+    Main_innerHTML(
+        'channel_content_titley_3',
+        '<i class="icon-link stream_channel_follow_icon"></i>' + STR_SPACE_HTML + STR_SPACE_HTML + 'Set w.tv'
     );
 
     Main_textContent('dialog_hist_setting_name_0', STR_SORTING);
@@ -1744,6 +1749,8 @@ function Main_OpenVodStart(data, id, idsArray, handleKeyDownFunction, screen) {
     Main_RemoveClass(idsArray[1] + id, 'opacity_zero');
     Main_values_Play_data = data;
 
+    if (typeof WTV_OpenHistoryVod === 'function' && WTV_IsData(Main_values_Play_data) && WTV_OpenHistoryVod(Main_values_Play_data)) return;
+
     Main_values.Main_selectedChannelDisplayname = Main_values_Play_data[1];
     ChannelVod_createdAt = Main_values_Play_data[2];
 
@@ -2081,7 +2088,7 @@ function BaseXmlHttpGet(theUrl, callbackSuccess, calbackError, key, checkResult,
 
     if (UseHeaders) {
         if (AddUser_UserHasToken()) {
-            Main_Bearer_User_Headers[1][1] = Bearer + AddUser_UsernameArray[0].access_token;
+            HttpGetEnsureUserHeader();
 
             headers = Main_Bearer_User_Headers;
         } else {
@@ -2187,6 +2194,22 @@ function HttpGetSetUserHeader() {
     }
 
     Play_Headers = JSON.stringify(header);
+}
+
+function HttpGetEnsureUserHeader() {
+    if (!AddUser_UserHasToken()) return;
+
+    if (!Main_Bearer_User_Headers || !Main_Bearer_User_Headers[1] || !Main_OAuth_User_Headers || !Main_OAuth_User_Headers[1]) {
+        HttpGetSetUserHeader();
+        return;
+    }
+
+    Main_Bearer_User_Headers[1][1] = Bearer + AddUser_UsernameArray[0].access_token;
+    Main_OAuth_User_Headers[1][1] = Main_OAuth + AddUser_UsernameArray[0].access_token;
+    Play_Headers = JSON.stringify([
+        [clientIdHeader, AddCode_backup_client_id],
+        [Bearer_Header, Main_OAuth + AddUser_UsernameArray[0].access_token]
+    ]);
 }
 
 function FullxmlHttpGet(theUrl, Headers, callbackSuccess, calbackError, key, checkResult, Method, postMessage) {
@@ -2855,6 +2878,8 @@ function Main_RunVODWorker() {
     }
 
     for (i; i >= 0; i--) {
+        if (WTV_IsData(array[i].data)) continue;
+
         //TODO remove this workaround after some updates
         if (array[i].data[2] && typeof array[i].data[2] === 'string') {
             array[i].data[2] = array[i].data[2].replace('Streamed', '');
@@ -2891,6 +2916,8 @@ function Main_RunLiveVODWorker() {
     }
 
     for (i; i >= 0; i--) {
+        if (WTV_IsData(array[i].data)) continue;
+
         //TODO remove this workaround after some updates
         array[i].data[11] = array[i].data[11].replace('Since', '');
         array[i].data[4] = array[i].data[4].replace('Viewers', '');

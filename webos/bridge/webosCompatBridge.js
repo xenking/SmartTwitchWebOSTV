@@ -616,23 +616,28 @@
             callback({matched: false, reason: result.error || ('HTTP ' + result.status)});
         });
     }
-    function localVodIsTruthy(value) {
-        return value === true || value === 1 || value === '1' || value === 'true';
-    }
-    function localVodShouldUseFilePlayback(match) {
-        if (!match || !match.vod) return false;
+    function localVodCompatiblePlaybackUrl(match) {
+        if (!match || !match.vod) return '';
         var vod = match.vod;
-        var fileUrl = match.file_url || vod.file_url || '';
-        if (!fileUrl) return false;
-        if (localVodIsTruthy(vod.source_pruned)) return true;
-        if (!Object.prototype.hasOwnProperty.call(vod, 'source_count')) return false;
-        return String(vod.status || '').toLowerCase() === 'finalized' && parseInt(vod.source_count, 10) === 0;
+        return (
+            match.webos_playback_url ||
+            match.compat_playback_url ||
+            match.h264_playback_url ||
+            match.hls_playback_url ||
+            vod.webos_playback_url ||
+            vod.compat_playback_url ||
+            vod.h264_playback_url ||
+            vod.hls_playback_url ||
+            ''
+        );
     }
     function localVodPlaybackUrl(match) {
         if (!match || !match.vod) return '';
+        var compatibleUrl = localVodCompatiblePlaybackUrl(match);
+        if (compatibleUrl) return localArchiveUrl(compatibleUrl);
         var fileUrl = match.file_url || match.vod.file_url || '';
         var playlistUrl = match.playback_url || match.vod.playback_url || '';
-        return localArchiveUrl(localVodShouldUseFilePlayback(match) ? fileUrl : playlistUrl || fileUrl);
+        return localArchiveUrl(playlistUrl || fileUrl);
     }
     function localVodHasUsableCurrentMatch() {
         return !!(localVodOverride.match && localVodOverride.match.matched && localVodOverride.match.position_within_recording && localVodPlaybackUrl(localVodOverride.match));
@@ -872,9 +877,7 @@
                     localVodStartLocalMatch(match, meta, actions, 'Playing local archive');
                     return;
                 }
-            } else {
-                localVodOverride.lastError = match && match.reason ? match.reason : 'no_match';
-            }
+            } else localVodOverride.lastError = match && match.reason ? match.reason : 'no_match';
             localVodStartTwitch(actions, localVodOverride.lastError ? 'Local archive unavailable: ' + localVodOverride.lastError : '', false);
         });
         return true;
@@ -3238,13 +3241,24 @@
         if (match && match[1]) return match[1];
         return '';
     }
+    function hashRequestBody(body) {
+        if (!body || typeof body !== 'string') return '';
+        var hash = 0;
+        var i;
+        for (i = 0; i < body.length; i++) {
+            hash = (hash * 31 + body.charCodeAt(i)) >>> 0;
+        }
+        return hash.toString(36);
+    }
     function extractGqlKey(body) {
         if (!body || typeof body !== 'string') return '';
+        var opMatch = body.match(/"operationName"\s*:\s*"([^"]+)"/i);
+        var op = opMatch && opMatch[1] ? opMatch[1].toLowerCase() : '';
         var loginMatch = body.match(/"login"\s*:\s*"([^"]+)"/i);
-        if (loginMatch && loginMatch[1]) return loginMatch[1].toLowerCase();
+        if (loginMatch && loginMatch[1]) return (op ? op + ':' : '') + loginMatch[1].toLowerCase();
         var vodMatch = body.match(/"vodid"\s*:\s*"([^"]+)"/i);
-        if (vodMatch && vodMatch[1]) return vodMatch[1].toLowerCase();
-        return '';
+        if (vodMatch && vodMatch[1]) return (op ? op + ':' : '') + vodMatch[1].toLowerCase();
+        return (op || 'query') + ':' + hashRequestBody(body);
     }
     // Builds metadata for a network request (host, request key, circuit/dedupe flags).
     function buildNetworkRequestMeta(rawUrl, method, body) {
@@ -3257,7 +3271,7 @@
         var hlsId = extractHlsId(pathLower);
         if (gqlHost) {
             var gqlKey = extractGqlKey(body);
-            key = 'gql-token:' + (gqlKey || 'global');
+            key = 'gql:' + (gqlKey || 'global');
         } else if (pathLower.indexOf('.m3u8') !== -1 || pathLower.indexOf('/api/channel/hls/') !== -1) {
             if (host.indexOf('usher.ttvnw.net') !== -1) {
                 key = 'hls-playlist:' + (hlsId || 'unknown');

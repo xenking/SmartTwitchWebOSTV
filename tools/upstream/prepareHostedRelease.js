@@ -6,7 +6,7 @@ const releaseSourceDir = path.join(root, 'release');
 const bridgeSource = path.join(root, 'webos', 'bridge', 'webosCompatBridge.js');
 const defaultOutputRoot = path.join(root, '.tmp', 'hosted-release-artifact');
 const defaultChannel = 'release';
-const bridgeTag = '<script src="githubio/js/webosCompatBridge.js"></script>';
+const bridgeTag = '<script src="githubio/js/webosCompatBridge.js?sttv_webos_build=__BUILD_TOKEN__"></script>';
 const mainScriptRegex = /<script\b(?=[^>]*\bsrc\s*=\s*['"][^'"]*githubio\/js\/main\.js(?:\?[^'"]*)?['"])[^>]*>\s*<\/script>/i;
 const anyBridgeTagRegex = /<script\b(?=[^>]*\bsrc\s*=\s*['"][^'"]*webos(?:Hosted|Compat)Bridge\.js(?:\?[^'"]*)?['"])[^>]*>\s*<\/script>\s*/gi;
 const bridgeTagGlobalRegex = /<script\b(?=[^>]*\bsrc\s*=\s*['"][^'"]*githubio\/js\/webosCompatBridge\.js(?:\?[^'"]*)?['"])[^>]*>\s*<\/script>/gi;
@@ -129,6 +129,7 @@ function buildArtifact(outputRoot, channel) {
     const stagedChannelDir = path.join(outputRoot, channel);
     const stagedBridgePath = path.join(stagedChannelDir, 'githubio', 'js', 'webosCompatBridge.js');
     const stagedIndexPath = path.join(stagedChannelDir, 'index.html');
+    const buildToken = String(Date.now());
 
     fs.rmSync(stagedChannelDir, {recursive: true, force: true});
     fs.mkdirSync(outputRoot, {recursive: true});
@@ -143,7 +144,10 @@ function buildArtifact(outputRoot, channel) {
     if (!mainScriptRegex.test(html)) {
         throw new Error('Cannot find main.js script tag in staged ' + channel + '/index.html');
     }
-    html = html.replace(mainScriptRegex, bridgeTag + '$&');
+    html = html.replace(mainScriptRegex, function (mainTag) {
+        const cacheBustedMainTag = mainTag.replace(/githubio\/js\/main\.js(?:\?[^'"]*)?/, 'githubio/js/main.js?sttv_webos_build=' + buildToken);
+        return bridgeTag.replace('__BUILD_TOKEN__', buildToken) + cacheBustedMainTag;
+    });
     fs.writeFileSync(stagedIndexPath, html);
 
     return {

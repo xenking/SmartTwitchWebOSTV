@@ -171,11 +171,6 @@ var Settings_value = {
         set_values: [''],
         defaultValue: 1
     },
-    local_archive_settings: {
-        values: ['None'],
-        set_values: [''],
-        defaultValue: 1
-    },
     local_archive_endpoint: {
         //Migrated to dialog
         values: ['None'],
@@ -1019,12 +1014,6 @@ function Settings_SetSettings() {
         STR_WEBOS_TTVLOL_PROXY_SETTINGS,
         STR_WEBOS_TTVLOL_PROXY_SETTINGS_SUMMARY
     );
-    div += Settings_Content(
-        'local_archive_settings',
-        [STR_ENTER_TO_OPEN],
-        'Local VOD archive endpoint',
-        'LAN archiver URL used to auto-match and override Twitch VOD playback.'
-    );
     //div += Settings_Content('proxy_settings', [STR_ENTER_TO_OPEN], PROXY_SETTINGS, null);
     div += Settings_Content('player_extracodecs', [STR_ENTER_TO_OPEN], STR_PLAYER_EXTRA_CODEC, STR_PLAYER_EXTRA_CODEC_SUMMARY);
     div += Settings_Content('blocked_codecs', [STR_ENTER_TO_OPEN], STR_BLOCKED_CODEC, STR_BLOCKED_CODEC_SUMMARY);
@@ -1751,7 +1740,7 @@ function Settings_WebOsTtvLolProxyUrlPrompt() {
 }
 
 function Settings_GetLocalArchiveEndpoint() {
-    return Main_getItemString('sttv_webos_local_archive_endpoint', '');
+    return Settings_NormalizeEndpointUrl(Main_getItemString('sttv_webos_local_archive_endpoint', 'http://192.168.0.109:18080'));
 }
 
 function Settings_NormalizeEndpointUrl(value) {
@@ -1785,8 +1774,19 @@ function Settings_LocalArchiveEndpointSummary() {
     return 'Current endpoint:' + STR_BR + STR_BR + Settings_EscapeHtml(endpoint || 'Disabled');
 }
 
-function Settings_DialogShowLocalArchive(click) {
+function Settings_EnsureLocalArchiveDialogValues() {
+    if (!Settings_value.local_archive_endpoint) {
+        Settings_value.local_archive_endpoint = {
+            values: ['None'],
+            set_values: [''],
+            defaultValue: 1
+        };
+    }
     Settings_value.local_archive_endpoint.values = [STR_ENTER_TO_OPEN];
+}
+
+function Settings_DialogShowLocalArchive(click) {
+    Settings_EnsureLocalArchiveDialogValues();
 
     var obj = {
         local_archive_endpoint: {
@@ -1800,10 +1800,10 @@ function Settings_DialogShowLocalArchive(click) {
 
     Settings_DialogShow(
         obj,
-        'Local VOD archive endpoint' +
+        'Local archive endpoint' +
             STR_BR +
             STR_BR +
-            'LAN archiver URL used to auto-match and override Twitch VOD playback.',
+            'Set Local VOD archive endpoint URL.',
         click
     );
 }
@@ -2285,7 +2285,6 @@ function Settings_KeyEnter(click) {
     else if (Main_A_includes_B(Settings_value_keys[Settings_cursorY], 'player_extracodecs')) Settings_DialogShowExtraCodecs(click);
     else if (Main_A_includes_B(Settings_value_keys[Settings_cursorY], 'player_bitrate')) Settings_DialogShowBitrate(click);
     else if (Main_A_includes_B(Settings_value_keys[Settings_cursorY], 'webos_ttv_lol_proxy_settings')) Settings_DialogShowWebOsTtvLolProxy(click);
-    else if (Main_A_includes_B(Settings_value_keys[Settings_cursorY], 'local_archive_settings')) Settings_DialogShowLocalArchive(click);
     else if (Main_A_includes_B(Settings_value_keys[Settings_cursorY], 'proxy_settings')) Settings_DialogShowProxy(click);
     else if (Main_A_includes_B(Settings_value_keys[Settings_cursorY], 'vod_seek')) Settings_vod_seek(click);
     else if (Main_A_includes_B(Settings_value_keys[Settings_cursorY], 'block_qualities')) Settings_block_qualities(click);
@@ -3898,7 +3897,7 @@ function Settings_DialoghandleKeyReturn() {
 }
 
 function Settings_DialoghandleKeyReturnAfter() {
-    Settings_RemoveInputFocusKey(Settings_DialogValue[Settings_DialogPos]);
+    if (Settings_DialogValue && Settings_DialogValue.length) Settings_RemoveInputFocusKey(Settings_DialogValue[Settings_DialogPos]);
     Main_HideElement('dialog_settings');
     Main_removeEventListener('keydown', Settings_DialoghandleKeyDown);
 }

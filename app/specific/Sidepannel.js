@@ -169,7 +169,7 @@ function Sidepannel_UpdateThumbDiv() {
         Main_innerHTMLWithEle(Sidepannel_UpdateThumbDivViews, STR_FOR + info[4] + STR_SPACE_HTML + Main_GetViewerStrings(info[13]));
         Play_LoadLogo(Sidepannel_UpdateThumbDivThumb, info[9]);
         Sidepannel_UpdateSince();
-        Sidepannel_updateThumbInfo(info);
+        if (!(typeof WTV_IsData === 'function' && WTV_IsData(info))) Sidepannel_updateThumbInfo(info);
     }
 }
 
@@ -238,7 +238,11 @@ function Sidepannel_UpdateThumb() {
             if (Sidepannel_ObjNotNull()) {
                 var ChannelId = UserLiveFeed_DataObj[UserLiveFeedobj_UserLivePos][Sidepannel_PosFeed][14];
 
-                if ((!Play_PreviewId || !Main_A_equals_B(ChannelId, Play_PreviewId)) && !Play_PreviewVideoEnded) {
+                if (
+                    !(typeof WTV_IsData === 'function' && WTV_IsData(UserLiveFeed_DataObj[UserLiveFeedobj_UserLivePos][Sidepannel_PosFeed])) &&
+                    (!Play_PreviewId || !Main_A_equals_B(ChannelId, Play_PreviewId)) &&
+                    !Play_PreviewVideoEnded
+                ) {
                     Sidepannel_CheckIfIsLiveStart();
                 } else if (Play_PreviewId && Main_IsOn_OSInterface) {
                     Sidepannel_UpdateThumbDoc.src = IMG_404_BANNER;
@@ -280,6 +284,7 @@ function Sidepannel_CheckIfIsLive() {
     }
 
     if (!Main_isStopped && Sidepannel_ObjNotNull() && Sidepannel_isShowingUserLive()) {
+        if (typeof WTV_IsData === 'function' && WTV_IsData(UserLiveFeed_DataObj[UserLiveFeedobj_UserLivePos][Sidepannel_PosFeed])) return;
         var channel = UserLiveFeed_DataObj[UserLiveFeedobj_UserLivePos][Sidepannel_PosFeed][6];
 
         PlayHLS_GetPlayListAsync(true, channel, Sidepannel_PosFeed % 100, 0, Sidepannel_CheckIfIsLiveResult);
@@ -360,6 +365,8 @@ function Sidepannel_HideWarningDialog() {
 }
 
 function Sidepannel_partnerIcon(name, partner, isrerun) {
+    var currentObj = Sidepannel_ObjNotNull() ? Sidepannel_GetObj() : null;
+    var isWTV = typeof WTV_IsData === 'function' && WTV_IsData(currentObj);
     return (
         '<div id="feed_thumb_partnericon" class="partnericon_div"> ' +
         name +
@@ -369,12 +376,12 @@ function Sidepannel_partnerIcon(name, partner, isrerun) {
         (partner
             ? '<img id="feed_thumb_partnerimg" class="partnericon_img" alt="" src="' + IMG_PARTNER + '">' + STR_SPACE_HTML + STR_SPACE_HTML
             : '') +
-        '<div id="feed_thumb_partnertext" class="partnericon_text" style="background: #' +
-        (isrerun ? 'FFFFFF; color: #000000;' : 'E21212;') +
+        '<div id="feed_thumb_partnertext" class="partnericon_text" style="background: ' +
+        (isWTV ? '#9146ff;' : '#' + (isrerun ? 'FFFFFF; color: #000000;' : 'E21212;')) +
         '">' +
         STR_SPACE_HTML +
         STR_SPACE_HTML +
-        (isrerun ? STR_RERUN : STR_LIVE) +
+        (isWTV ? 'W.TV' : isrerun ? STR_RERUN : STR_LIVE) +
         STR_SPACE_HTML +
         STR_SPACE_HTML +
         '</div>'

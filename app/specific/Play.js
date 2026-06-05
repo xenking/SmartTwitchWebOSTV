@@ -552,6 +552,10 @@ function Play_UpdateMainStream(startChat, refreshInfo) {
 
 var Play_updateStreamInfoStartId;
 function Play_updateStreamInfoStart() {
+    if (WTV_IsData(Play_data.data)) {
+        Main_Set_history('live', Play_data.data, !Play_isPlaying());
+        return;
+    }
     if (!Play_data.data[14]) return;
 
     var theUrl = Main_helix_api + 'streams?user_id=' + Play_data.data[14];
@@ -643,6 +647,11 @@ function Play_updateStreamInfo() {
             Play_updateStreamInfoMulti(i);
         }
     } else {
+        if (WTV_IsData(Play_data.data)) {
+            Main_Set_history('live', Play_data.data, !Play_isPlaying());
+            return;
+        }
+
         //When update this also update PlayExtra_updateStreamInfo
         Play_updateStreamInfoGet(Main_helix_api + 'streams?user_id=' + Play_data.data[14], 1);
     }
@@ -652,6 +661,10 @@ var Play_updateStreamLogoValuesId;
 function Play_updateStreamLogo() {
     if (Play_data.data && Play_data.data.length && Play_data.data[10] !== null && Play_data.data[9] !== null) {
         Play_updateStreamLogoEnd();
+    }
+
+    if (WTV_IsData(Play_data.data)) {
+        return;
     }
 
     Play_updateStreamLogoValuesId = new Date().getTime();
@@ -792,7 +805,9 @@ function Play_loadData(synchronous) {
         Play_loadDataId = new Date().getTime();
 
         //On resume to avoid out of sync resumes we run PP synchronous
-        if (synchronous) {
+        if (WTV_IsData(Play_data.data)) {
+            PlayHLS_GetExternalPlayListAsync(WTV_GetPlaybackUrl(Play_data.data), Play_loadDataId, null, Play_loadDataResult);
+        } else if (synchronous) {
             var StreamData = Play_getStreamData(Play_data.data[6]);
 
             if (StreamData) Play_loadDataResultEnd(JSON.parse(StreamData));
@@ -821,7 +836,7 @@ function Play_loadDataResultEnd(responseObj) {
     if (responseObj.status === 200) {
         Play_WebOSLocalLiveResumeFallback = false;
         Play_data.AutoUrl = responseObj.url;
-        Play_loadDataSuccessEnd(responseObj.responseText, true);
+        Play_loadDataSuccessEnd(responseObj.responseText, !WTV_IsData(Play_data.data));
         return;
     } else if (responseObj.status === 1 || responseObj.status === 403 || responseObj.status === 404 || responseObj.status === 410) {
         //404 = off line
