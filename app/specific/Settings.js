@@ -1741,7 +1741,11 @@ function Settings_WebOsTtvLolProxyUrlPrompt() {
 }
 
 function Settings_GetLocalArchiveEndpoint() {
-    return Settings_NormalizeEndpointUrl(Main_getItemString('sttv_webos_local_archive_endpoint', 'http://192.168.0.109:18080'));
+    try {
+        var value = localStorage.getItem('sttv_webos_local_archive_endpoint');
+        if (value !== null) return Settings_NormalizeEndpointUrl(value);
+    } catch (e) {}
+    return Settings_NormalizeEndpointUrl('http://192.168.0.109:18080');
 }
 
 function Settings_NormalizeEndpointUrl(value) {

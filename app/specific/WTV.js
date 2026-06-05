@@ -143,7 +143,7 @@ function WTV_AddSource(channel, success, error) {
 
 function WTV_GetLive(channel, success, error) {
     WTV_Request(
-        '/archive/sources/wtv/' + encodeURIComponent(channel) + '/live',
+        '/api/sources/wtv/' + encodeURIComponent(channel) + '/live',
         null,
         null,
         success,
@@ -860,6 +860,8 @@ function WTV_PatchVodPlaylist(playlist, baseUrl) {
             out.push('#EXT-X-ENDLIST');
         } else if (trimmed && trimmed.charAt(0) !== '#') {
             out.push(WTV_ToAbsolutePlaylistUrl(trimmed, baseUrl));
+        } else if (trimmed && trimmed.charAt(0) === '#' && trimmed.toUpperCase().indexOf('URI=') !== -1) {
+            out.push(WTV_PatchPlaylistTagUris(line, baseUrl));
         } else {
             out.push(line);
         }
@@ -894,6 +896,12 @@ function WTV_ToAbsolutePlaylistUrl(url, baseUrl) {
     }
 
     return url;
+}
+
+function WTV_PatchPlaylistTagUris(line, baseUrl) {
+    return line.replace(/(URI=")([^"]+)(")/gi, function (_, prefix, uri, suffix) {
+        return prefix + WTV_ToAbsolutePlaylistUrl(uri, baseUrl) + suffix;
+    });
 }
 
 function WTV_CreatePlaylistObjectUrl(playlist) {

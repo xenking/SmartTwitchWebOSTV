@@ -32545,6 +32545,12 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
                     if (Main_values.ChannelVod_vodId) PlayVod_SaveVodIds(Main_vodOffset);
                 }
                 if (!Main_values.ChannelVod_vodId) {
+                    Play_HideBufferDialog();
+                    if (typeof Main_OPenAsVod_PreshutdownStream === 'function' && typeof Main_openStream === 'function') {
+                        Main_OPenAsVod_PreshutdownStream();
+                        Main_openStream();
+                        return;
+                    }
                     PlayVod_WarnEnd((result && result.reason) || 'Local archive unavailable');
                     return;
                 }
@@ -44018,7 +44024,11 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
     }
 
     function Settings_GetLocalArchiveEndpoint() {
-        return Settings_NormalizeEndpointUrl(Main_getItemString('sttv_webos_local_archive_endpoint', 'http://192.168.0.109:18080'));
+        try {
+            var value = localStorage.getItem('sttv_webos_local_archive_endpoint');
+            if (value !== null) return Settings_NormalizeEndpointUrl(value);
+        } catch (e) {}
+        return Settings_NormalizeEndpointUrl('http://192.168.0.109:18080');
     }
 
     function Settings_NormalizeEndpointUrl(value) {
@@ -52217,7 +52227,7 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
     }
 
     function WTV_GetLive(channel, success, error) {
-        WTV_Request('/archive/sources/wtv/' + encodeURIComponent(channel) + '/live', null, null, success, function () {
+        WTV_Request('/api/sources/wtv/' + encodeURIComponent(channel) + '/live', null, null, success, function () {
             WTV_GetLiveFromActiveArchive(channel, success, error);
         });
     }
@@ -52953,6 +52963,8 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
                 out.push('#EXT-X-ENDLIST');
             } else if (trimmed && trimmed.charAt(0) !== '#') {
                 out.push(WTV_ToAbsolutePlaylistUrl(trimmed, baseUrl));
+            } else if (trimmed && trimmed.charAt(0) === '#' && trimmed.toUpperCase().indexOf('URI=') !== -1) {
+                out.push(WTV_PatchPlaylistTagUris(line, baseUrl));
             } else {
                 out.push(line);
             }
@@ -52987,6 +52999,12 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
         }
 
         return url;
+    }
+
+    function WTV_PatchPlaylistTagUris(line, baseUrl) {
+        return line.replace(/(URI=")([^"]+)(")/gi, function (_, prefix, uri, suffix) {
+            return prefix + WTV_ToAbsolutePlaylistUrl(uri, baseUrl) + suffix;
+        });
     }
 
     function WTV_CreatePlaylistObjectUrl(playlist) {

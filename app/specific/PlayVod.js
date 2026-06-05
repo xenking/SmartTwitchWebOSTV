@@ -461,6 +461,12 @@ function PlayVod_WebOSLocalActions() {
                 if (Main_values.ChannelVod_vodId) PlayVod_SaveVodIds(Main_vodOffset);
             }
             if (!Main_values.ChannelVod_vodId) {
+                Play_HideBufferDialog();
+                if (typeof Main_OPenAsVod_PreshutdownStream === 'function' && typeof Main_openStream === 'function') {
+                    Main_OPenAsVod_PreshutdownStream();
+                    Main_openStream();
+                    return;
+                }
                 PlayVod_WarnEnd((result && result.reason) || 'Local archive unavailable');
                 return;
             }
