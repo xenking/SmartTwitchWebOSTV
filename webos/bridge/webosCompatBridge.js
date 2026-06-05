@@ -533,7 +533,7 @@
         return 0;
     }
     function localVodIsPlayableStatus(status) {
-        return status === 'open' || status === 'closing' || status === 'finalizing' || status === 'finalized' || !status;
+        return status === 'open' || status === 'recording' || status === 'closing' || status === 'finalizing' || status === 'finalized' || !status;
     }
     function localVodMatchFromVod(meta, vod) {
         if (!meta || !vod || !localVodIsPlayableStatus(vod.status)) return null;
@@ -543,7 +543,7 @@
         if (!sourceStartMs) return null;
         var durationSeconds = localVodDurationSeconds(vod.duration_seconds);
         var localEndMs = 0;
-        if (vod.growing || vod.active || vod.status === 'open' || vod.status === 'closing' || vod.status === 'finalizing') {
+        if (vod.growing || vod.active || vod.status === 'open' || vod.status === 'recording' || vod.status === 'closing' || vod.status === 'finalizing') {
             localEndMs = Date.now();
         } else {
             localEndMs = localVodParseTimeMs(vod.last_ended_at);

@@ -18414,6 +18414,7 @@
         Main_removeEventListener('keydown', handleKeyDownFunction);
         Main_values_Play_data = data;
         Play_data.data = Main_values_Play_data;
+        if (typeof WTV_IsData === 'function' && WTV_IsData(Play_data.data)) checkHistory = false;
 
         if (checkHistory) {
             var historyPos = Main_history_GetById('live', Play_data.data[7]);
@@ -44577,6 +44578,7 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
         else if (Main_A_includes_B(Settings_value_keys[Settings_cursorY], 'player_extracodecs')) Settings_DialogShowExtraCodecs(click);
         else if (Main_A_includes_B(Settings_value_keys[Settings_cursorY], 'player_bitrate')) Settings_DialogShowBitrate(click);
         else if (Main_A_includes_B(Settings_value_keys[Settings_cursorY], 'webos_ttv_lol_proxy_settings')) Settings_DialogShowWebOsTtvLolProxy(click);
+        else if (Main_A_includes_B(Settings_value_keys[Settings_cursorY], 'local_archive_endpoint')) Settings_DialogShowLocalArchive(click);
         else if (Main_A_includes_B(Settings_value_keys[Settings_cursorY], 'proxy_settings')) Settings_DialogShowProxy(click);
         else if (Main_A_includes_B(Settings_value_keys[Settings_cursorY], 'vod_seek')) Settings_vod_seek(click);
         else if (Main_A_includes_B(Settings_value_keys[Settings_cursorY], 'block_qualities')) Settings_block_qualities(click);

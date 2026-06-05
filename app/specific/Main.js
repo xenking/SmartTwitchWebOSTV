@@ -1497,6 +1497,7 @@ function Main_OpenLiveStream(data, id, idsArray, handleKeyDownFunction, checkHis
     Main_removeEventListener('keydown', handleKeyDownFunction);
     Main_values_Play_data = data;
     Play_data.data = Main_values_Play_data;
+    if (typeof WTV_IsData === 'function' && WTV_IsData(Play_data.data)) checkHistory = false;
 
     if (checkHistory) {
         var historyPos = Main_history_GetById('live', Play_data.data[7]);
