@@ -117,6 +117,7 @@
     var WEBTAG_STORAGE_KEY = STORAGE_PREFIX + 'webtag';
     var LOCAL_ARCHIVE_ENDPOINT_KEY = STORAGE_PREFIX + 'local_archive_endpoint';
     var LOCAL_ARCHIVE_ENDPOINT_LEGACY_KEY = 'localArchiveEndpoint';
+    var LOCAL_ARCHIVE_ENDPOINT_DEFAULT = 'http://192.168.0.109:18080';
     var LOCAL_VOD_MATCH_TOLERANCE_SECONDS = 600;
     var LOCAL_VOD_REQUEST_TIMEOUT_MS = 5500;
     var LOCAL_VOD_GROWING_DURATION_MARGIN_MS = 2000;
@@ -457,6 +458,7 @@
     function getLocalArchiveEndpoint() {
         var endpoint = normalizeLocalArchiveEndpoint(getLocalStorageValue(LOCAL_ARCHIVE_ENDPOINT_KEY));
         if (!endpoint) endpoint = normalizeLocalArchiveEndpoint(getLocalStorageValue(LOCAL_ARCHIVE_ENDPOINT_LEGACY_KEY));
+        if (!endpoint) endpoint = normalizeLocalArchiveEndpoint(LOCAL_ARCHIVE_ENDPOINT_DEFAULT);
         return endpoint;
     }
     function localArchiveEndpoint() {

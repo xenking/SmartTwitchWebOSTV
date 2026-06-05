@@ -1014,6 +1014,7 @@ function Settings_SetSettings() {
         STR_WEBOS_TTVLOL_PROXY_SETTINGS,
         STR_WEBOS_TTVLOL_PROXY_SETTINGS_SUMMARY
     );
+    div += Settings_Content('local_archive_endpoint', [STR_ENTER_TO_OPEN], 'Local archive endpoint', 'Set Local VOD archive endpoint URL.');
     //div += Settings_Content('proxy_settings', [STR_ENTER_TO_OPEN], PROXY_SETTINGS, null);
     div += Settings_Content('player_extracodecs', [STR_ENTER_TO_OPEN], STR_PLAYER_EXTRA_CODEC, STR_PLAYER_EXTRA_CODEC_SUMMARY);
     div += Settings_Content('blocked_codecs', [STR_ENTER_TO_OPEN], STR_BLOCKED_CODEC, STR_BLOCKED_CODEC_SUMMARY);

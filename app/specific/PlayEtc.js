@@ -896,7 +896,7 @@ function Play_EndSet(PlayVodClip) {
         Play_HasVod = false;
 
         if (WTV_HasRecordingAction()) {
-            Play_VodObj = {data: Play_data.data, vodid: Play_data.data[WTV_MetaIndex].recording_group_id || ''};
+            Play_VodObj = {data: Play_data.data, vodid: (WTV_GetMeta(Play_data.data) || {}).recording_group_id || ''};
             Main_textContent('dialog_end_vod_text_2', 'Open w.tv recording');
             Main_getElementById('dialog_end_2').style.display = 'inline-block';
             Main_innerHTML('end_vod_name_text_2', Play_data.data[1]);

@@ -57,8 +57,7 @@ function WTV_GetLiveBadgeText(data) {
 
 function WTV_HasRecordingAction() {
     var meta = WTV_GetMeta(Play_data.data);
-    if (meta && (meta.vod_url || meta.recording_group_id || meta.source_channel)) return true;
-    return !!WTV_GetPlaybackMapping();
+    return !!(meta && (meta.vod_url || meta.recording_group_id || meta.source_channel));
 }
 
 function WTV_GetDataId(data) {
@@ -328,8 +327,40 @@ function WTV_BuildTwitchMappedLiveData(status, mapping, sourceKind) {
     return data;
 }
 
+function WTV_MappedFeedSlotIsWTV(pos, itemPos, mapping) {
+    var current = UserLiveFeed_DataObj[pos] && UserLiveFeed_DataObj[pos][itemPos],
+        meta = WTV_GetMeta(current);
+    return !!(meta && meta.source_platform === WTV_Platform && (!mapping || !mapping.twitch_id || meta.twitch_id === mapping.twitch_id));
+}
+
+function WTV_RemoveMappedLiveFromUserFeed(mapping) {
+    if (!mapping || !mapping.twitch_id || !UserLiveFeed_idObject || !UserLiveFeed_DataObj) return;
+
+    var pos = UserLiveFeedobj_UserLivePos,
+        itemPos = UserLiveFeed_idObject[pos] && UserLiveFeed_idObject[pos].hasOwnProperty(mapping.twitch_id) ? UserLiveFeed_idObject[pos][mapping.twitch_id] : null;
+
+    if (itemPos === null || !WTV_MappedFeedSlotIsWTV(pos, itemPos, mapping)) return;
+
+    if (typeof UserLiveFeedobj_StartDefault === 'function' && UserLiveFeed_obj[pos] && UserLiveFeed_obj[pos].load) {
+        UserLiveFeedobj_StartDefault(pos);
+        UserLiveFeed_obj[pos].load();
+        return;
+    }
+
+    delete UserLiveFeed_idObject[pos][mapping.twitch_id];
+    delete UserLiveFeed_DataObj[pos][itemPos];
+    if (UserLiveFeed_cell[pos] && UserLiveFeed_cell[pos][itemPos] && UserLiveFeed_cell[pos][itemPos].parentNode) {
+        UserLiveFeed_cell[pos][itemPos].parentNode.removeChild(UserLiveFeed_cell[pos][itemPos]);
+    }
+    if (UserLiveFeed_cell[pos]) delete UserLiveFeed_cell[pos][itemPos];
+    Sidepannel_Positions = JSON.parse(JSON.stringify(UserLiveFeed_idObject[pos] || {}));
+}
+
 function WTV_AddMappedLiveToUserFeed(status, mapping) {
-    if (!status || !status.online || !status.playback_url || !mapping || !mapping.twitch_id) return;
+    if (!status || !status.online || !status.playback_url || !mapping || !mapping.twitch_id) {
+        WTV_RemoveMappedLiveFromUserFeed(mapping);
+        return;
+    }
     if (!UserLiveFeed_obj || !UserLiveFeed_obj[UserLiveFeedobj_UserLivePos]) return;
 
     var pos = UserLiveFeedobj_UserLivePos,
@@ -340,6 +371,8 @@ function WTV_AddMappedLiveToUserFeed(status, mapping) {
         oldCell,
         newCell,
         sideHtml;
+
+    if (existingPos !== null && !WTV_MappedFeedSlotIsWTV(pos, existingPos, mapping)) return;
 
     if (!UserLiveFeed_idObject[pos]) UserLiveFeed_idObject[pos] = {};
     if (!UserLiveFeed_DataObj[pos]) UserLiveFeed_DataObj[pos] = {};
@@ -877,7 +910,7 @@ function WTV_CreatePlaylistObjectUrl(playlist) {
 
 function WTV_PlayVodLoadDataSuccess(responseObj) {
     var patchedPlaylist = WTV_PatchVodPlaylist(responseObj.responseText || '', responseObj.url || WTV_GetPlaybackUrl(Main_values_Play_data));
-    PlayVod_autoUrl = responseObj.url || WTV_GetPlaybackUrl(Main_values_Play_data) || WTV_CreatePlaylistObjectUrl(patchedPlaylist);
+    PlayVod_autoUrl = WTV_CreatePlaylistObjectUrl(patchedPlaylist) || responseObj.url || WTV_GetPlaybackUrl(Main_values_Play_data);
     PlayVod_loadDataSuccessEnd(patchedPlaylist);
 }
 

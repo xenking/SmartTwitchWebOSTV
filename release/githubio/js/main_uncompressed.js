@@ -26394,7 +26394,7 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
             Play_HasVod = false;
 
             if (WTV_HasRecordingAction()) {
-                Play_VodObj = {data: Play_data.data, vodid: Play_data.data[WTV_MetaIndex].recording_group_id || ''};
+                Play_VodObj = {data: Play_data.data, vodid: (WTV_GetMeta(Play_data.data) || {}).recording_group_id || ''};
                 Main_textContent('dialog_end_vod_text_2', 'Open w.tv recording');
                 Main_getElementById('dialog_end_2').style.display = 'inline-block';
                 Main_innerHTML('end_vod_name_text_2', Play_data.data[1]);
@@ -43290,6 +43290,7 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
             STR_WEBOS_TTVLOL_PROXY_SETTINGS,
             STR_WEBOS_TTVLOL_PROXY_SETTINGS_SUMMARY
         );
+        div += Settings_Content('local_archive_endpoint', [STR_ENTER_TO_OPEN], 'Local archive endpoint', 'Set Local VOD archive endpoint URL.');
         //div += Settings_Content('proxy_settings', [STR_ENTER_TO_OPEN], PROXY_SETTINGS, null);
         div += Settings_Content('player_extracodecs', [STR_ENTER_TO_OPEN], STR_PLAYER_EXTRA_CODEC, STR_PLAYER_EXTRA_CODEC_SUMMARY);
         div += Settings_Content('blocked_codecs', [STR_ENTER_TO_OPEN], STR_BLOCKED_CODEC, STR_BLOCKED_CODEC_SUMMARY);
@@ -52134,8 +52135,7 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
 
     function WTV_HasRecordingAction() {
         var meta = WTV_GetMeta(Play_data.data);
-        if (meta && (meta.vod_url || meta.recording_group_id || meta.source_channel)) return true;
-        return !!WTV_GetPlaybackMapping();
+        return !!(meta && (meta.vod_url || meta.recording_group_id || meta.source_channel));
     }
 
     function WTV_GetDataId(data) {
@@ -52402,8 +52402,43 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
         return data;
     }
 
+    function WTV_MappedFeedSlotIsWTV(pos, itemPos, mapping) {
+        var current = UserLiveFeed_DataObj[pos] && UserLiveFeed_DataObj[pos][itemPos],
+            meta = WTV_GetMeta(current);
+        return !!(meta && meta.source_platform === WTV_Platform && (!mapping || !mapping.twitch_id || meta.twitch_id === mapping.twitch_id));
+    }
+
+    function WTV_RemoveMappedLiveFromUserFeed(mapping) {
+        if (!mapping || !mapping.twitch_id || !UserLiveFeed_idObject || !UserLiveFeed_DataObj) return;
+
+        var pos = UserLiveFeedobj_UserLivePos,
+            itemPos =
+                UserLiveFeed_idObject[pos] && UserLiveFeed_idObject[pos].hasOwnProperty(mapping.twitch_id)
+                    ? UserLiveFeed_idObject[pos][mapping.twitch_id]
+                    : null;
+
+        if (itemPos === null || !WTV_MappedFeedSlotIsWTV(pos, itemPos, mapping)) return;
+
+        if (typeof UserLiveFeedobj_StartDefault === 'function' && UserLiveFeed_obj[pos] && UserLiveFeed_obj[pos].load) {
+            UserLiveFeedobj_StartDefault(pos);
+            UserLiveFeed_obj[pos].load();
+            return;
+        }
+
+        delete UserLiveFeed_idObject[pos][mapping.twitch_id];
+        delete UserLiveFeed_DataObj[pos][itemPos];
+        if (UserLiveFeed_cell[pos] && UserLiveFeed_cell[pos][itemPos] && UserLiveFeed_cell[pos][itemPos].parentNode) {
+            UserLiveFeed_cell[pos][itemPos].parentNode.removeChild(UserLiveFeed_cell[pos][itemPos]);
+        }
+        if (UserLiveFeed_cell[pos]) delete UserLiveFeed_cell[pos][itemPos];
+        Sidepannel_Positions = JSON.parse(JSON.stringify(UserLiveFeed_idObject[pos] || {}));
+    }
+
     function WTV_AddMappedLiveToUserFeed(status, mapping) {
-        if (!status || !status.online || !status.playback_url || !mapping || !mapping.twitch_id) return;
+        if (!status || !status.online || !status.playback_url || !mapping || !mapping.twitch_id) {
+            WTV_RemoveMappedLiveFromUserFeed(mapping);
+            return;
+        }
         if (!UserLiveFeed_obj || !UserLiveFeed_obj[UserLiveFeedobj_UserLivePos]) return;
 
         var pos = UserLiveFeedobj_UserLivePos,
@@ -52414,6 +52449,8 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
             oldCell,
             newCell,
             sideHtml;
+
+        if (existingPos !== null && !WTV_MappedFeedSlotIsWTV(pos, existingPos, mapping)) return;
 
         if (!UserLiveFeed_idObject[pos]) UserLiveFeed_idObject[pos] = {};
         if (!UserLiveFeed_DataObj[pos]) UserLiveFeed_DataObj[pos] = {};
@@ -52568,7 +52605,17 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
     }
 
     function WTV_VodPlaybackUrl(vod) {
-        return vod ? vod.playback_url || vod.vod_url || vod.playlist_url || vod.hls_url || vod.url || '' : '';
+        return vod
+            ? vod.webos_playback_url ||
+                  vod.compat_playback_url ||
+                  vod.h264_playback_url ||
+                  vod.playback_url ||
+                  vod.vod_url ||
+                  vod.playlist_url ||
+                  vod.hls_url ||
+                  vod.url ||
+                  ''
+            : '';
     }
 
     function WTV_VodStartedAt(vod) {
@@ -52959,7 +53006,7 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
 
     function WTV_PlayVodLoadDataSuccess(responseObj) {
         var patchedPlaylist = WTV_PatchVodPlaylist(responseObj.responseText || '', responseObj.url || WTV_GetPlaybackUrl(Main_values_Play_data));
-        PlayVod_autoUrl = responseObj.url || WTV_GetPlaybackUrl(Main_values_Play_data) || WTV_CreatePlaylistObjectUrl(patchedPlaylist);
+        PlayVod_autoUrl = WTV_CreatePlaylistObjectUrl(patchedPlaylist) || responseObj.url || WTV_GetPlaybackUrl(Main_values_Play_data);
         PlayVod_loadDataSuccessEnd(patchedPlaylist);
     }
 

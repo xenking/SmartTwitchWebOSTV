@@ -5,6 +5,18 @@ Scope: `SmartTwitchWebOSTV` only. Integration target is `w.tv` only.
 
 Kick is not part of the implementation plan. Kick can be used only as a reference for clean provider/player scheme design.
 
+
+## Repository architecture exception
+
+This feature intentionally touches `app/specific/**` and `app/index.html` instead of living only in the webOS bridge. The required UX is inside existing upstream screens/player controls: channel action row, live feed ordering, side panel entries, end-dialog rewind/VOD actions, VOD history, and playback metadata labels. The webOS bridge can supply platform APIs and local archive playback shims, but it cannot safely add those focusable app-level controls or mutate all internal feed/player state from outside without fragile DOM monkey-patching.
+
+Keep this exception narrow:
+
+- w.tv app-level state/UI lives in `app/specific/WTV.js` plus minimal call sites.
+- webOS runtime/local archive plumbing remains in `webos/bridge/webosCompatBridge.js`.
+- hosted release injection remains in `tools/upstream/prepareHostedRelease.js`.
+- upstream sync conflict risk is accepted for this feature and must be resolved explicitly during future syncs.
+
 ## Corrected understanding
 
 Playback default is direct HLS, not archiver proxy.
