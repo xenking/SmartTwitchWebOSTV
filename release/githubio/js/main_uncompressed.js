@@ -52121,10 +52121,7 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
 
     function WTV_IsVodData(data) {
         var meta = WTV_GetMeta(data);
-        return !!(
-            meta &&
-            (meta.source_kind === 'vod' || meta.source_kind === 'recording' || WTV_IsArchiveVodUrl(meta.playback_url || meta.vod_url || ''))
-        );
+        return !!(meta && (meta.source_kind === 'vod' || meta.source_kind === 'recording' || meta.duration_seconds));
     }
 
     function WTV_GetLiveBadgeText(data) {
@@ -52309,10 +52306,13 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
             mapping = null;
 
         if (!wtvChannel) {
-            localStorage.removeItem(WTV_GetMappingKey(twitchLogin));
             for (i = list.length - 1; i >= 0; i--) {
-                if (list[i].twitch_login === twitchLogin) list.splice(i, 1);
+                if (list[i].twitch_login === twitchLogin) {
+                    WTV_RemoveMappedLiveFromUserFeed(list[i]);
+                    list.splice(i, 1);
+                }
             }
+            localStorage.removeItem(WTV_GetMappingKey(twitchLogin));
             WTV_WriteMappingIndex(list);
             return null;
         }
@@ -52586,8 +52586,8 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
             playback_url: playbackURL,
             playback_kind: 'archive_hls',
             vod_url: playbackURL,
-            recording_group_id: vod.id || vod.recording_group_id || '',
-            stream_id: vod.id || vod.recording_group_id || WTV_Platform + ':' + channel
+            recording_group_id: vod.recording_group_id || vod.id || '',
+            stream_id: vod.recording_group_id || vod.id || WTV_Platform + ':' + channel
         };
     }
 

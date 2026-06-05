@@ -429,6 +429,14 @@
             return '';
         }
     }
+    function getLocalStorageValueRaw(key) {
+        try {
+            if (!w.localStorage) return null;
+            return w.localStorage.getItem(key);
+        } catch (eStorageRaw) {
+            return null;
+        }
+    }
     function isTtvLolPlaylistProxyEnabled() {
         try {
             if (w.location && typeof w.location.search === 'string' && /(?:\?|&)sttv_ttvlol=0(?:&|$)/i.test(w.location.search)) return false;
@@ -456,10 +464,11 @@
         return endpoint;
     }
     function getLocalArchiveEndpoint() {
-        var endpoint = normalizeLocalArchiveEndpoint(getLocalStorageValue(LOCAL_ARCHIVE_ENDPOINT_KEY));
-        if (!endpoint) endpoint = normalizeLocalArchiveEndpoint(getLocalStorageValue(LOCAL_ARCHIVE_ENDPOINT_LEGACY_KEY));
-        if (!endpoint) endpoint = normalizeLocalArchiveEndpoint(LOCAL_ARCHIVE_ENDPOINT_DEFAULT);
-        return endpoint;
+        var value = getLocalStorageValueRaw(LOCAL_ARCHIVE_ENDPOINT_KEY);
+        if (value !== null) return normalizeLocalArchiveEndpoint(value);
+        value = getLocalStorageValueRaw(LOCAL_ARCHIVE_ENDPOINT_LEGACY_KEY);
+        if (value !== null) return normalizeLocalArchiveEndpoint(value);
+        return normalizeLocalArchiveEndpoint(LOCAL_ARCHIVE_ENDPOINT_DEFAULT);
     }
     function localArchiveEndpoint() {
         localVodOverride.endpoint = getLocalArchiveEndpoint();
@@ -647,8 +656,8 @@
     function localVodIsActivePlayback() {
         return localVodOverride.source === 'local' && localVodHasUsableCurrentMatch() && ms && ms.type === 2;
     }
-    function localVodTwitchToLocalMs(twitchMs) {
-        var match = localVodOverride.match;
+    function localVodTwitchToLocalMs(twitchMs, candidateMatch) {
+        var match = candidateMatch || localVodOverride.match;
         if (!match) return twitchMs;
         var localSeconds = Math.max(0, (twitchMs / 1000) - (match.delta_seconds || 0));
         var availableSeconds = match.vod && match.vod.duration_seconds ? match.vod.duration_seconds : 0;
@@ -661,8 +670,8 @@
         }
         return Math.round(localSeconds * 1000);
     }
-    function localVodLocalToTwitchMs(localMs) {
-        var match = localVodOverride.match;
+    function localVodLocalToTwitchMs(localMs, candidateMatch) {
+        var match = candidateMatch || localVodOverride.match;
         if (!match) return localMs;
         return Math.max(0, Math.round(localMs + (match.delta_seconds || 0) * 1000));
     }
@@ -793,13 +802,12 @@
         var metaPositionSeconds = meta ? localVodDurationSeconds(meta.positionSeconds || 0) : 0;
         if (metaPositionSeconds > 0) return Math.floor(metaPositionSeconds);
         var localOffsetSeconds = match ? localVodDurationSeconds(match.offset_seconds || 0) : 0;
-        if (localOffsetSeconds > 0) return Math.floor(localVodLocalToTwitchMs(localOffsetSeconds * 1000) / 1000);
+        if (localOffsetSeconds > 0) return Math.floor(localVodLocalToTwitchMs(localOffsetSeconds * 1000, match) / 1000);
         return 0;
     }
     function localVodStartLocalMatch(match, meta, actions, message) {
         var url = localVodPlaybackUrl(match);
         if (!url) return false;
-        var localOffsetSeconds = Math.max(0, Math.floor(match.offset_seconds || 0));
         var twitchOffsetSeconds = localVodTargetTwitchSeconds(match, meta);
         actions = localVodRememberCallbacks(actions);
         localVodOverride.match = match;
@@ -812,7 +820,7 @@
                 actions.playLocal({
                     url: url,
                     playlist: '',
-                    offsetSeconds: localOffsetSeconds,
+                    offsetSeconds: Math.max(0, Math.floor(localVodTwitchToLocalMs(twitchOffsetSeconds * 1000, match) / 1000)),
                     twitchOffsetSeconds: twitchOffsetSeconds,
                     match: match
                 });
