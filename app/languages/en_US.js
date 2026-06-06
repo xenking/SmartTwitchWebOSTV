@@ -834,6 +834,14 @@ function en_USLang() {
     PROXY_SETTINGS = 'Proxy Settings (Internet censorship and related proxy)';
     PROXY_SETTINGS_SUMMARY =
         'Only one proxy can be enable, enables proxy server to get stream links from a different server, that may allow you to see content that is forbidden on yours region and avoid ads, disable this if you have any live stream issue too many or longer buffers, freezes or slow connection that may cause the stream quality to drop.';
+    STR_WEBOS_TTVLOL_PROXY_SETTINGS = 'webOS TTV LOL playlist proxy';
+    STR_WEBOS_TTVLOL_PROXY_SETTINGS_SUMMARY =
+        'Routes live Twitch playlist requests through the TTV LOL v2 Firefox proxy path before falling back to direct Twitch servers.';
+    STR_WEBOS_TTVLOL_PROXY_ENABLED = 'Enable playlist proxy';
+    STR_WEBOS_TTVLOL_PROXY_ENABLED_SUMMARY = 'Disable this if live streams fail, buffer too much, or you want direct Twitch playlists.';
+    STR_WEBOS_TTVLOL_PROXY_URL = 'Proxy server';
+    STR_WEBOS_TTVLOL_PROXY_URL_SUMMARY = 'Default: chromium.api.cdn-perfprod.com:2023,firefox.api.cdn-perfprod.com:2023. You can enter one proxy or multiple proxies separated by comma, semicolon, or new line.';
+    STR_WEBOS_TTVLOL_PROXY_URL_PROMPT = 'Enter TTV LOL HTTP(S) proxy server(s). Multiple values can be separated by comma, semicolon, or new line.';
     SEEK_PREVIEW = 'Seek Preview';
     SEEK_PREVIEW_SUMMARY =
         "Allows to control the VOD seek preview image that shows when rewind or fast forward, seek preview isn't available to all VODs.";

@@ -21,6 +21,28 @@ function run(command, args) {
     process.exit(result.status || 0);
 }
 
+function nodeMajor() {
+    return Number((process.versions.node || '0').split('.')[0]) || 0;
+}
+
+function runAres(command, args) {
+    const localBin = path.join(root, 'node_modules', '@webos-tools', 'cli', 'bin', command + '.js');
+    if (process.env.STTV_WEBOS_ARES_NODE) {
+        run(process.env.STTV_WEBOS_ARES_NODE, [localBin].concat(args));
+        return;
+    }
+
+    // @webos-tools/cli 3.2.x device/novacom commands currently crash under Node 25
+    // with `isDate is not a function`. Use Node 20 for device operations when the
+    // active shell Node is newer than the CLI supports.
+    if (nodeMajor() >= 23 && fs.existsSync(localBin)) {
+        run('npx', ['-y', '-p', 'node@20', 'node', localBin].concat(args));
+        return;
+    }
+
+    run(command, args);
+}
+
 function main() {
     const action = process.argv[2];
     if (!action) {
@@ -33,22 +55,22 @@ function main() {
     const ipkFile = path.join(root, 'build', id + '_' + version + '_all.ipk');
 
     if (action === 'install') {
-        run('ares-install', [ipkFile]);
+        runAres('ares-install', [ipkFile]);
         return;
     }
 
     if (action === 'launch') {
-        run('ares-launch', [id]);
+        runAres('ares-launch', [id]);
         return;
     }
 
     if (action === 'inspect') {
-        run('ares-inspect', ['--device', 'webos', id]);
+        runAres('ares-inspect', ['--device', 'webos', id]);
         return;
     }
 
     if (action === 'remove') {
-        run('ares-install', ['--device', 'webos', '-r', id]);
+        runAres('ares-install', ['--device', 'webos', '-r', id]);
         return;
     }
 

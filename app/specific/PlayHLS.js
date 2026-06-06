@@ -79,6 +79,39 @@ function PlayHLS_GetPlayListAsync(isLive, Channel_or_VOD_Id, CheckId_y, CheckId_
     }
 }
 
+
+function PlayHLS_GetExternalPlayListAsync(playbackUrl, CheckId_y, CheckId_x, callBackSuccess) {
+    OSInterface_XmlHttpGetFull(
+        playbackUrl,
+        DefaultHttpGetTimeout,
+        null,
+        null,
+        null,
+        'PlayHLS_ExternalPlayListUrlResult',
+        CheckId_y,
+        '1',
+        '0',
+        playbackUrl,
+        null,
+        CheckId_x,
+        callBackSuccess.name,
+        null
+    );
+}
+
+function PlayHLS_ExternalPlayListUrlResult(result, checkResult, check_1, check_2, check_3, check_4, check_5, callBackSuccess) {
+    var response = JSON.parse(result);
+
+    response.checkResult = checkResult;
+    response.url = check_3;
+
+    eval(callBackSuccess)( // jshint ignore:line
+        JSON.stringify(response),
+        check_5 ? parseInt(check_5) : null,
+        parseInt(checkResult)
+    );
+}
+
 function PlayHLS_GetToken(isLive, Channel_or_VOD_Id, CheckId_y, CheckId_x, callBackSuccess, useProxy) {
     OSInterface_XmlHttpGetFull(
         PlayClip_BaseUrl, //String urlString

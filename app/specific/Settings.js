@@ -155,6 +155,28 @@ var Settings_value = {
         values: ['no', 'yes'],
         defaultValue: 1
     },
+    webos_ttv_lol_proxy: {
+        //Migrated to dialog
+        values: ['no', 'yes'],
+        defaultValue: 2
+    },
+    webos_ttv_lol_proxy_url: {
+        //Migrated to dialog
+        values: ['None'],
+        set_values: [''],
+        defaultValue: 1
+    },
+    webos_ttv_lol_proxy_settings: {
+        values: ['None'],
+        set_values: [''],
+        defaultValue: 1
+    },
+    local_archive_endpoint: {
+        //Migrated to dialog
+        values: ['None'],
+        set_values: [''],
+        defaultValue: 1
+    },
     proxy_timeout: {
         //Migrated to dialog
         values: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 15, 20, 30],
@@ -986,6 +1008,13 @@ function Settings_SetSettings() {
     div += Settings_Content('speed_adjust', dis_ena, STR_SPEED_ADJUST, STR_SPEED_ADJUST_SUMMARY);
 
     //Dialog settings
+    div += Settings_Content(
+        'webos_ttv_lol_proxy_settings',
+        [STR_ENTER_TO_OPEN],
+        STR_WEBOS_TTVLOL_PROXY_SETTINGS,
+        STR_WEBOS_TTVLOL_PROXY_SETTINGS_SUMMARY
+    );
+    div += Settings_Content('local_archive_endpoint', [STR_ENTER_TO_OPEN], 'Local archive endpoint', 'Set Local VOD archive endpoint URL.');
     //div += Settings_Content('proxy_settings', [STR_ENTER_TO_OPEN], PROXY_SETTINGS, null);
     div += Settings_Content('player_extracodecs', [STR_ENTER_TO_OPEN], STR_PLAYER_EXTRA_CODEC, STR_PLAYER_EXTRA_CODEC_SUMMARY);
     div += Settings_Content('blocked_codecs', [STR_ENTER_TO_OPEN], STR_BLOCKED_CODEC, STR_BLOCKED_CODEC_SUMMARY);
@@ -1156,6 +1185,7 @@ function Settings_SetDefaults() {
     Settings_set_all_notification();
     Settings_SetLang();
     Settings_SetSpeed_adjust();
+    Settings_SetWebOsTtvLolProxy();
 
     Settings_SetResBitRate(0);
 
@@ -1427,6 +1457,7 @@ function Settings_SetDefault(position) {
     else if (position === 'ttv_lolProxy') Settings_set_all_proxy('ttv_lolProxy');
     else if (position === 'k_twitch') Settings_set_all_proxy('k_twitch');
     else if (position === 'T1080') Settings_set_all_proxy('T1080');
+    else if (position === 'webos_ttv_lol_proxy') Settings_SetWebOsTtvLolProxy();
     else if (position === 'vod_seek_min') Settings_check_min_seek();
     else if (position === 'vod_seek_max') Settings_check_max_seek();
     else if (position === 'auto_minimize_inactive') Settings_SetAutoMinimizeTimeout();
@@ -1583,6 +1614,203 @@ function Settings_get_enabled_Proxy() {
     }
 
     return 3;
+}
+
+
+var Settings_WebOsTtvLolProxyDefault = 'chromium.api.cdn-perfprod.com:2023,firefox.api.cdn-perfprod.com:2023';
+
+function Settings_GetWebOsTtvLolProxyUrl() {
+    return Main_getItemString('webos_ttv_lol_proxy_url_value', Settings_WebOsTtvLolProxyDefault);
+}
+
+function Settings_SetWebOsTtvLolProxy() {
+    Main_setItem('STTV_TTVLOL_ENABLED', Settings_Obj_default('webos_ttv_lol_proxy') ? '1' : '0');
+    Main_setItem('STTV_TTVLOL_PROXIES', Settings_GetWebOsTtvLolProxyUrl());
+}
+
+function Settings_EscapeHtml(value) {
+    return String(value || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+var Settings_TextInputSave = null;
+var Settings_TextInputCancel = null;
+var Settings_TextInputFocusId = null;
+
+function Settings_TextInputShow(title, currentValue, placeholder, saveCallback, cancelCallback) {
+    Settings_DialoghandleKeyReturnAfter();
+    Settings_TextInputSave = saveCallback;
+    Settings_TextInputCancel = cancelCallback;
+
+    Main_innerHTML(
+        'dialog_settings_text',
+        '<div class="about_text_title">' +
+            title +
+            '</div>' +
+            STR_BR +
+            '<input id="settings_text_input" class="input_class" type="text" placeholder="' +
+            Settings_EscapeHtml(placeholder || '') +
+            '" value="' +
+            Settings_EscapeHtml(currentValue || '') +
+            '" />' +
+            STR_BR +
+            '<div class="about_text_title">' +
+            STR_CLOSE_THIS +
+            '</div>'
+    );
+    Main_ShowElement('dialog_settings');
+    Main_addEventListener('keydown', Settings_TextInputHandleKeyDown);
+
+    Settings_TextInputFocusId = Main_setTimeout(
+        function () {
+            var input = Main_getElementById('settings_text_input');
+            if (input) input.focus();
+        },
+        500,
+        Settings_TextInputFocusId
+    );
+}
+
+function Settings_TextInputClose() {
+    Main_clearTimeout(Settings_TextInputFocusId);
+    var input = Main_getElementById('settings_text_input');
+    if (input) input.blur();
+    Main_removeEventListener('keydown', Settings_TextInputHandleKeyDown);
+    Main_HideElement('dialog_settings');
+}
+
+function Settings_TextInputSaveAndClose() {
+    var input = Main_getElementById('settings_text_input');
+    var value = input ? input.value : '';
+    var saveCallback = Settings_TextInputSave;
+    Settings_TextInputSave = null;
+    Settings_TextInputCancel = null;
+    Settings_TextInputClose();
+    if (saveCallback) saveCallback(value);
+}
+
+function Settings_TextInputCancelAndClose() {
+    var cancelCallback = Settings_TextInputCancel;
+    Settings_TextInputSave = null;
+    Settings_TextInputCancel = null;
+    Settings_TextInputClose();
+    if (cancelCallback) cancelCallback();
+}
+
+function Settings_TextInputHandleKeyDown(event) {
+    switch (event.keyCode) {
+        case KEY_KEYBOARD_DONE:
+        case KEY_ENTER:
+        case KEY_DOWN:
+            Settings_TextInputSaveAndClose();
+            break;
+        case KEY_KEYBOARD_BACKSPACE:
+        case KEY_RETURN:
+            Settings_TextInputCancelAndClose();
+            break;
+        default:
+            break;
+    }
+}
+
+function Settings_WebOsTtvLolProxyUrlSummary() {
+    return STR_WEBOS_TTVLOL_PROXY_URL_SUMMARY + STR_BR + STR_BR + Settings_EscapeHtml(Settings_GetWebOsTtvLolProxyUrl());
+}
+
+function Settings_WebOsTtvLolProxyUrlPrompt() {
+    var currentValue = Settings_GetWebOsTtvLolProxyUrl();
+    Settings_TextInputShow(
+        STR_WEBOS_TTVLOL_PROXY_URL_PROMPT,
+        currentValue,
+        Settings_WebOsTtvLolProxyDefault,
+        function (nextValue) {
+            nextValue = String(nextValue || '').replace(/[\r\n]+/g, ',').trim();
+            if (!nextValue) nextValue = Settings_WebOsTtvLolProxyDefault;
+            Main_setItem('webos_ttv_lol_proxy_url_value', nextValue);
+            Settings_SetWebOsTtvLolProxy();
+            Settings_DialogShowWebOsTtvLolProxy(false);
+        },
+        function () {
+            Settings_DialogShowWebOsTtvLolProxy(false);
+        }
+    );
+}
+
+function Settings_GetLocalArchiveEndpoint() {
+    try {
+        var value = localStorage.getItem('sttv_webos_local_archive_endpoint');
+        if (value !== null) return Settings_NormalizeEndpointUrl(value);
+    } catch (e) {}
+    return Settings_NormalizeEndpointUrl('http://192.168.0.109:18080');
+}
+
+function Settings_NormalizeEndpointUrl(value) {
+    value = String(value || '').replace(/\r|\n/g, '').trim().replace(/\/+$/, '');
+    if (value && !/^https?:\/\//i.test(value)) value = 'http://' + value;
+    return value;
+}
+
+function Settings_LocalArchiveEndpointPrompt() {
+    var currentValue = Settings_GetLocalArchiveEndpoint();
+    Settings_TextInputShow(
+        'Local VOD archive endpoint',
+        currentValue,
+        'http://192.168.1.50:8080',
+        function (nextValue) {
+            nextValue = Settings_NormalizeEndpointUrl(nextValue);
+            Main_setItem('sttv_webos_local_archive_endpoint', nextValue);
+            Main_setItem('localArchiveEndpoint', nextValue);
+            if (window.STTVWebOSLocalVod && window.STTVWebOSLocalVod.updateEndpoint) window.STTVWebOSLocalVod.updateEndpoint();
+            OSInterface_showToast(nextValue ? 'Local VOD archive endpoint saved' : 'Local VOD archive disabled');
+            Settings_DialogShowLocalArchive(false);
+        },
+        function () {
+            Settings_DialogShowLocalArchive(false);
+        }
+    );
+}
+
+function Settings_LocalArchiveEndpointSummary() {
+    var endpoint = Settings_GetLocalArchiveEndpoint();
+    return 'Current endpoint:' + STR_BR + STR_BR + Settings_EscapeHtml(endpoint || 'Disabled');
+}
+
+function Settings_EnsureLocalArchiveDialogValues() {
+    if (!Settings_value.local_archive_endpoint) {
+        Settings_value.local_archive_endpoint = {
+            values: ['None'],
+            set_values: [''],
+            defaultValue: 1
+        };
+    }
+    Settings_value.local_archive_endpoint.values = [STR_ENTER_TO_OPEN];
+}
+
+function Settings_DialogShowLocalArchive(click) {
+    Settings_EnsureLocalArchiveDialogValues();
+
+    var obj = {
+        local_archive_endpoint: {
+            defaultValue: Settings_value.local_archive_endpoint.defaultValue,
+            values: Settings_value.local_archive_endpoint.values,
+            title: 'Local VOD archive endpoint URL',
+            summary: Settings_LocalArchiveEndpointSummary(),
+            keyenter: true
+        }
+    };
+
+    Settings_DialogShow(
+        obj,
+        'Local archive endpoint' +
+            STR_BR +
+            STR_BR +
+            'Set Local VOD archive endpoint URL.',
+        click
+    );
 }
 
 function Settings_check_min_seek() {
@@ -2061,6 +2289,8 @@ function Settings_KeyEnter(click) {
     else if (Main_A_includes_B(Settings_value_keys[Settings_cursorY], 'blocked_codecs')) Settings_CodecsShow(click);
     else if (Main_A_includes_B(Settings_value_keys[Settings_cursorY], 'player_extracodecs')) Settings_DialogShowExtraCodecs(click);
     else if (Main_A_includes_B(Settings_value_keys[Settings_cursorY], 'player_bitrate')) Settings_DialogShowBitrate(click);
+    else if (Main_A_includes_B(Settings_value_keys[Settings_cursorY], 'webos_ttv_lol_proxy_settings')) Settings_DialogShowWebOsTtvLolProxy(click);
+    else if (Main_A_includes_B(Settings_value_keys[Settings_cursorY], 'local_archive_endpoint')) Settings_DialogShowLocalArchive(click);
     else if (Main_A_includes_B(Settings_value_keys[Settings_cursorY], 'proxy_settings')) Settings_DialogShowProxy(click);
     else if (Main_A_includes_B(Settings_value_keys[Settings_cursorY], 'vod_seek')) Settings_vod_seek(click);
     else if (Main_A_includes_B(Settings_value_keys[Settings_cursorY], 'block_qualities')) Settings_block_qualities(click);
@@ -2582,6 +2812,30 @@ function Settings_ForceEnableAnimations() {
     Settings_value.app_animations.defaultValue = 1;
     Main_setItem('app_animations', 2);
     Settings_SetAnimations();
+}
+
+function Settings_DialogShowWebOsTtvLolProxy(click) {
+    var array_no_yes = [STR_NO, STR_YES];
+    Settings_value.webos_ttv_lol_proxy.values = array_no_yes;
+    Settings_value.webos_ttv_lol_proxy_url.values = [STR_ENTER_TO_OPEN];
+
+    var obj = {
+        webos_ttv_lol_proxy: {
+            defaultValue: Settings_value.webos_ttv_lol_proxy.defaultValue,
+            values: Settings_value.webos_ttv_lol_proxy.values,
+            title: STR_WEBOS_TTVLOL_PROXY_ENABLED,
+            summary: STR_WEBOS_TTVLOL_PROXY_ENABLED_SUMMARY
+        },
+        webos_ttv_lol_proxy_url: {
+            defaultValue: Settings_value.webos_ttv_lol_proxy_url.defaultValue,
+            values: Settings_value.webos_ttv_lol_proxy_url.values,
+            title: STR_WEBOS_TTVLOL_PROXY_URL,
+            summary: Settings_WebOsTtvLolProxyUrlSummary(),
+            keyenter: true
+        }
+    };
+
+    Settings_DialogShow(obj, STR_WEBOS_TTVLOL_PROXY_SETTINGS + STR_BR + STR_BR + STR_WEBOS_TTVLOL_PROXY_SETTINGS_SUMMARY, click);
 }
 
 function Settings_DialogShowProxy(click) {
@@ -3649,7 +3903,7 @@ function Settings_DialoghandleKeyReturn() {
 }
 
 function Settings_DialoghandleKeyReturnAfter() {
-    Settings_RemoveInputFocusKey(Settings_DialogValue[Settings_DialogPos]);
+    if (Settings_DialogValue && Settings_DialogValue.length) Settings_RemoveInputFocusKey(Settings_DialogValue[Settings_DialogPos]);
     Main_HideElement('dialog_settings');
     Main_removeEventListener('keydown', Settings_DialoghandleKeyDown);
 }
@@ -3696,6 +3950,16 @@ function Settings_DialoghandleKeyDown(event) {
                     Settings_DialogAddBackupAccount();
                 }
 
+                break;
+            }
+
+            if (Settings_DialogValue[Settings_DialogPos] === 'webos_ttv_lol_proxy_url') {
+                Settings_WebOsTtvLolProxyUrlPrompt();
+                break;
+            }
+
+            if (Settings_DialogValue[Settings_DialogPos] === 'local_archive_endpoint') {
+                Settings_LocalArchiveEndpointPrompt();
                 break;
             }
 

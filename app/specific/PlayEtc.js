@@ -39,11 +39,25 @@ function Play_SetControlsVisibilityPlayer(PlayVodClip) {
         if (Play_StayDialogVisible()) Play_SetControlsVisibility('ShowInStay');
         else if (Play_MultiEnable) Play_SetControlsVisibility('ShowInMulti');
         else if (PlayExtra_PicturePicture) Play_SetControlsVisibility('ShowInPP');
-        else Play_SetControlsVisibility('ShowInLive');
+        else {
+            Play_SetControlsVisibility('ShowInLive');
+            if (WTV_HasRecordingAction()) {
+                Play_controls[Play_controlsOpenVod].string = 'Open w.tv recording';
+                Play_controls[Play_controlsOpenVod].setLabel(Play_data.data[2], Play_data.data[1]);
+                Play_BottomShow(Play_controlsOpenVod);
+            } else {
+                Play_controls[Play_controlsOpenVod].string = STR_OPEN_BROADCAST;
+            }
+        }
     } else if (PlayVodClip === 2) {
         Play_SetControlsVisibility('ShowInVod');
-        if (PlayVod_ChaptersArray.length) Play_BottomShow(Play_controlsChapters);
-        if (Play_HasLive) Play_BottomShow(Play_controlsOpenLive);
+        if (WTV_IsData(Main_values_Play_data) || WTV_IsData(Play_data.data)) {
+            Play_BottomHide(Play_controlsLocalVodSource);
+            Play_BottomHide(Play_controlsOpenLive);
+        } else {
+            if (PlayVod_ChaptersArray.length) Play_BottomShow(Play_controlsChapters);
+            if (Play_HasLive) Play_BottomShow(Play_controlsOpenLive);
+        }
     } else if (PlayVodClip === 3) {
         Play_SetControlsVisibility('ShowInClip');
         if (PlayClip_HasVOD) Play_BottomShow(Play_controlsOpenVod);
@@ -220,6 +234,89 @@ function Play_A_Control(value, control) {
     Play_controls[control].defaultValue = value;
     if (Play_controls[control].bottomArrows) Play_controls[control].bottomArrows();
     Play_controls[control].setLabel();
+}
+
+function Play_WebOSLocalArchiveEnabled() {
+    return !!(
+        window.STTVWebOSLocalVod &&
+        window.STTVWebOSLocalVod.getState &&
+        window.STTVWebOSLocalVod.getState().enabled
+    );
+}
+
+var Play_WebOSLocalLiveResumeItem = 'webos_local_live_resume_point';
+
+function Play_WebOSLocalSaveLiveResumePoint() {
+    if (!Play_WebOSLocalArchiveEnabled() || !Play_isOn || !Play_data || !Play_data.data || !Play_data.data[12]) return;
+    var liveId = Play_data.data[7] || Play_data.data[6] || '';
+    if (!liveId) return;
+    Main_setItem(
+        Play_WebOSLocalLiveResumeItem,
+        JSON.stringify({
+            id: liveId,
+            date: new Date().getTime(),
+            data: Main_Slice(Play_data.data),
+            vodid: ''
+        })
+    );
+}
+
+function Play_WebOSLocalGetLiveResumePoint() {
+    if (!Play_WebOSLocalArchiveEnabled() || !Play_data || !Play_data.data || !Play_data.data[12]) return null;
+    var liveId = Play_data.data[7] || Play_data.data[6] || '';
+    var historyPos = AddUser_IsUserSet() && liveId ? Main_history_GetById('live', liveId) : null;
+    var stored = null;
+    try {
+        stored = Main_getItemJson(Play_WebOSLocalLiveResumeItem, null);
+    } catch (e) {}
+    if ((!historyPos || !historyPos.date) && stored && stored.id && String(stored.id) === String(liveId)) {
+        historyPos = stored;
+    }
+    if (!historyPos) {
+        historyPos = {
+            id: liveId,
+            date: new Date().getTime(),
+            data: Play_data.data,
+            vodid: ''
+        };
+    }
+    var startedAtMs = new Date(Play_data.data[12]).getTime();
+    var resumeDate = parseInt(historyPos.date);
+    if (!startedAtMs || !resumeDate || resumeDate <= startedAtMs) return null;
+    return {
+        id: historyPos.id || liveId,
+        date: resumeDate,
+        data: Main_Slice(historyPos.data && historyPos.data.length ? historyPos.data : Play_data.data),
+        vodid: historyPos.vodid || ''
+    };
+}
+
+function Play_WebOSLocalOpenLiveResumePoint() {
+    var historyPos = Play_WebOSLocalGetLiveResumePoint();
+    if (!historyPos) return false;
+    Main_values_Play_data = historyPos.data;
+    Play_VodObj = historyPos;
+    Play_OpenRewind = false;
+    Play_showWarningMiddleDialog('Opening local archive at saved position', 2500);
+    Main_OPenAsVod(historyPos);
+    return true;
+}
+
+function Play_PrepareLiveAsLocalVod(rewindId) {
+    Main_values_Play_data = Play_data.data;
+    Main_values.Main_selectedChannelDisplayname = Play_data.data[1];
+    Main_values.Main_selectedChannel = Play_data.data[6];
+    Main_values.Main_selectedChannelLogo = Play_data.data[9];
+    Main_values.Main_selectedChannelPartner = Play_data.data[10];
+    Main_values.Main_selectedChannel_id = Play_data.data[14];
+    Main_values.ChannelVod_vodId = rewindId || '';
+    ChannelVod_createdAt = Play_data.data[11] || '';
+    ChannelVod_language = Play_data.data[15] || '';
+    ChannelVod_title = Play_data.data[2] || Play_data.data[1] || '';
+    ChannelVod_game = Play_data.data[3] ? STR_STARTED + STR_PLAYING + Play_data.data[3] : '';
+    ChannelVod_views = Play_data.data[13] ? Main_formatNumber(Play_data.data[13]) : '';
+    if (Play_data.data[12]) Play_DurationSeconds = parseInt((Date.now() - new Date(Play_data.data[12]).getTime()) / 1000);
+    if (!Play_DurationSeconds || Play_DurationSeconds < 0) Play_DurationSeconds = 0;
 }
 
 function Play_SetFullScreen(isFull) {
@@ -459,7 +556,8 @@ function Play_partnerIcon(name, partner, live_vod_clip, lang, rerun) {
         var isStay = Play_StayDialogVisible();
         var text = STR_LIVE;
 
-        if (rerun) text = STR_RERUN;
+        if (WTV_IsData(Play_data.data)) text = WTV_GetLiveBadgeText(Play_data.data);
+        else if (rerun) text = STR_RERUN;
         else if (isStay) text = STR_CH_IS_OFFLINE;
 
         div +=
@@ -475,7 +573,8 @@ function Play_partnerIcon(name, partner, live_vod_clip, lang, rerun) {
             STR_SPACE_HTML +
             '</div>';
     } else if (live_vod_clip === 1) {
-        div += STR_SPACE_HTML + STR_SPACE_HTML + '<div class="partnericon_text" style="background: #00a94b">&nbsp;&nbsp;VOD&nbsp;&nbsp;</div>';
+        var vodText = WTV_IsData(Main_values_Play_data) || WTV_IsData(Play_data.data) ? 'W.TV VOD' : 'VOD';
+        div += STR_SPACE_HTML + STR_SPACE_HTML + '<div class="partnericon_text" style="background: #00a94b">&nbsp;&nbsp;' + vodText + '&nbsp;&nbsp;</div>';
     } else {
         div += STR_SPACE_HTML + STR_SPACE_HTML + '<div class="partnericon_text" style="background: #F05700">&nbsp;&nbsp;CLIP&nbsp;&nbsp;</div>';
     }
@@ -739,10 +838,14 @@ function Play_EndDialogPressed(PlayVodClip) {
         }
     } else if (Play_EndCounter === 2) {
         if (PlayVodClip === 1) {
-            Main_values_Play_data = Play_VodObj.data;
-            Play_ClearPP();
-            PlayVod_PreshutdownStream();
-            Main_OPenAsVod(Play_VodObj);
+            if (WTV_IsData(Play_data.data)) {
+                WTV_OpenRecordingFromLive();
+            } else {
+                Main_values_Play_data = Play_VodObj.data;
+                Play_ClearPP();
+                PlayVod_PreshutdownStream();
+                Main_OPenAsVod(Play_VodObj);
+            }
         } else if (PlayVodClip === 3) {
             PlayClip_OpenVod();
             if (!PlayClip_HasVOD) canHide = false;
@@ -792,13 +895,20 @@ function Play_EndSet(PlayVodClip) {
         Play_EndTextsReset();
         Play_HasVod = false;
 
-        if (AddUser_IsUserSet()) {
+        if (WTV_HasRecordingAction()) {
+            Play_VodObj = {data: Play_data.data, vodid: (WTV_GetMeta(Play_data.data) || {}).recording_group_id || ''};
+            Main_textContent('dialog_end_vod_text_2', 'Open w.tv recording');
+            Main_getElementById('dialog_end_2').style.display = 'inline-block';
+            Main_innerHTML('end_vod_name_text_2', Play_data.data[1]);
+            Main_textContent('end_vod_title_text_2', Play_data.data[2]);
+            Play_HasVod = true;
+        } else if (AddUser_IsUserSet()) {
             var historyPos = Main_history_GetById('live', Play_data.data[7]);
             if (historyPos) {
                 Play_VodObj = historyPos;
 
-                if (Play_VodObj.vodid) {
-                    Main_textContent('dialog_end_vod_text_2', STR_OPEN_LAST_BROADCAST);
+                if (Play_VodObj.vodid || (window.STTVWebOSLocalVod && window.STTVWebOSLocalVod.getState && window.STTVWebOSLocalVod.getState().enabled)) {
+                    Main_textContent('dialog_end_vod_text_2', Play_VodObj.vodid ? STR_OPEN_LAST_BROADCAST : 'Open local archive');
                     Main_getElementById('dialog_end_2').style.display = 'inline-block';
                     Main_innerHTML('end_vod_name_text_2', Play_VodObj.data[1]);
                     Main_textContent('end_vod_title_text_2', Play_VodObj.data[2]);
@@ -993,6 +1103,11 @@ function Play_StartStayStartCheck() {
 
 function Play_StayCheckLive() {
     Play_loadDataId = new Date().getTime();
+
+    if (WTV_IsData(Play_data.data)) {
+        PlayHLS_GetExternalPlayListAsync(WTV_GetPlaybackUrl(Play_data.data), Play_loadDataId, null, Play_StayCheckLiveResult);
+        return;
+    }
 
     PlayHLS_GetPlayListAsync(true, Play_data.data[6], Play_loadDataId, null, Play_StayCheckLiveResult);
 }
@@ -1410,6 +1525,30 @@ function Play_KeyReturnSetExit() {
     text = Play_MultiEnable ? STR_EXIT_AGAIN_MULTI : text;
     Main_textContent('play_dialog_exit_text', text);
     Play_showExitDialog();
+}
+
+function Play_ChannelRockerSwitchLive(direction) {
+    if (Play_isEndDialogVisible() || Play_MultiDialogVisible()) return;
+    if (UserLiveFeed_loadingData[UserLiveFeedobj_UserLivePos]) return;
+    if (!UserLiveFeed_DataObj[UserLiveFeedobj_UserLivePos]) return;
+
+    var size = UserLiveFeed_itemsCount[UserLiveFeedobj_UserLivePos] || Sidepannel_GetSize();
+    var currentId = Play_data && Play_data.data ? Play_data.data[14] : null;
+    var currentPos =
+        currentId && Sidepannel_Positions.hasOwnProperty(currentId) ? Sidepannel_Positions[currentId] : Sidepannel_PosFeed;
+    var nextPos = currentPos + direction;
+    var nextData;
+
+    while (nextPos >= 0 && nextPos < size) {
+        nextData = UserLiveFeed_DataObj[UserLiveFeedobj_UserLivePos][nextPos];
+        if (nextData && !nextData.image && nextData[14]) {
+            Sidepannel_PosFeed = nextPos;
+            Main_values.Play_isHost = false;
+            Main_OpenLiveStream(nextData, nextPos, UserLiveFeed_side_ids, Sidepannel_handleKeyDown, false, 'Side_Panel');
+            return;
+        }
+        nextPos += direction;
+    }
 }
 
 function Play_CheckPreview() {
@@ -1914,14 +2053,10 @@ function Play_handleKeyDown(e) {
             Play_controls[Play_controlsChat].enterKey(1);
             break;
         case KEY_PG_UP:
-            if (UserLiveFeed_isPreviewShowing()) UserLiveFeed_KeyUpDown(-1);
-            else if (Play_isFullScreen && Play_isChatShown()) Play_KeyChatPosChage();
-            else UserLiveFeed_ShowFeed();
+            Play_ChannelRockerSwitchLive(-1);
             break;
         case KEY_PG_DOWN:
-            if (UserLiveFeed_isPreviewShowing()) UserLiveFeed_KeyUpDown(1);
-            else if (Play_isFullScreen && Play_isChatShown()) Play_KeyChatSizeChage();
-            else UserLiveFeed_ShowFeed();
+            Play_ChannelRockerSwitchLive(1);
             break;
         case KEY_2:
         case KEY_MEDIA_FAST_FORWARD:
@@ -1984,6 +2119,7 @@ var Play_controlsOpenVod = temp_controls_pos++;
 var Play_controlsFollow = temp_controls_pos++;
 var Play_controlsSpeed = temp_controls_pos++;
 var Play_controlsExternal = temp_controls_pos++;
+var Play_controlsLocalVodSource = temp_controls_pos++;
 var Play_controlsRewind = temp_controls_pos++;
 var Play_controlsQuality = temp_controls_pos++;
 var Play_controlsQualityMini = temp_controls_pos++;
@@ -2208,7 +2344,8 @@ function Play_MakeControls() {
         defaultValue: null,
         enterKey: function () {
             Play_ForceHidePannel();
-            PlayClip_OpenVod();
+            if (WTV_IsData(Play_data.data)) WTV_OpenRecordingFromLive();
+            else PlayClip_OpenVod();
         },
         setLabel: function (title, name) {
             Main_innerHTML(
@@ -2310,11 +2447,11 @@ function Play_MakeControls() {
 
     Play_controls[Play_controlsExternal] = {
         //External
-        ShowInLive: true,
-        ShowInVod: true,
-        ShowInClip: true,
-        ShowInPP: true,
-        ShowInMulti: true,
+        ShowInLive: false,
+        ShowInVod: false,
+        ShowInClip: false,
+        ShowInPP: false,
+        ShowInMulti: false,
         ShowInChat: false,
         ShowInAudio: false,
         ShowInAudioPP: false,
@@ -2353,6 +2490,40 @@ function Play_MakeControls() {
         }
     };
 
+    Play_controls[Play_controlsLocalVodSource] = {
+        //webOS local archive VOD source switch
+        ShowInLive: false,
+        ShowInVod: true,
+        ShowInClip: false,
+        ShowInPP: false,
+        ShowInMulti: false,
+        ShowInChat: false,
+        ShowInAudio: false,
+        ShowInAudioPP: false,
+        ShowInAudioMulti: false,
+        ShowInPreview: false,
+        ShowInStay: false,
+        icons: 'refresh',
+        offsetY: -7,
+        string: 'VOD source',
+        values: ['Twitch VOD'],
+        defaultValue: 0,
+        enterKey: function (PlayVodClip) {
+            if (PlayVodClip !== 2) return;
+            PlayVod_WebOSLocalSwitchSource();
+            Play_ResetPanel(PlayVodClip);
+        },
+        updown: function () {
+            PlayVod_WebOSLocalSwitchSource();
+        },
+        setLabel: function () {
+            PlayVod_WebOSLocalUpdateControlLabel();
+        },
+        bottomArrows: function () {
+            Play_BottomArrows(this.position);
+        }
+    };
+
     Play_controls[Play_controlsRewind] = {
         //open rewind
         ShowInLive: true,
@@ -2372,15 +2543,20 @@ function Play_MakeControls() {
         values: null,
         defaultValue: null,
         enterKey: function () {
+            if (WTV_IsData(Play_data.data)) {
+                Play_ForceHidePannel();
+                WTV_OpenRecordingFromLive();
+                return;
+            }
+
             var rewindId = Play_RewindId[Play_data.data[7]];
 
-            if (rewindId) {
-                Main_values.ChannelVod_vodId = rewindId;
-            } else {
+            if (!rewindId && !Play_WebOSLocalArchiveEnabled()) {
                 Play_showWarningMiddleDialog(STR_OPEN_REWIND_FAIL, 3000);
                 return;
             }
 
+            Play_PrepareLiveAsLocalVod(rewindId);
             Play_ForceHidePannel();
             Main_vodOffset = 0;
 

@@ -39,7 +39,7 @@ npm run webos:remove
 - Artifact generation script:
   - `npm run release:artifacts`
 - Stable manifest URL contract:
-  - `https://github.com/TBSniller/SmartTwitchWebOSTV/releases/latest/download/com.tbsniller.smarttwitchwebostv.manifest.json`
+  - `https://github.com/xenking/SmartTwitchWebOSTV/releases/latest/download/com.tbsniller.smarttwitchwebostv.manifest.json`
 
 ## GitHub Release Automation
 
@@ -88,6 +88,7 @@ Workflow: `.github/workflows/release-dev-prerelease.yml`
   - stable Homebrew artifacts (`*.manifest.json`, `*.apps-repo.yml`)
 
 ## Related Docs
+- Live adroll/proxy logging: `docs/WEBOS_ADROLL_REPRO.md`
 - Upstream sync procedure: `docs/UPSTREAM_SYNC_PLAYBOOK.md`
 - Current implementation/parity snapshot: `docs/WEBOS_PORTING_STATUS.md`
 - Platform limits: `docs/WEBOS_LIMITATIONS.md`

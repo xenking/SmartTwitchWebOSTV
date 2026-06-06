@@ -107,12 +107,20 @@
     var fsSize = 3;            // Fullscreen size variant.
     var feedBottomPx = 0;      // Feed bottom viewport offset in pixels.
     var sideRect = null;       // Side panel rect {left, top, width, height}.
+    var screenRect = null;     // Grid/card preview rect {left, top, width, height}.
     var mainMaxRes = 0;        // Max resolution cap for main player (0 = unlimited).
     var smallMaxRes = 0;       // Max resolution cap for preview player (0 = unlimited).
+    var PREVIEW_VIDEO_Z_INDEX = 2147483000; // Above app UI so small previews are visible over thumbnails.
     // --- Storage & constants ---
     var STORAGE_PREFIX = 'sttv_webos_';
     // Persist last seen hosted WebTag to avoid repeated reloads for the same build.
     var WEBTAG_STORAGE_KEY = STORAGE_PREFIX + 'webtag';
+    var LOCAL_ARCHIVE_ENDPOINT_KEY = STORAGE_PREFIX + 'local_archive_endpoint';
+    var LOCAL_ARCHIVE_ENDPOINT_LEGACY_KEY = 'localArchiveEndpoint';
+    var LOCAL_ARCHIVE_ENDPOINT_DEFAULT = 'http://192.168.0.109:18080';
+    var LOCAL_VOD_MATCH_TOLERANCE_SECONDS = 600;
+    var LOCAL_VOD_REQUEST_TIMEOUT_MS = 5500;
+    var LOCAL_VOD_GROWING_DURATION_MARGIN_MS = 2000;
     // Multi-stream rejection notices. Android: supports multi-stream natively.
     // webOS: single hardware decoder, so multi/PiP/side-panel are rejected.
     var MULTISTREAM_NOTICE_COOLDOWN_MS = 3000;
@@ -137,7 +145,7 @@
         }
         return '/SmartTwitchWebOSTV';
     }
-    var FORK_BASE_URL = (w.location && w.location.origin ? w.location.origin : 'https://tbsniller.github.io') + detectRepoBasePath();
+    var FORK_BASE_URL = (w.location && w.location.origin ? w.location.origin : 'https://xenking.github.io') + detectRepoBasePath();
     var FORK_RELEASE_URL = FORK_BASE_URL + '/release/index.html';
     var FORK_VERSION_URL = FORK_BASE_URL + '/release/githubio/version/version.json';
     // --- Multi-stream warning state ---
@@ -169,6 +177,8 @@
     var mainHardReloadCount = 0;      // Number of hard reloads (mv.load) in current cooldown window.
     var mainLastHardReloadMs = 0;     // Wall-clock timestamp of most recent hard reload.
     var mainDecoderJamRecoveryTimerId = 0; // Timer id for decoder-jam soft recovery follow-up.
+    var mainPauseRequested = false;     // True only for explicit app/user pause, not media end/stall pauses.
+    var sessionRejectedVideoCodecKeys = {}; // Codec keys rejected after runtime playback failure.
 
     // --- Loading indicator state ---
     var mainLoadingSinceAt = 0;       // When main loader was first shown (for hysteresis).
@@ -245,6 +255,7 @@
     var USHER_PLAYLIST_CACHE_TTL_MS = 45000;           // In-memory TTL for service-fetched playlists.
     var USHER_PLAYLIST_CACHE_MAX = 24;                 // Max cached service playlist entries.
     var USHER_PLAYLIST_INFLIGHT_MAX_AGE_MS = 20000;    // Safety prune age for stale in-flight entries.
+    var TTVLOL_DEFAULT_OPTIMIZED_PROXIES = ['chromium.api.cdn-perfprod.com:2023', 'firefox.api.cdn-perfprod.com:2023']; // v2 optimized defaults from archiver.
     var PREVIEW_SET_COOLDOWN_MS = 450;                 // Dedup cooldown for repeated setPrev calls.
     var LIFECYCLE_STOP_MIN_HIDDEN_MS = 12000;          // Min hidden time before stopping playback.
     var STALL_PROGRESS_THRESHOLD_MS = 4000;            // No-progress window before stall is considered persistent.
@@ -317,6 +328,17 @@
         chatContainers: [null, null],
         chatHolders: [null, null]
     };
+    var localVodOverride = {
+        endpoint: '',
+        source: 'twitch',
+        defaultSource: 'local',
+        matching: false,
+        match: null,
+        twitchMeta: null,
+        suppressMatch: false,
+        actions: null,
+        lastError: ''
+    };
     // =========================================================================
     // Bootstrap Sequence (runs immediately at parse time)
     // =========================================================================
@@ -378,6 +400,562 @@
             if (value === '1' || value === 'true' || value === 'TRUE') return true;
         } catch (e1) {}
         return false;
+    }
+    function parseLocalStorageListValue(value, fallback) {
+        if (typeof value !== 'string') return fallback ? fallback.slice(0) : [];
+        var raw = value.trim();
+        if (!raw) return fallback ? fallback.slice(0) : [];
+        var i;
+        var parsed = null;
+        if (raw.charAt(0) === '[') {
+            try { parsed = JSON.parse(raw); } catch (eJson) { parsed = null; }
+        }
+        var parts = Array.isArray(parsed) ? parsed : raw.split(/[\n,;]+/);
+        var result = [];
+        var seen = {};
+        for (i = 0; i < parts.length; i++) {
+            var item = typeof parts[i] === 'string' ? parts[i].replace(/[\r\n]/g, '').trim() : '';
+            if (!item || seen[item]) continue;
+            seen[item] = true;
+            result.push(item);
+        }
+        return result.length ? result : (fallback ? fallback.slice(0) : []);
+    }
+    function getLocalStorageValue(key) {
+        try {
+            if (!w.localStorage) return '';
+            return w.localStorage.getItem(key) || '';
+        } catch (eStorage) {
+            return '';
+        }
+    }
+    function getLocalStorageValueRaw(key) {
+        try {
+            if (!w.localStorage) return null;
+            return w.localStorage.getItem(key);
+        } catch (eStorageRaw) {
+            return null;
+        }
+    }
+    function isTtvLolPlaylistProxyEnabled() {
+        try {
+            if (w.location && typeof w.location.search === 'string' && /(?:\?|&)sttv_ttvlol=0(?:&|$)/i.test(w.location.search)) return false;
+            if (w.location && typeof w.location.search === 'string' && /(?:\?|&)sttv_ttvlol=1(?:&|$)/i.test(w.location.search)) return true;
+        } catch (e0) {}
+        var value = getLocalStorageValue('STTV_TTVLOL_ENABLED');
+        if (value === '0' || value === 'false' || value === 'FALSE') return false;
+        if (value === '1' || value === 'true' || value === 'TRUE') return true;
+        value = getLocalStorageValue('webos_ttv_lol_proxy');
+        if (value === '1') return false;
+        if (value === '2') return true;
+        return true;
+    }
+    function getTtvLolOptimizedProxies() {
+        return parseLocalStorageListValue(
+            getLocalStorageValue('STTV_TTVLOL_PROXIES') || getLocalStorageValue('webos_ttv_lol_proxy_url_value'),
+            TTVLOL_DEFAULT_OPTIMIZED_PROXIES
+        );
+    }
+    function normalizeLocalArchiveEndpoint(value) {
+        var endpoint = typeof value === 'string' ? value.replace(/[\r\n]+/g, '').trim() : '';
+        if (!endpoint) return '';
+        endpoint = endpoint.replace(/\/+$/, '');
+        if (!/^https?:\/\//i.test(endpoint)) endpoint = 'http://' + endpoint;
+        return endpoint;
+    }
+    function getLocalArchiveEndpoint() {
+        var value = getLocalStorageValueRaw(LOCAL_ARCHIVE_ENDPOINT_KEY);
+        if (value !== null) return normalizeLocalArchiveEndpoint(value);
+        value = getLocalStorageValueRaw(LOCAL_ARCHIVE_ENDPOINT_LEGACY_KEY);
+        if (value !== null) return normalizeLocalArchiveEndpoint(value);
+        return normalizeLocalArchiveEndpoint(LOCAL_ARCHIVE_ENDPOINT_DEFAULT);
+    }
+    function localArchiveEndpoint() {
+        localVodOverride.endpoint = getLocalArchiveEndpoint();
+        return localVodOverride.endpoint;
+    }
+    function localArchiveUrl(path) {
+        var endpoint = localArchiveEndpoint();
+        if (!endpoint || !path) return '';
+        if (/^https?:\/\//i.test(path)) return path;
+        return endpoint.replace(/\/+$/, '') + '/' + String(path).replace(/^\/+/, '');
+    }
+    function localVodRequest(path, callback) {
+        var url = localArchiveUrl(path);
+        if (!url) {
+            callback({status: 0, error: 'Local archive endpoint is not configured.'});
+            return;
+        }
+        try {
+            var xhr = new XMLHttpRequest();
+            xhr.open('GET', url, true);
+            xhr.timeout = LOCAL_VOD_REQUEST_TIMEOUT_MS;
+            xhr.onreadystatechange = function () {
+                if (xhr.readyState !== 4) return;
+                var text = xhr.responseText || '';
+                var parsed = null;
+                if (xhr.status >= 200 && xhr.status < 300) {
+                    try { parsed = text ? JSON.parse(text) : null; } catch (eJson) {
+                        callback({status: xhr.status || 0, error: 'Invalid JSON response.'});
+                        return;
+                    }
+                    callback({status: xhr.status, data: parsed, text: text});
+                    return;
+                }
+                callback({status: xhr.status || 0, error: 'HTTP ' + (xhr.status || 0)});
+            };
+            xhr.onerror = function () { callback({status: 0, error: 'Connection failed.'}); };
+            xhr.ontimeout = function () { callback({status: 0, error: 'Connection timed out.'}); };
+            xhr.send(null);
+        } catch (e) {
+            callback({status: 0, error: e && e.message ? e.message : 'Request failed.'});
+        }
+    }
+    function localVodParseTimeMs(value) {
+        if (!value) return 0;
+        try {
+            var msValue = new Date(value).getTime();
+            return isNaN(msValue) ? 0 : msValue;
+        } catch (e) {
+            return 0;
+        }
+    }
+    function localVodDurationSeconds(value) {
+        if (typeof value === 'number' && isFinite(value)) return Math.max(0, Math.floor(value));
+        if (typeof value === 'string') {
+            var hms = value.match(/^(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?$/i);
+            if (hms && (hms[1] || hms[2] || hms[3])) {
+                return (parseInt(hms[1], 10) || 0) * 3600 + (parseInt(hms[2], 10) || 0) * 60 + (parseInt(hms[3], 10) || 0);
+            }
+            var parsed = parseInt(value, 10);
+            return isNaN(parsed) ? 0 : Math.max(0, parsed);
+        }
+        return 0;
+    }
+    function localVodIsPlayableStatus(status) {
+        return status === 'open' || status === 'recording' || status === 'closing' || status === 'finalizing' || status === 'finalized' || !status;
+    }
+    function localVodMatchFromVod(meta, vod) {
+        if (!meta || !vod || !localVodIsPlayableStatus(vod.status)) return null;
+        var channel = vod.channel ? String(vod.channel).toLowerCase() : meta.login;
+        if (channel !== meta.login) return null;
+        var sourceStartMs = localVodParseTimeMs(vod.source_started_at || vod.started_at);
+        if (!sourceStartMs) return null;
+        var durationSeconds = localVodDurationSeconds(vod.duration_seconds);
+        var localEndMs = 0;
+        if (vod.growing || vod.active || vod.status === 'open' || vod.status === 'recording' || vod.status === 'closing' || vod.status === 'finalizing') {
+            localEndMs = Date.now();
+        } else {
+            localEndMs = localVodParseTimeMs(vod.last_ended_at);
+            if (!localEndMs && durationSeconds) localEndMs = sourceStartMs + durationSeconds * 1000;
+        }
+        if (!localEndMs) return null;
+        var toleranceMs = meta.toleranceSeconds * 1000;
+        var twitchStartMs = meta.startedAtMs;
+        var twitchEndMs = twitchStartMs + meta.durationSeconds * 1000;
+        if (sourceStartMs > twitchEndMs + toleranceMs || localEndMs < twitchStartMs - toleranceMs) return null;
+        var twitchPositionMs = twitchStartMs + meta.positionSeconds * 1000;
+        var positionWithin = twitchPositionMs >= sourceStartMs && twitchPositionMs <= localEndMs + 30000;
+        var deltaSeconds = Math.round((sourceStartMs - twitchStartMs) / 1000);
+        var localOffsetSeconds = Math.max(0, meta.positionSeconds - deltaSeconds);
+        if (durationSeconds && localOffsetSeconds > durationSeconds) localOffsetSeconds = durationSeconds > 1 ? durationSeconds - 1 : 0;
+        return {
+            matched: true,
+            vod: vod,
+            sourceStartedAtMs: sourceStartMs,
+            source_started_at: vod.source_started_at || vod.started_at,
+            delta_seconds: deltaSeconds,
+            offset_seconds: localOffsetSeconds,
+            position_within_recording: positionWithin,
+            playback_url: vod.playback_url || '',
+            file_url: vod.file_url || '',
+            score: (positionWithin ? 0 : 1000000000) + Math.abs(deltaSeconds) - (vod.growing || vod.active ? 100 : 0)
+        };
+    }
+    function localVodPickFallbackMatch(meta, vods) {
+        var list = Array.isArray(vods) ? vods : [];
+        var best = null;
+        var i;
+        for (i = 0; i < list.length; i++) {
+            var candidate = localVodMatchFromVod(meta, list[i]);
+            if (!candidate) continue;
+            if (!best || candidate.score < best.score) best = candidate;
+        }
+        if (!best) return {matched: false, reason: 'no_overlap'};
+        return best;
+    }
+    function localVodNormalizeBackendMatch(meta, data) {
+        if (!data || !data.matched || !data.vod) return {matched: false, reason: data && data.reason ? data.reason : 'no_match'};
+        var fallback = localVodMatchFromVod(meta, data.vod) || {vod: data.vod};
+        fallback.matched = true;
+        fallback.offset_seconds = localVodDurationSeconds(data.offset_seconds || fallback.offset_seconds);
+        fallback.source_started_at = data.source_started_at || fallback.source_started_at || data.vod.source_started_at || data.vod.started_at;
+        fallback.delta_seconds = typeof data.delta_seconds === 'number' ? data.delta_seconds : fallback.delta_seconds || 0;
+        fallback.position_within_recording = data.position_within_recording !== false;
+        fallback.playback_url = data.playback_url || fallback.playback_url || data.vod.playback_url || '';
+        fallback.file_url = data.file_url || fallback.file_url || data.vod.file_url || '';
+        return fallback;
+    }
+    function localVodFetchFallbackMatch(meta, callback) {
+        localVodRequest('/archive/channels/' + encodeURIComponent(meta.login) + '/vods', function (result) {
+            if (result.status >= 200 && result.status < 300 && result.data) {
+                callback(localVodPickFallbackMatch(meta, result.data.vods || []));
+                return;
+            }
+            callback({matched: false, reason: result.error || ('HTTP ' + result.status)});
+        });
+    }
+    function localVodFetchMatch(meta, callback) {
+        if (!localArchiveEndpoint()) {
+            callback({matched: false, reason: 'endpoint_disabled'});
+            return;
+        }
+        var path = '/archive/channels/' + encodeURIComponent(meta.login) + '/vods/match' +
+            '?started_at=' + encodeURIComponent(meta.startedAt) +
+            '&duration_seconds=' + encodeURIComponent(String(meta.durationSeconds)) +
+            '&position_seconds=' + encodeURIComponent(String(meta.positionSeconds)) +
+            '&tolerance_seconds=' + encodeURIComponent(String(meta.toleranceSeconds));
+        localVodRequest(path, function (result) {
+            if (result.status >= 200 && result.status < 300 && result.data) {
+                callback(localVodNormalizeBackendMatch(meta, result.data));
+                return;
+            }
+            if (result.status === 404 || result.status === 0) {
+                localVodFetchFallbackMatch(meta, callback);
+                return;
+            }
+            callback({matched: false, reason: result.error || ('HTTP ' + result.status)});
+        });
+    }
+    function localVodCompatiblePlaybackUrl(match) {
+        if (!match || !match.vod) return '';
+        var vod = match.vod;
+        return (
+            match.webos_playback_url ||
+            match.compat_playback_url ||
+            match.h264_playback_url ||
+            match.hls_playback_url ||
+            vod.webos_playback_url ||
+            vod.compat_playback_url ||
+            vod.h264_playback_url ||
+            vod.hls_playback_url ||
+            ''
+        );
+    }
+    function localVodPlaybackUrl(match) {
+        if (!match || !match.vod) return '';
+        var compatibleUrl = localVodCompatiblePlaybackUrl(match);
+        if (compatibleUrl) return localArchiveUrl(compatibleUrl);
+        var fileUrl = match.file_url || match.vod.file_url || '';
+        var playlistUrl = match.playback_url || match.vod.playback_url || '';
+        return localArchiveUrl(playlistUrl || fileUrl);
+    }
+    function localVodHasUsableCurrentMatch() {
+        return !!(localVodOverride.match && localVodOverride.match.matched && localVodOverride.match.position_within_recording && localVodPlaybackUrl(localVodOverride.match));
+    }
+    function localVodIsActivePlayback() {
+        return localVodOverride.source === 'local' && localVodHasUsableCurrentMatch() && ms && ms.type === 2;
+    }
+    function localVodTwitchToLocalMs(twitchMs, candidateMatch) {
+        var match = candidateMatch || localVodOverride.match;
+        if (!match) return twitchMs;
+        var localSeconds = Math.max(0, (twitchMs / 1000) - (match.delta_seconds || 0));
+        var availableSeconds = match.vod && match.vod.duration_seconds ? match.vod.duration_seconds : 0;
+        if (localVodIsGrowingMatch(match)) {
+            var availableMs = localVodAvailableLocalDurationMs();
+            if (availableMs > availableSeconds * 1000) availableSeconds = Math.floor(availableMs / 1000);
+        }
+        if (availableSeconds && localSeconds > availableSeconds) {
+            localSeconds = Math.max(0, availableSeconds - 1);
+        }
+        return Math.round(localSeconds * 1000);
+    }
+    function localVodLocalToTwitchMs(localMs, candidateMatch) {
+        var match = candidateMatch || localVodOverride.match;
+        if (!match) return localMs;
+        return Math.max(0, Math.round(localMs + (match.delta_seconds || 0) * 1000));
+    }
+    function localVodMatchDeltaMs(match) {
+        var value = parseFloat(match && match.delta_seconds);
+        return isFinite(value) ? Math.round(value * 1000) : 0;
+    }
+    function localVodMatchDurationMs(match) {
+        if (!match) return 0;
+        var vod = match.vod || {};
+        var seconds = localVodDurationSeconds(vod.duration_seconds || match.duration_seconds || 0);
+        return seconds > 0 ? Math.round(seconds * 1000) : 0;
+    }
+    function localVodMatchSourceStartedAtMs(match) {
+        if (!match) return 0;
+        var vod = match.vod || {};
+        return localVodParseTimeMs(match.source_started_at || vod.source_started_at || vod.started_at || '');
+    }
+    function localVodIsGrowingMatch(match) {
+        if (!match || !match.vod) return false;
+        var vod = match.vod;
+        var status = String(vod.status || '').toLowerCase();
+        return !!(vod.active || vod.growing || status === 'open' || status === 'recording' || status === 'closing' || status === 'finalizing');
+    }
+    function localVodAvailableLocalDurationMs() {
+        var match = localVodOverride.match;
+        var durationMs = localVodMatchDurationMs(match);
+        var media = getVideoTimelineState(mv);
+        if (media.durationMs > durationMs) durationMs = media.durationMs;
+        if (localVodIsGrowingMatch(match)) {
+            var sourceStartedAtMs = localVodMatchSourceStartedAtMs(match);
+            if (sourceStartedAtMs > 0) {
+                var wallDurationMs = Date.now() - sourceStartedAtMs;
+                if (wallDurationMs > durationMs) durationMs = wallDurationMs;
+            }
+            var currentMs = mtime();
+            if (currentMs > 0 && currentMs + LOCAL_VOD_GROWING_DURATION_MARGIN_MS > durationMs) {
+                durationMs = currentMs + LOCAL_VOD_GROWING_DURATION_MARGIN_MS;
+            }
+        }
+        return durationMs > 0 ? durationMs : 0;
+    }
+    function localVodReportedDurationMs() {
+        if (localVodIsActivePlayback()) {
+            var match = localVodOverride.match;
+            var reportedMs = 0;
+            var localDurationMs = localVodAvailableLocalDurationMs();
+            if (localDurationMs > 0) reportedMs = localDurationMs + localVodMatchDeltaMs(match);
+            if (localVodOverride.twitchMeta && localVodOverride.twitchMeta.durationSeconds) {
+                var twitchMetaDurationMs = localVodOverride.twitchMeta.durationSeconds * 1000;
+                if (twitchMetaDurationMs > reportedMs) reportedMs = twitchMetaDurationMs;
+            }
+            if (localVodIsGrowingMatch(match) && localVodOverride.twitchMeta && localVodOverride.twitchMeta.startedAtMs) {
+                var twitchWallDurationMs = Date.now() - localVodOverride.twitchMeta.startedAtMs;
+                if (twitchWallDurationMs > reportedMs) reportedMs = twitchWallDurationMs;
+                var currentTwitchMs = localVodLocalToTwitchMs(mtime());
+                if (currentTwitchMs > 0 && currentTwitchMs + LOCAL_VOD_GROWING_DURATION_MARGIN_MS > reportedMs) {
+                    reportedMs = currentTwitchMs + LOCAL_VOD_GROWING_DURATION_MARGIN_MS;
+                }
+            }
+            if (reportedMs > 0) return reportedMs;
+        }
+        try {
+            if (localVodIsActivePlayback() && w.Play_DurationSeconds) return Math.round(w.Play_DurationSeconds * 1000);
+        } catch (e) {}
+        return getMainDurationMs();
+    }
+    function localVodNormalizeMeta(input) {
+        var meta = input || {};
+        var login = meta.login || meta.channel || '';
+        login = String(login || '').toLowerCase().trim();
+        var vodId = meta.vodId || meta.vod_id || '';
+        vodId = String(vodId || '').replace(/^v/i, '').trim();
+        var startedAt = meta.startedAt || meta.started_at || '';
+        var startedAtMs = localVodParseTimeMs(startedAt);
+        var durationSeconds = localVodDurationSeconds(meta.durationSeconds || meta.duration_seconds || meta.duration || 0);
+        var positionSeconds = localVodDurationSeconds(meta.positionSeconds || meta.position_seconds || 0);
+        var playerPositionSeconds = localVodDurationSeconds(meta.playerPositionSeconds || meta.player_position_seconds || positionSeconds);
+        if (!positionSeconds && meta.resumeSeconds) positionSeconds = localVodDurationSeconds(meta.resumeSeconds);
+        if (!login || !startedAtMs || !durationSeconds) return null;
+        return {
+            login: login,
+            vodId: vodId,
+            startedAt: startedAt,
+            startedAtMs: startedAtMs,
+            durationSeconds: durationSeconds,
+            positionSeconds: positionSeconds,
+            playerPositionSeconds: playerPositionSeconds,
+            toleranceSeconds: localVodDurationSeconds(meta.toleranceSeconds || meta.tolerance_seconds || LOCAL_VOD_MATCH_TOLERANCE_SECONDS)
+        };
+    }
+    function localVodRememberCallbacks(actions) {
+        localVodOverride.actions = actions || localVodOverride.actions || null;
+        return localVodOverride.actions;
+    }
+    function localVodNotify(actions, message) {
+        actions = actions || localVodOverride.actions;
+        if (!message || !actions || typeof actions.notify !== 'function') return;
+        try { actions.notify(message); } catch (e) {}
+    }
+    function localVodControlState() {
+        var enabled = !!localArchiveEndpoint();
+        var hasMatch = localVodHasUsableCurrentMatch();
+        var source = localVodOverride.source === 'local' && hasMatch ? 'local' : 'twitch';
+        var label = 'Twitch VOD';
+        if (!enabled) label = 'Local archive disabled';
+        else if (localVodOverride.matching) label = 'Checking local archive...';
+        else if (source === 'local') label = 'Local archive';
+        else if (hasMatch) label = 'Twitch VOD (local available)';
+        else if (localVodOverride.lastError) label = 'Local archive: ' + localVodOverride.lastError;
+        return {
+            enabled: enabled,
+            matching: localVodOverride.matching,
+            hasMatch: hasMatch,
+            source: source,
+            canSwitch: enabled && hasMatch,
+            label: label,
+            reason: localVodOverride.lastError || ''
+        };
+    }
+    function localVodEmitState(actions) {
+        actions = actions || localVodOverride.actions;
+        if (actions && typeof actions.updateState === 'function') {
+            try { actions.updateState(localVodControlState()); } catch (e) {}
+        }
+    }
+    function localVodTargetTwitchSeconds(match, meta) {
+        var metaPositionSeconds = meta ? localVodDurationSeconds(meta.positionSeconds || 0) : 0;
+        if (metaPositionSeconds > 0) return Math.floor(metaPositionSeconds);
+        var localOffsetSeconds = match ? localVodDurationSeconds(match.offset_seconds || 0) : 0;
+        if (localOffsetSeconds > 0) return Math.floor(localVodLocalToTwitchMs(localOffsetSeconds * 1000, match) / 1000);
+        return 0;
+    }
+    function localVodStartLocalMatch(match, meta, actions, message) {
+        var url = localVodPlaybackUrl(match);
+        if (!url) return false;
+        var twitchOffsetSeconds = localVodTargetTwitchSeconds(match, meta);
+        actions = localVodRememberCallbacks(actions);
+        localVodOverride.match = match;
+        localVodOverride.twitchMeta = meta || localVodOverride.twitchMeta;
+        localVodOverride.source = 'local';
+        localVodOverride.lastError = '';
+        localVodEmitState(actions);
+        if (actions && typeof actions.playLocal === 'function') {
+            try {
+                actions.playLocal({
+                    url: url,
+                    playlist: '',
+                    offsetSeconds: Math.max(0, Math.floor(localVodTwitchToLocalMs(twitchOffsetSeconds * 1000, match) / 1000)),
+                    twitchOffsetSeconds: twitchOffsetSeconds,
+                    match: match
+                });
+            } catch (e) {
+                return false;
+            }
+        }
+        localVodNotify(actions, message || 'Playing local archive');
+        return true;
+    }
+    function localVodStartTwitch(actions, reason, suppressLocal) {
+        actions = localVodRememberCallbacks(actions);
+        localVodOverride.source = 'twitch';
+        localVodOverride.suppressMatch = !!suppressLocal;
+        localVodEmitState(actions);
+        if (actions && typeof actions.playTwitch === 'function') {
+            try {
+                actions.playTwitch({
+                    reason: reason || '',
+                    suppressLocal: !!suppressLocal,
+                    offsetSeconds: Math.max(0, Math.floor(localVodLocalToTwitchMs(mtime()) / 1000))
+                });
+            } catch (e) {}
+        }
+        localVodOverride.suppressMatch = false;
+        if (reason) localVodNotify(actions, reason);
+    }
+    function localVodLoadWithActions(inputMeta, actions) {
+        actions = localVodRememberCallbacks(actions);
+        if (localVodOverride.suppressMatch) {
+            localVodOverride.suppressMatch = false;
+            localVodStartTwitch(actions, '', false);
+            return true;
+        }
+        if (!localArchiveEndpoint()) {
+            localVodOverride.match = null;
+            localVodOverride.lastError = 'endpoint_disabled';
+            localVodStartTwitch(actions, '', false);
+            return true;
+        }
+        var meta = localVodNormalizeMeta(inputMeta);
+        if (!meta) {
+            localVodOverride.match = null;
+            localVodOverride.lastError = 'missing_vod_metadata';
+            localVodStartTwitch(actions, '', false);
+            return true;
+        }
+        var metaKey = meta.vodId || (meta.login + ':' + meta.startedAt);
+        var previousMetaKey = localVodOverride.twitchMeta ? localVodOverride.twitchMeta.vodId || (localVodOverride.twitchMeta.login + ':' + localVodOverride.twitchMeta.startedAt) : '';
+        if (!localVodOverride.twitchMeta || previousMetaKey !== metaKey) {
+            localVodOverride.defaultSource = 'local';
+            localVodOverride.match = null;
+        }
+        localVodOverride.twitchMeta = meta;
+        localVodOverride.matching = true;
+        localVodOverride.lastError = '';
+        localVodEmitState(actions);
+        localVodFetchMatch(meta, function (match) {
+            localVodOverride.matching = false;
+            localVodOverride.match = match && match.matched ? match : null;
+            if (match && match.matched && match.position_within_recording && localVodPlaybackUrl(match)) {
+                localVodOverride.lastError = '';
+                if (localVodOverride.defaultSource === 'local') {
+                    localVodStartLocalMatch(match, meta, actions, 'Playing local archive');
+                    return;
+                }
+            } else localVodOverride.lastError = match && match.reason ? match.reason : 'no_match';
+            localVodStartTwitch(actions, localVodOverride.lastError ? 'Local archive unavailable: ' + localVodOverride.lastError : '', false);
+        });
+        return true;
+    }
+    function localVodSwitchWithActions(inputMeta, actions) {
+        actions = localVodRememberCallbacks(actions);
+        var meta = localVodNormalizeMeta(inputMeta) || localVodOverride.twitchMeta;
+        if (!localArchiveEndpoint()) {
+            localVodOverride.lastError = 'endpoint_disabled';
+            localVodEmitState(actions);
+            localVodNotify(actions, 'Local archive endpoint is disabled');
+            return false;
+        }
+        if (localVodOverride.source === 'local') {
+            localVodOverride.defaultSource = 'twitch';
+            localVodStartTwitch(actions, 'Switched to Twitch VOD', true);
+            return true;
+        }
+        if (!meta) {
+            localVodOverride.lastError = 'missing_vod_metadata';
+            localVodEmitState(actions);
+            localVodNotify(actions, 'No matching local archive for this VOD position');
+            return false;
+        }
+        localVodOverride.twitchMeta = meta;
+        localVodOverride.matching = true;
+        localVodEmitState(actions);
+        localVodFetchMatch(meta, function (match) {
+            localVodOverride.matching = false;
+            localVodOverride.match = match && match.matched ? match : null;
+            if (match && match.matched && match.position_within_recording && localVodPlaybackUrl(match)) {
+                localVodOverride.defaultSource = 'local';
+                localVodStartLocalMatch(match, meta, actions, 'Switched to local archive');
+                return;
+            }
+            localVodOverride.lastError = match && match.reason ? match.reason : 'no_match';
+            localVodEmitState(actions);
+            localVodNotify(actions, 'No matching local archive for this VOD position');
+        });
+        return true;
+    }
+    function localVodTryFallbackToTwitch(reason) {
+        if (!localVodIsActivePlayback()) return false;
+        localVodOverride.defaultSource = 'twitch';
+        localVodStartTwitch(localVodOverride.actions, reason || 'Local archive stalled, switching to Twitch VOD', true);
+        return true;
+    }
+    function localVodShutdown() {
+        localVodOverride.source = 'twitch';
+        localVodOverride.defaultSource = 'local';
+        localVodOverride.matching = false;
+        localVodOverride.actions = null;
+        localVodOverride.suppressMatch = false;
+        localVodEmitState(null);
+    }
+    function initLocalVodOverrideIntegration() {
+        localArchiveEndpoint();
+        w.STTVWebOSLocalVod = {
+            load: localVodLoadWithActions,
+            switchSource: localVodSwitchWithActions,
+            shutdown: localVodShutdown,
+            getState: localVodControlState,
+            updateEndpoint: function () {
+                localArchiveEndpoint();
+                localVodEmitState(localVodOverride.actions);
+                return localVodControlState();
+            }
+        };
     }
     function bridgeDebugLog(event, extra) {
         if (!BRIDGE_DEBUG_ENABLED) return;
@@ -909,9 +1487,13 @@
         if (!v) return false;
         return !!(v.currentSrc || v.src);
     }
-    // Checks if video is paused by user (not by end-of-stream).
+    // Checks whether a pause came from an explicit app/user pause. Media
+    // pipelines may also flip paused=true while a live stream ends or stalls;
+    // those must still flow through recovery/end handling.
     function isVideoPausedByUser(video) {
-        return !!(video && video.paused && !video.ended);
+        if (!video || !video.paused || video.ended) return false;
+        if (video === mv) return !!mainPauseRequested;
+        return true;
     }
     // Returns true if main video is active (has source and visible). Uses in-memory flag.
     function isMainActive() {
@@ -939,31 +1521,87 @@
             c.indexOf('vorbis') === 0
         );
     }
-    // Probes whether all video codecs in a comma-separated list are supported.
-    // Uses a cached <video> element (codecProbeElement) to avoid per-call allocation.
-    function isCodecSetSupported(codecs) {
-        if (!codecs) return true;
+    function getCodecProbeElement() {
+        if (!codecProbeElement && w.document && w.document.createElement) codecProbeElement = w.document.createElement('video');
+        return codecProbeElement;
+    }
+    function getVideoCodecParts(codecs) {
+        if (!codecs) return [];
+        return String(codecs)
+            .split(',')
+            .map(function (s) {
+                return s.trim();
+            })
+            .filter(function (s) {
+                return !!s && !isAudioCodec(s);
+            });
+    }
+    function normalizeCodecKey(codec) {
+        return String(codec || '').toLowerCase().split('.')[0];
+    }
+    function isCodecSessionRejected(codec) {
+        var key = normalizeCodecKey(codec);
+        return !!(key && sessionRejectedVideoCodecKeys[key]);
+    }
+    function canPlayVideoCodec(codec) {
+        if (!codec) return true;
+        if (isCodecSessionRejected(codec)) return false;
         try {
-            if (!codecProbeElement && w.document && w.document.createElement) codecProbeElement = w.document.createElement('video');
-            var probe = codecProbeElement;
+            var probe = getCodecProbeElement();
             if (!probe || typeof probe.canPlayType !== 'function') return true;
-            var parts = String(codecs)
-                .split(',')
-                .map(function (s) {
-                    return s.trim();
-                })
-                .filter(function (s) {
-                    return !!s;
-                });
-            var i;
-            for (i = 0; i < parts.length; i++) {
-                if (isAudioCodec(parts[i])) continue;
-                if (!probe.canPlayType('video/mp4; codecs="' + parts[i] + '"')) return false;
-            }
-            return true;
+            return !!probe.canPlayType('video/mp4; codecs="' + codec + '"');
         } catch (e) {
             return true;
         }
+    }
+    function markCodecSetRejected(codecs, reason) {
+        var parts = getVideoCodecParts(codecs);
+        var marked = [];
+        var i;
+        for (i = 0; i < parts.length; i++) {
+            var key = normalizeCodecKey(parts[i]);
+            if (!key || sessionRejectedVideoCodecKeys[key]) continue;
+            sessionRejectedVideoCodecKeys[key] = true;
+            marked.push(key);
+        }
+        if (marked.length) {
+            bridgeDebugLog('codec_session_rejected', {
+                reason: reason || 'unknown',
+                codecs: codecs || '',
+                keys: marked.join(',')
+            });
+        }
+        return marked.length > 0;
+    }
+    // Probes whether all video codecs in a comma-separated list are supported.
+    // Uses a cached <video> element (codecProbeElement) to avoid per-call allocation.
+    function isCodecSetSupported(codecs) {
+        var parts = getVideoCodecParts(codecs);
+        if (!parts.length) return true;
+        var i;
+        for (i = 0; i < parts.length; i++) {
+            if (!canPlayVideoCodec(parts[i])) return false;
+        }
+        return true;
+    }
+    function isCodecTypeSupported(codecType) {
+        var ct = String(codecType || 'avc').toLowerCase();
+        var probes = ct === 'hevc' ? ['hvc1.1.6.L93.B0', 'hev1.1.6.L93.B0', 'hvc1.1.6.L120.B0'] : ct === 'av01' ? ['av01.0.05M.08', 'av01.0.08M.08'] : ['avc1.640028', 'avc1.4d401f', 'avc1.42E01E'];
+        var i;
+        for (i = 0; i < probes.length; i++) {
+            if (canPlayVideoCodec(probes[i])) return true;
+        }
+        return false;
+    }
+    function buildCodecCapabilityPayload(codecType) {
+        var ct = String(codecType || 'avc').toLowerCase();
+        if (!isCodecTypeSupported(ct)) {
+            bridgeDebugLog('codec_capability_unsupported', {type: ct});
+            return '[]';
+        }
+        var mime = ct === 'hevc' ? 'video/hevc' : ct === 'av01' ? 'video/av01' : 'video/avc';
+        var n = 'webos.' + ct + '.decoder';
+        return JSON.stringify([{CanonicalName: n, instances: 2, isHardwareAccelerated: true, isSoftwareOnly: false, name: n, nameType: n + mime, type: mime, supportsIsHw: true, resolutions: 'Unknown', maxresolution: 'Unknown', maxbitrate: 'Unknown', maxlevel: 'Unknown'}]);
     }
     // Resolves a relative URL to absolute.
     function toAbsoluteUrl(url, base) {
@@ -989,7 +1627,9 @@
     // Returns a version string compatible with the upstream version check format.
     // Android: returns BuildConfig.VERSION_NAME. webOS: synthesized from app version globals.
     function getCompatibleVersion() {
-        var fallback = '3.0.377';
+        // Keep this aligned with app/general/version.js so upstream APK-update
+        // logic does not offer the Android APK on webOS builds.
+        var fallback = '3.0.379';
         try {
             if (!w.version) return fallback;
             var base = String(w.version.VersionBase || '').trim();
@@ -1001,6 +1641,11 @@
         } catch (e) {
             return fallback;
         }
+    }
+    function getCompatiblePublishVersionCode() {
+        var parts = getCompatibleVersion().split('.');
+        var patch = parseInt(parts[2], 10);
+        return isNaN(patch) || patch < 0 ? 0 : patch;
     }
     // =========================================================================
     // Lifecycle Management
@@ -1038,6 +1683,13 @@
             return;
         }
         if (call('Main_CheckStop') !== null) lifecycleSuspended = true;
+    }
+    function persistPlaybackPositionForLifecycle() {
+        try {
+            if (w.PlayVod_isOn && typeof w.PlayVod_SaveCurrentOffset === 'function') {
+                w.PlayVod_SaveCurrentOffset();
+            }
+        } catch (e) {}
     }
     // Resumes playback after app returns to foreground.
     function tryLifecycleResume() {
@@ -1106,6 +1758,7 @@
             var hidden = !!w.document[hiddenProp] || w.document.visibilityState === 'hidden' || w.document.webkitVisibilityState === 'hidden';
             if (hidden) {
                 if (!lifecycleHiddenSinceAt) lifecycleHiddenSinceAt = Date.now();
+                persistPlaybackPositionForLifecycle();
                 if (versionRefreshIntervalId) { w.clearInterval(versionRefreshIntervalId); versionRefreshIntervalId = 0; }
                 scheduleLifecycleStop(LIFECYCLE_STOP_MIN_HIDDEN_MS);
             }
@@ -1127,6 +1780,20 @@
                 clearScheduledLifecycleStop();
                 lifecycleHiddenSinceAt = 0;
                 tryLifecycleResume();
+            },
+            true
+        );
+        w.addEventListener(
+            'pagehide',
+            function () {
+                persistPlaybackPositionForLifecycle();
+            },
+            true
+        );
+        w.addEventListener(
+            'blur',
+            function () {
+                persistPlaybackPositionForLifecycle();
             },
             true
         );
@@ -1228,6 +1895,18 @@
         out.sort(function (a, b) {
             return b.resolution - a.resolution;
         });
+        var supportedOut = out.filter(function (item) {
+            return isCodecSetSupported(item.codecs);
+        });
+        if (supportedOut.length) {
+            if (supportedOut.length !== out.length) {
+                bridgeDebugLog('playlist_unsupported_codecs_filtered', {
+                    before: out.length,
+                    after: supportedOut.length
+                });
+            }
+            out = supportedOut;
+        }
         return out;
     }
     // =========================================================================
@@ -1252,6 +1931,7 @@
         if (!w.document || !w.document.body) return false;
         if (!root) {
             root = w.document.createElement('div');
+            root.id = 'sttv_video_root';
             root.style.cssText = 'position:fixed;left:0;top:0;width:100%;height:100%;pointer-events:none;z-index:1';
         }
         if (!root.parentNode) {
@@ -1273,7 +1953,7 @@
         // loadedmetadata: metadata (duration, dimensions) available. Resume VOD/clip position.
         mv.addEventListener('loadedmetadata', function () {
             if (ms.resume > 0 && (ms.type === 2 || ms.type === 3)) try { mv.currentTime = Math.max(0, ms.resume / 1000); } catch (e) {}
-            call('Play_UpdateDuration', [getMainDurationMs()]);
+            call('Play_UpdateDuration', [localVodReportedDurationMs()]);
             mainErrorCount = 0;
             clearMainStallTimer();
             markMainProgressBaseline();
@@ -1360,9 +2040,8 @@
         });
         // ended: playback finished. Notify upstream app.
         mv.addEventListener('ended', function () {
-            clearMainStallTimer();
-            clearMainDecoderJamRecoveryTimer();
-            call('Play_PannelEndStart', [ms.type, 0, 0]);
+            if (ms.type === 1 && mainLastCurrentTime < 1 && retryMainWithCodecFallback('live_ended_before_progress')) return;
+            handleMainPlaybackFinished(0, 0);
         });
         // error: playback error. Retry up to 2x, then escalate to upstream failure handler.
         mv.addEventListener('error', function () {
@@ -1370,19 +2049,22 @@
             clearMainDecoderJamRecoveryTimer();
             setMainLoading(false);
             if (mv && mv.error && mv.error.code === 1) return;
+            if (retryMainWithCodecFallback('main_media_error')) return;
             if (retryMainPlayback()) return;
             handleMainPlaybackFailure(1, mv && mv.error ? mv.error.code || 0 : 0);
         });
     }
     // Lazily creates preview video and installs preview event handlers.
     function ensurePreview() {
-        if (!ensureRoot()) return;
+        if (!w.document || !w.document.body) return;
         if (pv) return;
-        pv = makeVideo('sttv_preview', 4);
-        pv.muted = true;
-        pv.defaultMuted = true;
-        pv.setAttribute('muted', 'muted');
-        root.appendChild(pv);
+        pv = makeVideo('sttv_preview', PREVIEW_VIDEO_Z_INDEX);
+        // Preview is started by explicit UI navigation, so keep audio available
+        // and let applyAudio() scale it according to upstream settings.
+        pv.muted = false;
+        pv.defaultMuted = false;
+        try { pv.removeAttribute('muted'); } catch (eMuted) {}
+        w.document.body.appendChild(pv);
         // --- Preview video event handlers (mirror main with preview-specific behavior) ---
         pv.addEventListener('loadedmetadata', function () {
             if (ps.resume > 0 && ps.type === 2) try { pv.currentTime = Math.max(0, ps.resume / 1000); } catch (e) {}
@@ -1568,6 +2250,10 @@
     // Returns main player position in ms (used by gettime/getsavedtime bridge methods).
     // Android: ExoPlayer.getCurrentPosition(). webOS: video.currentTime * 1000.
     function getMainCurrentTimeMs() {
+        if (localVodIsActivePlayback()) {
+            var localNow = mtime();
+            if (localNow > 0) return localNow;
+        }
         var mt = getVideoTimelineState(mv);
         if (mt.positionMs > 0) return mt.positionMs;
         var now = mtime();
@@ -1789,8 +2475,12 @@
         var timeline = getVideoTimelineState(video);
         var durationMs = timeline.durationMs > 0 ? timeline.durationMs : video === pv ? getPreviewDurationMs() : getMainDurationMs();
         var positionMs = timeline.positionMs > 0 ? timeline.positionMs : video === pv ? getPreviewCurrentTimeMs() : getMainCurrentTimeMs();
+        if (video === mv && localVodIsActivePlayback()) {
+            durationMs = localVodReportedDurationMs();
+            positionMs = localVodLocalToTwitchMs(mtime());
+        }
         if (video === pv && durationMs > 0) previewDurationMsCached = durationMs;
-        if (video === mv && durationMs > 0) mainDurationMsCached = durationMs;
+        if (video === mv && durationMs > 0 && !localVodIsActivePlayback()) mainDurationMsCached = durationMs;
         var bufferSeconds = getBufferedAheadSeconds(video);
         var bufferMs = Math.round(bufferSeconds * 1000);
         var liveOffsetMs = showLatency ? getCurrentLiveOffsetMs(video, durationMs, positionMs, !!usePreviewList) : 0;
@@ -1842,6 +2532,10 @@
         var timeline = getVideoTimelineState(mv);
         var jumpPosition = positionMs > 0 ? positionMs : 0;
         var duration = timeline.durationMs > 0 ? timeline.durationMs : getMainDurationMs();
+        if (localVodIsActivePlayback()) {
+            var localDuration = localVodAvailableLocalDurationMs();
+            if (localDuration > duration) duration = localDuration;
+        }
         if (duration > 0 && jumpPosition >= duration) jumpPosition = Math.max(0, duration - 1000);
         var seekSeconds = jumpPosition / 1000;
         if (timeline.useSeekableWindow && isFinite(timeline.seekStartSeconds) && isFinite(timeline.seekEndSeconds) && timeline.seekEndSeconds > timeline.seekStartSeconds) {
@@ -1853,6 +2547,9 @@
         try {
             mv.currentTime = seekSeconds;
         } catch (e) {}
+    }
+    function isSingleSmallPreviewMode(mode) {
+        return mode === 'preview' || mode === 'feed' || mode === 'side' || mode === 'screens';
     }
     // Applies audio settings (volume, mute, enable) to both video elements.
     // Android: ExoPlayer per-player volume control. webOS: video.volume + video.muted.
@@ -1868,32 +2565,73 @@
             mv.volume = clamp((mainEnabled ? audioVolumes[0] : 0) * mainScale, 0, 1);
             if (mainEnabled && !isPreviewActive() && mv.muted) mv.muted = false;
         }
-        if (pv) { var s = clamp(ps.slot, 1, 3); pv.volume = clamp((audioEnabled[s] ? audioVolumes[s] : 0) * previewScale, 0, 1); }
-    }
-    function pickFromMaster(rawUri, list, maxRes) {
-        if (list && list.length) {
-            var supported = list.filter(function (item) {
-                return isCodecSetSupported(item.codecs);
-            });
-            var candidates = supported.length ? supported : list;
-            if (maxRes > 0) {
-                var i;
-                for (i = 0; i < candidates.length; i++) {
-                    if (candidates[i].resolution > 0 && candidates[i].resolution <= maxRes) return candidates[i].url;
-                }
-                return candidates[candidates.length - 1].url;
-            }
-            return candidates[0].url;
+        if (pv) {
+            var s = clamp(ps.slot, 1, 3);
+            // Upstream uses player slot 1 for both multi/PiP audio and regular
+            // focused previews. In single-preview modes there is no main player
+            // competing for audio, so keep the preview audible even when the
+            // multi-player slot flag is false ([1,0,0,0] is the normal app
+            // default outside multi/PiP). User preview volume still applies.
+            var previewEnabled = !!audioEnabled[s] || isSingleSmallPreviewMode(ps.mode);
+            var previewVolume = clamp((previewEnabled ? audioVolumes[s] : 0) * previewScale, 0, 1);
+            pv.volume = previewVolume;
+            if (previewEnabled && previewVolume > 0 && pv.muted) pv.muted = false;
         }
-        return rawUri || '';
     }
     // Selects the best quality variant URL from the parsed playlist.
     // Android: ExoPlayer TrackSelector handles quality. webOS: manual URL selection.
     function sourceFromQuality(state, maxRes) {
         if (!state) return '';
-        if (state.qp >= 0 && state.q[state.qp]) return state.q[state.qp].url;
-        if (state.rawUri && (!maxRes || maxRes <= 0)) return state.rawUri;
-        return pickFromMaster(state.rawUri, state.q, maxRes);
+        var selected = null;
+        if (state.qp >= 0 && state.q[state.qp] && isCodecSetSupported(state.q[state.qp].codecs)) {
+            selected = state.q[state.qp];
+        } else if (state.q && state.q.length) {
+            var supported = state.q.filter(function (item) {
+                return isCodecSetSupported(item.codecs);
+            });
+            var candidates = supported.length ? supported : state.q;
+            if (maxRes > 0) {
+                var i;
+                for (i = 0; i < candidates.length; i++) {
+                    if (candidates[i].resolution > 0 && candidates[i].resolution <= maxRes) {
+                        selected = candidates[i];
+                        break;
+                    }
+                }
+                if (!selected) selected = candidates[candidates.length - 1];
+            } else {
+                selected = candidates[0];
+            }
+        }
+        if (selected) {
+            state.activeCodecs = selected.codecs || '';
+            return selected.url || '';
+        }
+        state.activeCodecs = '';
+        return state.rawUri || '';
+    }
+    function retryMainWithCodecFallback(reason) {
+        if (!mv || !ms || !ms.activeCodecs) return false;
+        var previousUri = ms.uri || mv.currentSrc || mv.src || '';
+        if (!markCodecSetRejected(ms.activeCodecs, reason)) return false;
+        var fallback = sourceFromQuality(ms, mainMaxRes);
+        if (!fallback || fallback === previousUri) return false;
+        bridgeDebugLog('main_codec_fallback_retry', {
+            reason: reason || 'unknown',
+            from: previousUri,
+            to: fallback,
+            codecs: ms.activeCodecs || ''
+        });
+        ms.uri = fallback;
+        mainErrorCount = 0;
+        mainPauseRequested = false;
+        resetMainRecoveryState();
+        requestMainLoadingShow();
+        mv.src = fallback;
+        try { mv.load(); } catch (e) {}
+        tryPlay(mv);
+        applyAudio();
+        return true;
     }
     function normalizeQualityPosition(pos, listLength) {
         var parsed = -1;
@@ -2077,22 +2815,31 @@
         clear(pv);
         resetPreviewState();
     }
+    // Notifies upstream that main playback finished and releases the HTML5
+    // video source first. Android's native PlayerActivity has already stopped
+    // the player by the time it calls Play_PannelEndStart; webOS must do that
+    // explicitly or stale waiting/stalled events can keep the loading overlay
+    // alive and make Back appear stuck after a stream ends.
+    function handleMainPlaybackFinished(failType, errorCode) {
+        var ft = parseInt(failType, 10) || 0;
+        var ec = parseInt(errorCode, 10) || 0;
+        var type = ms.type || 1;
+        if (type === 2 && ft === 0 && localVodTryFallbackToTwitch('Local archive ended, switching to Twitch VOD')) return;
+        mainPauseRequested = false;
+        setMainLoading(false);
+        clearMainLoadingShowTimer();
+        clearMainStallTimer();
+        clearMainDecoderJamRecoveryTimer();
+        clear(mv);
+        resetMainRecoveryState();
+        call('Play_PannelEndStart', [type, ft, ec]);
+    }
     // Notifies upstream that main playback failed after retries exhausted.
-    // For live streams, prefers Play_CheckIfIsLiveClean to avoid aggressive reload loops.
     function handleMainPlaybackFailure(failType, errorCode) {
         var ft = parseInt(failType, 10) || 1;
         var ec = parseInt(errorCode, 10) || 0;
-        setMainLoading(false);
-        clearMainStallTimer();
-        resetMainRecoveryState();
-        // For live playback, prefer the live-clean path to avoid aggressive forced
-        // end/start loops that can bounce back to the home screen on transient failures.
-        if ((ms.type || 1) === 1 && typeof w.Play_CheckIfIsLiveClean === 'function') {
-            clear(mv);
-            call('Play_CheckIfIsLiveClean', [ft, ec]);
-            return;
-        }
-        call('Play_PannelEndStart', [ms.type, ft, ec]);
+        if (localVodTryFallbackToTwitch('Local archive stalled, switching to Twitch VOD')) return;
+        handleMainPlaybackFinished(ft, ec);
     }
     // Schedules an 8-second stall check for main player. If unresolved, retries or fails.
     function scheduleMainStallCheck() {
@@ -2117,11 +2864,13 @@
                 return;
             }
             if (classification === 'decoder_jam') {
+                if (localVodTryFallbackToTwitch('Local archive stalled, switching to Twitch VOD')) return;
                 if (maybeAutoClearMainLoading('stall_timer', 1000)) return;
                 if (attemptDecoderJamRecovery()) return;
                 handleMainPlaybackFailure(1, 0);
                 return;
             }
+            if (localVodTryFallbackToTwitch('Local archive stalled, switching to Twitch VOD')) return;
             if (maybeAutoClearMainLoading('stall_timer', 1000)) return;
             if (retryMainPlayback()) return;
             handleMainPlaybackFailure(1, 0);
@@ -2244,6 +2993,7 @@
         if (!pv) return;
         if (ps.mode === 'feed') applyFeedLayout(ps.feedPos);
         else if (ps.mode === 'side' && sideRect) applyRect(pv, sideRect.left, sideRect.top, sideRect.width, sideRect.height);
+        else if (ps.mode === 'screens' && screenRect) applyRect(pv, screenRect.left, screenRect.top, screenRect.width, screenRect.height);
         else applyPreviewPiPLayout();
     }
     function resetMainState() {
@@ -2253,6 +3003,7 @@
         ms.playlist = '';
         ms.q = [];
         ms.qp = -1;
+        ms.activeCodecs = '';
         ms.resume = 0;
         mainDurationMsCached = 0;
         liveLatencyOffsetMainMs = 0;
@@ -2264,6 +3015,7 @@
         ps.playlist = '';
         ps.q = [];
         ps.qp = -1;
+        ps.activeCodecs = '';
         ps.mode = 'preview';
         ps.slot = 1;
         ps.multi = 1;
@@ -2285,6 +3037,7 @@
         resetVideoStatusCounters();
         clearMainStallTimer();
         mainErrorCount = 0;
+        mainPauseRequested = false;
         resetMainRecoveryState();
         requestMainLoadingShow();
         ms.type = t || 1;
@@ -2292,6 +3045,7 @@
         ms.playlist = pl || '';
         ms.q = parseQ(ms.playlist, ms.rawUri);
         ms.qp = -1;
+        ms.activeCodecs = '';
         ms.resume = rs > 0 ? rs : 0;
         bridgeDebugLog('main_playlist_parsed', {
             count: ms.q.length,
@@ -2342,7 +3096,8 @@
             setFeedLoading(false);
             clear(pv);
             if (mode === 'multi') rejectMultiStream(multi);
-            else showMultiLimitNotice();
+            else if (mode === 'extra') showMultiLimitNotice();
+            else clearPreviewTracking();
             return false;
         }
         ensurePreview();
@@ -2352,6 +3107,7 @@
         ps.playlist = pl || '';
         ps.q = parseQ(ps.playlist, ps.rawUri);
         ps.qp = -1;
+        ps.activeCodecs = '';
         ps.resume = rs > 0 ? rs : 0;
         ps.mode = mode;
         ps.slot = slot;
@@ -2367,11 +3123,14 @@
                 pv.removeAttribute('src');
                 pv.load();
             } catch (e2) {}
-            pv.muted = true;
+            pv.muted = false;
+            try { pv.removeAttribute('muted'); } catch (eMuted) {}
             pv.src = ps.uri;
             applyPreviewModeLayout();
+            applyAudio();
             show(pv);
             try { pv.load(); } catch (e) {}
+            tryPlay(pv);
         }
         return true;
     }
@@ -2492,13 +3251,24 @@
         if (match && match[1]) return match[1];
         return '';
     }
+    function hashRequestBody(body) {
+        if (!body || typeof body !== 'string') return '';
+        var hash = 0;
+        var i;
+        for (i = 0; i < body.length; i++) {
+            hash = (hash * 31 + body.charCodeAt(i)) >>> 0;
+        }
+        return hash.toString(36);
+    }
     function extractGqlKey(body) {
         if (!body || typeof body !== 'string') return '';
+        var opMatch = body.match(/"operationName"\s*:\s*"([^"]+)"/i);
+        var op = opMatch && opMatch[1] ? opMatch[1].toLowerCase() : '';
         var loginMatch = body.match(/"login"\s*:\s*"([^"]+)"/i);
-        if (loginMatch && loginMatch[1]) return loginMatch[1].toLowerCase();
+        if (loginMatch && loginMatch[1]) return (op ? op + ':' : '') + loginMatch[1].toLowerCase();
         var vodMatch = body.match(/"vodid"\s*:\s*"([^"]+)"/i);
-        if (vodMatch && vodMatch[1]) return vodMatch[1].toLowerCase();
-        return '';
+        if (vodMatch && vodMatch[1]) return (op ? op + ':' : '') + vodMatch[1].toLowerCase();
+        return (op || 'query') + ':' + hashRequestBody(body);
     }
     // Builds metadata for a network request (host, request key, circuit/dedupe flags).
     function buildNetworkRequestMeta(rawUrl, method, body) {
@@ -2511,7 +3281,7 @@
         var hlsId = extractHlsId(pathLower);
         if (gqlHost) {
             var gqlKey = extractGqlKey(body);
-            key = 'gql-token:' + (gqlKey || 'global');
+            key = 'gql:' + (gqlKey || 'global');
         } else if (pathLower.indexOf('.m3u8') !== -1 || pathLower.indexOf('/api/channel/hls/') !== -1) {
             if (host.indexOf('usher.ttvnw.net') !== -1) {
                 key = 'hls-playlist:' + (hlsId || 'unknown');
@@ -2537,6 +3307,18 @@
     function hasUsablePlaylistBody(text) {
         return typeof text === 'string' && text.indexOf('#EXTM3U') !== -1;
     }
+    function playlistHasTwitchStitchedAds(text) {
+        if (typeof text !== 'string' || text.indexOf('#EXT') === -1) return false;
+        return text.indexOf('twitch-stitched-ad') !== -1 || /#EXT-X-DATERANGE:[^\n]*(?:CLASS="?twitch-stitched-ad"?|X-TV-TWITCH-AD)/i.test(text);
+    }
+    function recordTwitchStitchedAdMarker(meta, text) {
+        if (!playlistHasTwitchStitchedAds(text)) return;
+        bridgeDebugLog('twitch_stitched_ad_marker_detected', {
+            host: meta && meta.host ? meta.host : '',
+            url: meta && meta.url ? meta.url : '',
+            requestKey: meta && meta.requestKey ? meta.requestKey : ''
+        });
+    }
     function isUsherPlaylistPath(pathLower) {
         if (!pathLower) return false;
         var normalizedPath = String(pathLower).toLowerCase().split('?')[0];
@@ -2550,6 +3332,22 @@
         if (meta.host !== 'usher.ttvnw.net') return false;
         if (!isUsherPlaylistPath(meta.pathLower || '')) return false;
         return String(meta.method || 'GET').toUpperCase() === 'GET';
+    }
+    function isLiveUsherPlaylistRequest(meta) {
+        if (!isUsherPlaylistRequest(meta)) return false;
+        var normalizedPath = String(meta.pathLower || '').toLowerCase().split('?')[0];
+        return normalizedPath.indexOf('/api/channel/hls/') === 0;
+    }
+    function isLiveGqlPlaybackAccessTokenRequest(meta, method, body) {
+        if (!meta) return false;
+        if (meta.host !== 'gql.twitch.tv') return false;
+        if (String(method || meta.method || 'GET').toUpperCase() !== 'POST') return false;
+        var normalizedPath = String(meta.pathLower || '').toLowerCase().split('?')[0] || '/';
+        if (normalizedPath !== '/gql' && normalizedPath !== '/') return false;
+        var requestBody = typeof body === 'string' ? body : '';
+        if (!requestBody) return false;
+        if (requestBody.indexOf('PlaybackAccessToken') === -1 && requestBody.indexOf('streamPlaybackAccessToken') === -1) return false;
+        return /"isLive"\s*:\s*true/i.test(requestBody) || requestBody.indexOf('streamPlaybackAccessToken') !== -1;
     }
     function shouldUseUsherPlaylistCorsFallback(meta, status, text, reason) {
         if (!isUsherPlaylistRequest(meta)) return false;
@@ -2587,6 +3385,9 @@
         if (!appId) return '';
         return appId + USHER_PLAYLIST_SERVICE_ID_SUFFIX;
     }
+    function isTwitchProxyServiceAvailable() {
+        return !!(getUsherPlaylistServiceName() && typeof w.PalmServiceBridge === 'function');
+    }
     function getUsherPlaylistServiceTimeoutMs(timeoutHint) {
         var parsed = parseInt(timeoutHint, 10);
         if (!isFinite(parsed) || parsed <= 0) parsed = USHER_PLAYLIST_SERVICE_TIMEOUT_MS;
@@ -2613,19 +3414,22 @@
         };
         pruneOldestMapEntries(usherPlaylistCacheByKey, USHER_PLAYLIST_CACHE_MAX);
     }
-    function normalizeServicePlaylistResult(rawResult, meta) {
+    function normalizeServiceTwitchResult(rawResult, meta) {
         var payload = rawResult && typeof rawResult === 'object' ? rawResult : {};
         var st = parseInt(payload.status, 10) || 0;
         var text = typeof payload.responseText === 'string' ? payload.responseText : '';
-        if (st !== 200 || !hasUsablePlaylistBody(text)) return null;
+        if (st !== 200 || !text) return null;
+        if (isUsherPlaylistRequest(meta) && !hasUsablePlaylistBody(text)) return null;
         var url = typeof payload.url === 'string' && payload.url ? payload.url : meta && meta.url ? meta.url : '';
         return {
             status: 200,
             responseText: text,
-            url: url
+            url: url,
+            source: typeof payload.source === 'string' ? payload.source : '',
+            proxy: typeof payload.proxy === 'string' ? payload.proxy : ''
         };
     }
-    function callUsherPlaylistService(meta, timeoutMs, done) {
+    function callTwitchProxyService(meta, method, body, headers, timeoutMs, done) {
         var finish = typeof done === 'function' ? done : function () {};
         var serviceName = getUsherPlaylistServiceName();
         if (!serviceName || typeof w.PalmServiceBridge !== 'function') {
@@ -2682,7 +3486,7 @@
         }
         bridge.onservicecallback = function (msg) {
             var parsed = safeParse(msg, null);
-            var normalized = normalizeServicePlaylistResult(parsed, meta);
+            var normalized = normalizeServiceTwitchResult(parsed, meta);
             if (normalized) {
                 safeFinish(normalized, 'service_ok');
                 return;
@@ -2700,15 +3504,23 @@
         try {
             bridge.call('luna://' + serviceName + '/fetchPlaylist', JSON.stringify({
                 url: requestUrl,
+                method: String(method || 'GET').toUpperCase(),
+                body: typeof body === 'string' ? body : '',
+                headers: normalizeHeadersInput(headers),
                 timeoutMs: getUsherPlaylistServiceTimeoutMs(timeoutMs),
                 origin: requestOrigin || '',
                 referer: requestReferer || '',
                 userAgent: requestUserAgent || '',
-                acceptLanguage: requestAcceptLanguage || ''
+                acceptLanguage: requestAcceptLanguage || '',
+                ttvLolEnabled: isTtvLolPlaylistProxyEnabled(),
+                optimizedProxies: getTtvLolOptimizedProxies()
             }));
         } catch (eCall) {
             safeFinish(null, 'service_call_exception');
         }
+    }
+    function callUsherPlaylistService(meta, timeoutMs, done) {
+        callTwitchProxyService(meta, 'GET', '', null, timeoutMs, done);
     }
     function flushUsherPlaylistInFlight(requestKey, result, reason) {
         var inFlight = usherPlaylistInFlightByKey[requestKey];
@@ -2750,9 +3562,12 @@
                 reason: reason || '',
                 status: result && result.status ? result.status : 0,
                 hasPlaylist: !!(result && hasUsablePlaylistBody(result.responseText || '')),
+                source: result && result.source ? result.source : '',
+                proxy: result && result.proxy ? result.proxy : '',
                 url: meta && meta.url ? meta.url : ''
             });
             if (result && result.status === 200 && hasUsablePlaylistBody(result.responseText)) {
+                recordTwitchStitchedAdMarker(meta, result.responseText);
                 cacheUsherPlaylistResult(meta.requestKey, result.responseText, result.url || meta.url || '');
                 cacheNetworkResponse(meta.requestKey, result.status, result.responseText);
             }
@@ -3071,7 +3886,8 @@
         var body = req.body;
         var callback = typeof cb === 'function' ? cb : function () {};
         var meta = buildNetworkRequestMeta(u, method, body);
-        var forceServiceFetch = isForceHlsServiceFetchEnabled();
+        var forceServiceFetch = isForceHlsServiceFetchEnabled() || (isTtvLolPlaylistProxyEnabled() && isLiveUsherPlaylistRequest(meta));
+        var forceGqlProxyFetch = isTtvLolPlaylistProxyEnabled() && isLiveGqlPlaybackAccessTokenRequest(meta, method, body);
         maybePruneNetworkState();
         var effectiveTimeout = getEffectiveTimeoutMs(to, meta);
         var requestStartedAt = Date.now();
@@ -3104,6 +3920,7 @@
             var finalUrl = responseUrl || '';
             if (!synthetic) {
                 if (finalStatus > 0) {
+                    recordTwitchStitchedAdMarker(meta, finalText);
                     cacheNetworkResponse(meta.requestKey, finalStatus, finalText);
                     recordNetworkRtt(meta.host, Date.now() - requestStartedAt);
                     if (meta.circuitEnabled) recordHostCircuitSuccess(meta.host);
@@ -3125,6 +3942,19 @@
             x = null;
             if (callbackRef) callbackRef(finalStatus, finalText, finalUrl);
         };
+        if (forceGqlProxyFetch && isTwitchProxyServiceAvailable()) {
+            bridgeDebugLog('gql_token_proxy_service_forced', {
+                url: meta && meta.url ? meta.url : ''
+            });
+            callTwitchProxyService(meta, method, body, h, effectiveTimeout, function (serviceResult, serviceReason) {
+                if (serviceResult && serviceResult.status === 200 && serviceResult.responseText) {
+                    finish(serviceResult.status, serviceResult.responseText, 'service_success', serviceResult.url || meta.url || '', true, true);
+                    return;
+                }
+                finish(0, '', serviceReason || 'service_unavailable', meta.url || '', true, true);
+            });
+            return;
+        }
         if (isUsherPlaylistRequest(meta) && (usherPlaylistCorsFailureSeen || forceServiceFetch)) {
             if (forceServiceFetch) {
                 bridgeDebugLog('usher_hls_service_forced', {
@@ -3172,7 +4002,7 @@
         var method = req.method;
         var body = req.body;
         var meta = buildNetworkRequestMeta(u, method, body);
-        var forceServiceFetch = isForceHlsServiceFetchEnabled();
+        var forceServiceFetch = isForceHlsServiceFetchEnabled() || (isTtvLolPlaylistProxyEnabled() && isLiveUsherPlaylistRequest(meta));
         maybePruneNetworkState();
         var effectiveTimeout = getEffectiveTimeoutMs(to, meta, sync);
         // Stale-while-revalidate: for sync requests, serve cached data immediately
@@ -3224,6 +4054,7 @@
                     x.onloadend = function () {
                         if (meta.dedupeEnabled) clearInFlightRequestByKey(meta.requestKey, x);
                         if ((x.status || 0) > 0) {
+                            recordTwitchStitchedAdMarker(meta, x.responseText || '');
                             cacheNetworkResponse(meta.requestKey, x.status || 0, x.responseText || '');
                             recordNetworkRtt(meta.host, Date.now() - requestStartedAt);
                             if (meta.circuitEnabled) recordHostCircuitSuccess(meta.host);
@@ -3259,6 +4090,7 @@
                     return buildUsherPlaylistCorsFallbackResult(meta, ck, 'status0_sync');
                 }
                 if (syncStatus > 0) {
+                    recordTwitchStitchedAdMarker(meta, syncText);
                     cacheNetworkResponse(meta.requestKey, syncStatus, syncText);
                     recordNetworkRtt(meta.host, Date.now() - requestStartedAt);
                     if (meta.circuitEnabled) recordHostCircuitSuccess(meta.host);
@@ -3415,9 +4247,18 @@
         w.Main_CheckUpdateResult = function (responseText) {
             try {
                 var response = JSON.parse(responseText);
-                if (response && typeof response === 'object' && w.version) {
-                    response.publishVersionCode = typeof w.version.publishVersionCode === 'number' ? w.version.publishVersionCode : 0;
+                if (response && typeof response === 'object') {
+                    response.publishVersionCode = getCompatiblePublishVersionCode();
                     response.ApkUrl = '';
+                    if (w.version && typeof w.version === 'object') {
+                        var localWebTag = parseInt(w.version.WebTag, 10);
+                        var remoteWebTag = parseInt(response.WebTag, 10);
+                        if (!isNaN(localWebTag) && (isNaN(remoteWebTag) || remoteWebTag <= localWebTag)) {
+                            response.WebTag = localWebTag;
+                            response.WebVersion = w.version.WebVersion;
+                            response.changelog = JSON.parse(JSON.stringify(w.version.changelog || []));
+                        }
+                    }
                     return original.call(this, JSON.stringify(response));
                 }
             } catch (e) {}
@@ -3647,6 +4488,39 @@
         if (patchVodSafetyFlow()) return;
         w.setTimeout(patchVodSafetyFlow, 1000);
         w.setTimeout(patchVodSafetyFlow, 2500);
+    }
+    function patchLiveProxyAsyncLoadFlow() {
+        if (w.__sttvLiveProxyAsyncLoadPatched) return true;
+        var patched = 0;
+        var wrap = function (name) {
+            var original = w[name];
+            if (typeof original !== 'function') return;
+            if (original.__sttvLiveProxyAsyncLoadPatched) {
+                patched += 1;
+                return;
+            }
+            w[name] = function (synchronous) {
+                if (synchronous && isBridgePolyfillActive() && isTtvLolPlaylistProxyEnabled() && w.Main_IsOn_OSInterface) {
+                    bridgeDebugLog('live_sync_load_forced_async_proxy', {name: name});
+                    return original.call(this, false);
+                }
+                return original.apply(this, arguments);
+            };
+            w[name].__sttvLiveProxyAsyncLoadPatched = true;
+            patched += 1;
+        };
+        wrap('Play_loadData');
+        wrap('PlayExtra_Resume');
+        if (patched >= 1) {
+            w.__sttvLiveProxyAsyncLoadPatched = true;
+            return true;
+        }
+        return false;
+    }
+    function ensureLiveProxyAsyncLoadFlow() {
+        if (patchLiveProxyAsyncLoadFlow()) return;
+        w.setTimeout(patchLiveProxyAsyncLoadFlow, 1000);
+        w.setTimeout(patchLiveProxyAsyncLoadFlow, 2500);
     }
     // =========================================================================
     // Player Scene Optimizer (webOS-only)
@@ -4081,18 +4955,22 @@
     function applyWebOSDefaultSettings() {
         try {
             if (!w.localStorage) return false;
-            // Feed/screen/side preview players are no-ops on webOS (hardware
-            // decoder cannot render into small CSS windows).  Force all small-
-            // window preview settings to disabled ("1" = index 0 = 'no') so
-            // the upstream UI skips preview-related work entirely.
+            // Older webOS bridge builds forced all preview settings off because
+            // small-window playback was not implemented yet. Restore the upstream
+            // defaults once so existing installs can show live feed, side-panel,
+            // and grid/card previews again. Users can still turn these settings
+            // off afterward from the normal UI.
+            var marker = 'STTV_WEBOS_PREVIEW_DEFAULTS_RESTORED';
+            if (w.localStorage.getItem(marker) === '1') return false;
             var changed = false;
             var keys = ['show_feed_player', 'show_side_player', 'show_live_player', 'show_vod_player', 'show_clip_player'];
             for (var i = 0; i < keys.length; i++) {
-                if (w.localStorage.getItem(keys[i]) !== '1') {
-                    w.localStorage.setItem(keys[i], '1');
+                if (w.localStorage.getItem(keys[i]) === '1') {
+                    w.localStorage.setItem(keys[i], '2');
                     changed = true;
                 }
             }
+            w.localStorage.setItem(marker, '1');
             return changed;
         } catch (e) {}
         return false;
@@ -4131,7 +5009,10 @@
         A.StartAuto = function (u, pl, t, rs, player) {
             if (player && player > 0) {
                 if (!setPrev(u, pl, t, rs, 'extra', player, player)) return;
-            } else setMain(u, pl, t, rs);
+            } else {
+                var resumeMs = localVodOverride.source === 'local' && (t || 1) === 2 ? localVodTwitchToLocalMs(rs || 0) : rs;
+                setMain(u, pl, t, resumeMs);
+            }
         };
         // IMPLEMENTED: Prepare preview player for quality switch (pause + set quality position).
         A.ReuseFeedPlayerPrepare = function (trackSelectorPos) {
@@ -4168,7 +5049,7 @@
                 show(mv);
                 if (mv) tryPlay(mv);
             }
-            call('Play_UpdateDuration', [getMainDurationMs()]);
+            call('Play_UpdateDuration', [localVodReportedDurationMs()]);
         };
         // IMPLEMENTED: Restart playback from cached state or trigger upstream reload.
         A.RestartPlayer = function (t, rs, player) {
@@ -4183,7 +5064,7 @@
             }
             var mainSrc = ms.rawUri || ms.uri;
             if (mainSrc) {
-                setMain(mainSrc, ms.playlist, t || ms.type, rs);
+                setMain(mainSrc, ms.playlist, t || ms.type, localVodIsActivePlayback() ? localVodTwitchToLocalMs(rs || 0) : rs);
                 return;
             }
             if (!w.Main_IsOn_OSInterface) return;
@@ -4251,6 +5132,7 @@
         };
         // IMPLEMENTED: Stops all playback and resets state. Android: ExoPlayer.stop()/release().
         A.stopVideo = function () {
+            mainPauseRequested = false;
             clear(mv);
             clear(pv);
             resetMainState();
@@ -4276,14 +5158,16 @@
             ps.feedPos = clamp(typeof position === 'number' ? position : parseInt(position, 10) || 2, 0, 4);
             if (ps.mode === 'feed') applyFeedLayout(ps.feedPos);
         };
-        // HARDWARE-LTD: webOS hardware video pipeline cannot render into small CSS windows.
+        // IMPLEMENTED: Upstream guard for small-preview startup. webOS can show a preview
+        // before main playback starts, but starting a second video while main is active
+        // steals the hardware video surface on TVs that expose only one practical decoder.
+        A.CanStartSmallPreview = function () { return !isMainActive(); };
+        // IMPLEMENTED: Starts the live-feed/card preview player in a small webOS video element.
         // Android: secondary ExoPlayer renders feed thumbnails in small View.
         A.StartFeedPlayer = function (uri, playlist, position, resumePosition, isVod) {
-            void uri;
-            void playlist;
-            void position;
-            void resumePosition;
-            void isVod;
+            var pos = typeof position === 'number' ? position : parseInt(position, 10) || 2;
+            ps.feedPos = clamp(pos, 0, 4);
+            setPrev(uri, playlist, isVod ? 2 : 1, resumePosition || 0, 'feed', 1, 1);
         };
         // IMPLEMENTED: Sets feed bottom viewport position.
         A.SetPlayerViewFeedBottom = function (b, wh) {
@@ -4297,34 +5181,31 @@
             sideRect = calcPreviewRect(b, r, l, wh, false);
             if (ps.mode === 'side') applyPreviewModeLayout();
         };
-        // HARDWARE-LTD: Same as StartFeedPlayer — small video windows not supported.
+        // IMPLEMENTED: Starts side-panel preview playback using the cached side-panel rectangle.
         A.StartSidePanelPlayer = function (uri, playlist) {
-            void uri;
-            void playlist;
+            setPrev(uri, playlist, 1, 0, 'side', 1, 1);
         };
-        // HARDWARE-LTD: Multi-screen/PiP not available (single decoder).
-        A.StartScreensPlayer = function (position, uri, playlist, bottom, right, left, webHeight, whoCalled, isBig) {
-            void position;
-            void uri;
-            void playlist;
-            void bottom;
-            void right;
-            void left;
-            void webHeight;
-            void whoCalled;
-            void isBig;
+        // IMPLEMENTED: Starts focused grid/card preview playback.
+        A.StartScreensPlayer = function (uri, playlist, resumePosition, bottom, right, left, webHeight, whoCalled, isBig) {
+            screenRect = calcPreviewRect(bottom, right, left, webHeight, !!isBig);
+            setPrev(uri, playlist, whoCalled === 2 ? 2 : 1, resumePosition || 0, 'screens', 1, 1);
         };
-        // HARDWARE-LTD: Restore multi-screen — no-op on webOS.
+        // IMPLEMENTED: Restores the grid/card preview rectangle after UI transitions.
         A.ScreenPlayerRestore = function (bottom, right, left, webHeight, whoCalled, isBig) {
-            void bottom;
-            void right;
-            void left;
-            void webHeight;
             void whoCalled;
-            void isBig;
+            screenRect = calcPreviewRect(bottom, right, left, webHeight, !!isBig);
+            if (ps.mode === 'screens') {
+                applyPreviewModeLayout();
+                show(pv);
+            }
         };
-        // NO-OP: Side panel restore.
-        A.SidePanelPlayerRestore = function () {};
+        // IMPLEMENTED: Restore side panel preview after UI transitions.
+        A.SidePanelPlayerRestore = function () {
+            if (ps.mode === 'side') {
+                applyPreviewModeLayout();
+                show(pv);
+            }
+        };
         // IMPLEMENTED: Clears feed player.
         A.ClearFeedPlayer = function () { clear(pv); clearPreviewTracking(); };
         // IMPLEMENTED: Clears side panel player.
@@ -4511,7 +5392,10 @@
         // IMPLEMENTED: Clears cookies for current domain to support logout/session reset flows.
         A.clearCookie = clearCookiesForCurrentDomain;
         // IMPLEMENTED: Returns current main playback position in milliseconds.
-        A.gettime = function () { return getMainCurrentTimeMs(); };
+        A.gettime = function () {
+            var currentMs = getMainCurrentTimeMs();
+            return localVodIsActivePlayback() ? localVodLocalToTwitchMs(currentMs) : currentMs;
+        };
         // ALIAS: Android compatibility alias for gettime().
         A.getsavedtime = A.gettime;
         // IMPLEMENTED: Returns current preview playback position in milliseconds.
@@ -4519,12 +5403,14 @@
         // IMPLEMENTED: Seeks main player to position in milliseconds and persists resume for VOD/clip types.
         A.mseekTo = function (pos) {
             var positionMs = Math.max(0, parseInt(pos, 10) || 0);
-            seekMainToMs(positionMs);
-            if (ms.type === 2 || ms.type === 3) ms.resume = positionMs;
+            var targetMs = localVodIsActivePlayback() ? localVodTwitchToLocalMs(positionMs) : positionMs;
+            seekMainToMs(targetMs);
+            if (ms.type === 2 || ms.type === 3) ms.resume = targetMs;
         };
         // IMPLEMENTED: Explicit play/pause control for both main and preview players.
         A.PlayPause = function (st) {
             var shouldPlay = !!st;
+            mainPauseRequested = !shouldPlay;
             var targets = [mv, pv];
             var i;
             for (i = 0; i < targets.length; i++) {
@@ -4552,12 +5438,12 @@
         };
         // IMPLEMENTED: Returns main duration in milliseconds through callback (Android async callback style).
         A.getDuration = function (cb) {
-            var d = getMainDurationMs();
+            var d = localVodReportedDurationMs();
             call(cb, [d]);
         };
         // IMPLEMENTED: Emits screen-duration update payload used by upstream progress UI.
         A.updateScreenDuration = function (cb, key, objId) {
-            var d = getMainDurationMs();
+            var d = localVodReportedDurationMs();
             call(cb, [objId, key, d]);
         };
         // IMPLEMENTED: Builds and forwards telemetry payload with bitrate, fps, dropped frames, and optional latency.
@@ -4656,8 +5542,8 @@
         A.deviceIsTV = function () { return true; };
         // IMPLEMENTED: Returns User-Agent string as webview version surrogate.
         A.getWebviewVersion = function () { return ua || ''; };
-        // IMPLEMENTED: Returns synthetic codec capability payload for upstream codec/settings UI.
-        A.getcodecCapabilities = function (ct) { var mime = ct === 'hevc' ? 'video/hevc' : ct === 'av01' ? 'video/av01' : 'video/avc'; var n = 'webos.' + (ct || 'avc') + '.decoder'; return JSON.stringify([{CanonicalName: n, instances: 2, isHardwareAccelerated: true, isSoftwareOnly: false, name: n, nameType: n + mime, type: mime, supportsIsHw: true, resolutions: 'Unknown', maxresolution: 'Unknown', maxbitrate: 'Unknown', maxlevel: 'Unknown'}]); };
+        // IMPLEMENTED: Returns codec capability payload for upstream codec/settings UI based on HTML5 media probing.
+        A.getcodecCapabilities = function (ct) { return buildCodecCapabilityPayload(ct); };
         // NO-OP: Android reads accessibility service state; webOS bridge does not expose that signal.
         A.isAccessibilitySettingsOn = function () { return false; };
         // IMPLEMENTED (compat): Notification permission considered granted to avoid upstream gating.
@@ -4837,15 +5723,18 @@
     patchMainUpdateFlow();
     patchUpdateResultFlow();
     ensureVodSafetyPatches();
+    ensureLiveProxyAsyncLoadFlow();
     // Keep upstream proxy selection behavior. Bridge does not force provider defaults.
     // 9) Install launch/relaunch event bridge.
     initLaunch();
     // 10) Harden scene transitions and start player-scene optimizer.
     installSceneSafetyPatches();
     installPlayerSceneOptimizerMonitor();
-    // 11) Start periodic version checks.
+    // 11) Inject bridge-owned local VOD override hooks.
+    initLocalVodOverrideIntegration();
+    // 12) Start periodic version checks.
     checkForkVersionAndRefresh();
     versionRefreshIntervalId = w.setInterval(checkForkVersionAndRefresh, VERSION_REFRESH_MIN_INTERVAL_MS);
-    // 12) Restore app token from persisted storage (legacy key fallback included).
+    // 13) Restore app token from persisted storage (legacy key fallback included).
     try { appToken = w.localStorage ? (w.localStorage.getItem(STORAGE_PREFIX + 'app_token') || w.localStorage.getItem('sttv_webos_app_token')) : null; } catch (e) { appToken = null; }
 })(window);

@@ -47,3 +47,7 @@ todo.txt
 build/
 .claude/settings.local.json
 tmp/apps-repo/
+webos/app/release/
+
+# local graphify cache
+.graphify/

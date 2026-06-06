@@ -44,6 +44,9 @@ var ChannelContent_Lang = '';
 var ChannelContent_Ids = ['_ChannelContent_cell_0_1_img', '_ChannelContent_since_'];
 var ChannelContent_enable_mature;
 var ChannelContent_allowMature;
+var ChannelContent_ActionCount = 4;
+var ChannelContent_WTVCheckId;
+var ChannelContent_WTVRequestKey = 0;
 //Variable initialization end
 
 function ChannelContent_init() {
@@ -89,6 +92,7 @@ function ChannelContent_init() {
 }
 
 function ChannelContent_exit() {
+    ChannelContent_ClearWTVCheck();
     Main_RestoreTopLabel();
     Main_removeEventListener('keydown', ChannelContent_handleKeyDown);
     Main_HideElement('channel_content_scroll');
@@ -116,6 +120,8 @@ function ChannelContent_StartLoad() {
     ChannelContent_cursorX = 0;
     ChannelContent_cursorY = 0;
     ChannelContent_DataObj = null;
+    ChannelContent_UpdateWTVControl();
+    ChannelContent_ClearWTVCheck();
     ChannelContent_dataEnded = false;
     ChannelContent_TargetId = undefined;
     Main_FirstLoad = true;
@@ -225,7 +231,20 @@ function ChannelContent_setFollow() {
     }
 }
 
+function ChannelContent_UpdateWTVControl() {
+    if (typeof WTV_GetCurrentChannelMapping !== 'function') return;
+    var mapping = WTV_GetCurrentChannelMapping();
+    Main_innerHTML(
+        'channel_content_titley_3',
+        '<i class="icon-link stream_channel_follow_icon"></i>' +
+            STR_SPACE_HTML +
+            STR_SPACE_HTML +
+            (mapping && mapping.wtv_channel ? 'w.tv: ' + mapping.wtv_channel : 'Set w.tv')
+    );
+}
+
 function ChannelContent_loadDataSuccess() {
+    ChannelContent_UpdateWTVControl();
     Main_innerHTML(
         'channel_content_thumbdiv0_1',
         '<img class="stream_img_channel_logo" alt="" src="' +
@@ -282,15 +301,21 @@ function ChannelContent_loadDataSuccess() {
         ChannelContent_createCell(ScreensObj_LiveCellArray(stream));
 
         ChannelContent_cursorX = 1;
-    } else ChannelContent_createCellOffline(allowMature);
+    } else {
+        ChannelContent_createCellOffline(allowMature);
+        ChannelContent_CheckMappedWTVLive(false);
+    }
 
     ChannelContent_loadDataSuccessFinish();
 }
 
 function ChannelContent_createCell(valuesArray) {
     var ishosting = ChannelContent_TargetId !== undefined;
+    var isWTV = typeof WTV_IsData === 'function' && WTV_IsData(valuesArray);
+    var liveBadge = isWTV ? 'W.TV' : valuesArray[5];
 
     ChannelContent_DataObj = valuesArray;
+    ChannelContent_isoffline = false;
 
     Main_innerHTML(
         'channel_content_thumbdiv0_0',
@@ -314,7 +339,7 @@ function ChannelContent_createCell(valuesArray) {
             '</div><div class="stream_info_live" style="width:' +
             (ishosting ? 0 : 33) +
             '%; float: right; text-align: right; display: inline-block;">' +
-            (ishosting ? '' : valuesArray[5]) +
+            (ishosting ? '' : liveBadge) +
             '</div></div>' +
             '<div class="stream_info_live_title">' +
             twemoji.parse(valuesArray[2]) +
@@ -333,6 +358,65 @@ function ChannelContent_createCell(valuesArray) {
             STR_FOR +
             valuesArray[4] +
             '</div></div></div>'
+    );
+}
+
+function ChannelContent_ClearWTVCheck() {
+    Main_clearTimeout(ChannelContent_WTVCheckId);
+}
+
+function ChannelContent_CheckMappedWTVLive(isPoll) {
+    if (typeof WTV_GetCurrentChannelMapping !== 'function') return;
+
+    var mapping = WTV_GetCurrentChannelMapping();
+    if (!mapping || !mapping.wtv_channel || ChannelContent_responseText) {
+        ChannelContent_ClearWTVCheck();
+        return;
+    }
+
+    ChannelContent_WTVRequestKey++;
+    var requestKey = ChannelContent_WTVRequestKey;
+    WTV_GetLive(
+        mapping.wtv_channel,
+        function (status) {
+            ChannelContent_MappedWTVLiveResult(status, mapping, requestKey);
+        },
+        function () {
+            ChannelContent_MappedWTVLiveResult(null, mapping, requestKey);
+        }
+    );
+
+    if (!isPoll) ChannelContent_ScheduleWTVCheck();
+}
+
+function ChannelContent_MappedWTVLiveResult(status, mapping, requestKey) {
+    if (requestKey !== ChannelContent_WTVRequestKey || Main_values.Main_Go !== Main_ChannelContent) return;
+    if (!mapping || mapping.twitch_login !== WTV_NormalizeTwitchLogin(Main_values.Main_selectedChannel)) return;
+
+    if (status && status.online && status.playback_url) {
+        ChannelContent_createCell(WTV_BuildTwitchMappedLiveData(status, mapping, 'live'));
+        if (ChannelContent_cursorY) {
+            ChannelContent_removeFocus();
+            ChannelContent_addFocus();
+        }
+        WTV_AddMappedLiveToUserFeed(status, mapping);
+    } else if (!ChannelContent_isoffline) {
+        ChannelContent_createCellOffline(ChannelContent_allowMature);
+    }
+
+    ChannelContent_ScheduleWTVCheck();
+}
+
+function ChannelContent_ScheduleWTVCheck() {
+    ChannelContent_ClearWTVCheck();
+    if (Main_values.Main_Go !== Main_ChannelContent || ChannelContent_responseText) return;
+
+    ChannelContent_WTVCheckId = Main_setTimeout(
+        function () {
+            ChannelContent_CheckMappedWTVLive(true);
+        },
+        60000,
+        ChannelContent_WTVCheckId
     );
 }
 
@@ -408,6 +492,7 @@ function ChannelContent_removeAllFollowFocus() {
     Main_RemoveClass('channel_content_thumbdivy_0', 'stream_switch_focused');
     Main_RemoveClass('channel_content_thumbdivy_1', 'stream_switch_focused');
     Main_RemoveClass('channel_content_thumbdivy_2', 'stream_switch_focused');
+    Main_RemoveClass('channel_content_thumbdivy_3', 'stream_switch_focused');
 }
 
 function ChannelContent_keyEnter() {
@@ -439,6 +524,10 @@ function ChannelContent_keyEnter() {
             } else {
                 Main_showWarningDialog(STR_NOKEY_WARN, 2000);
             }
+        } else if (ChannelContent_cursorX === 3) {
+            ChannelContent_removeFocus();
+            Main_removeEventListener('keydown', ChannelContent_handleKeyDown);
+            WTV_ChannelContentPrompt(ChannelContent_WTVPromptDone);
         }
     } else {
         Main_removeEventListener('keydown', ChannelContent_handleKeyDown);
@@ -490,6 +579,15 @@ function ChannelContent_keyEnter() {
 
             Main_EventPlay('live', Main_values_Play_data[6], Main_values_Play_data[3], Main_values_Play_data[15], 'ChannelContent');
         }
+    }
+}
+
+function ChannelContent_WTVPromptDone(saved) {
+    ChannelContent_UpdateWTVControl();
+    if (saved) ChannelContent_CheckMappedWTVLive(false);
+    if (Main_values.Main_Go === Main_ChannelContent && Main_isScene1DocVisible()) {
+        Main_addEventListener('keydown', ChannelContent_handleKeyDown);
+        ChannelContent_addFocus();
     }
 }
 
@@ -566,10 +664,10 @@ function ChannelContent_handleKeyDown(event) {
             ChannelContent_handleKeyBakc();
             break;
         case KEY_LEFT:
-            if (!ChannelContent_cursorY && ChannelContent_cursorX) {
+            if (!ChannelContent_cursorY) {
                 ChannelContent_removeFocus();
                 ChannelContent_cursorX--;
-                if (ChannelContent_cursorX < 0) ChannelContent_cursorX = 2;
+                if (ChannelContent_cursorX < 0) ChannelContent_cursorX = ChannelContent_ActionCount - 1;
                 ChannelContent_addFocus();
             } else {
                 ChannelContent_removeFocus();
@@ -577,10 +675,15 @@ function ChannelContent_handleKeyDown(event) {
             }
             break;
         case KEY_RIGHT:
-            if (!ChannelContent_cursorY) {
+            if (ChannelContent_cursorY) {
+                ChannelContent_removeFocus();
+                ChannelContent_cursorY = 0;
+                ChannelContent_cursorX = ChannelContent_ActionCount - 1;
+                ChannelContent_addFocus();
+            } else {
                 ChannelContent_removeFocus();
                 ChannelContent_cursorX++;
-                if (ChannelContent_cursorX > 2) ChannelContent_cursorX = 0;
+                if (ChannelContent_cursorX >= ChannelContent_ActionCount) ChannelContent_cursorX = 0;
                 ChannelContent_addFocus();
             }
             break;
@@ -629,6 +732,7 @@ function ChannelContent_LoadPreview() {
         !Main_isStopped &&
         !ChannelContent_isoffline &&
         Settings_Obj_default('show_live_player') &&
+        OSInterface_CanStartSmallPreview() &&
         Main_isScene1DocVisible() &&
         !Sidepannel_isShowingUserLive() &&
         !Sidepannel_isShowingMenus() &&
@@ -636,6 +740,7 @@ function ChannelContent_LoadPreview() {
     ) {
         if (ChannelContent_DataObj) {
             var obj = Main_Slice(ChannelContent_DataObj);
+            if (typeof WTV_IsData === 'function' && WTV_IsData(obj)) return;
 
             if ((!Play_PreviewId || !Main_A_equals_B(obj[14].toString(), Play_PreviewId.toString())) && !Play_PreviewVideoEnded) {
                 ChannelContent_LoadPreviewStart(obj);

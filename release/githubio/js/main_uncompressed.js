@@ -740,6 +740,13 @@
         PROXY_SERVICE_OFF,
         PROXY_SETTINGS,
         PROXY_SETTINGS_SUMMARY,
+        STR_WEBOS_TTVLOL_PROXY_SETTINGS,
+        STR_WEBOS_TTVLOL_PROXY_SETTINGS_SUMMARY,
+        STR_WEBOS_TTVLOL_PROXY_ENABLED,
+        STR_WEBOS_TTVLOL_PROXY_ENABLED_SUMMARY,
+        STR_WEBOS_TTVLOL_PROXY_URL,
+        STR_WEBOS_TTVLOL_PROXY_URL_SUMMARY,
+        STR_WEBOS_TTVLOL_PROXY_URL_PROMPT,
         STR_K_TWITCH,
         STR_K_TWITCH_SUMMARY,
         STR_T1080,
@@ -2219,6 +2226,16 @@
         PROXY_SETTINGS = 'Proxy Settings (Internet censorship and related proxy)';
         PROXY_SETTINGS_SUMMARY =
             'Only one proxy can be enable, enables proxy server to get stream links from a different server, that may allow you to see content that is forbidden on yours region and avoid ads, disable this if you have any live stream issue too many or longer buffers, freezes or slow connection that may cause the stream quality to drop.';
+        STR_WEBOS_TTVLOL_PROXY_SETTINGS = 'webOS TTV LOL playlist proxy';
+        STR_WEBOS_TTVLOL_PROXY_SETTINGS_SUMMARY =
+            'Routes live Twitch playlist requests through the TTV LOL v2 Firefox proxy path before falling back to direct Twitch servers.';
+        STR_WEBOS_TTVLOL_PROXY_ENABLED = 'Enable playlist proxy';
+        STR_WEBOS_TTVLOL_PROXY_ENABLED_SUMMARY = 'Disable this if live streams fail, buffer too much, or you want direct Twitch playlists.';
+        STR_WEBOS_TTVLOL_PROXY_URL = 'Proxy server';
+        STR_WEBOS_TTVLOL_PROXY_URL_SUMMARY =
+            'Default: chromium.api.cdn-perfprod.com:2023,firefox.api.cdn-perfprod.com:2023. You can enter one proxy or multiple proxies separated by comma, semicolon, or new line.';
+        STR_WEBOS_TTVLOL_PROXY_URL_PROMPT =
+            'Enter TTV LOL HTTP(S) proxy server(s). Multiple values can be separated by comma, semicolon, or new line.';
         SEEK_PREVIEW = 'Seek Preview';
         SEEK_PREVIEW_SUMMARY =
             "Allows to control the VOD seek preview image that shows when rewind or fast forward, seek preview isn't available to all VODs.";
@@ -5791,6 +5808,16 @@
         PROXY_SETTINGS = 'Настройки прокси (цензура интернета и связанные прокси)';
         PROXY_SETTINGS_SUMMARY =
             'Можно включить только один прокси, включает прокси-сервер для получения ссылок на стримы с другого сервера, что может позволить вам увидеть контент, запрещённый в вашем регионе, и избежать рекламы. Отключите это, если у вас возникают проблемы с потоковыми трансляциями, такими как слишком много или долгие буферы, зависания или медленное соединение, что может привести к снижению качества трансляции.';
+        STR_WEBOS_TTVLOL_PROXY_SETTINGS = 'webOS TTV LOL прокси плейлистов';
+        STR_WEBOS_TTVLOL_PROXY_SETTINGS_SUMMARY =
+            'Отправляет live playlist-запросы Twitch через прокси-путь TTV LOL v2 Firefox, затем откатывается на прямые серверы Twitch.';
+        STR_WEBOS_TTVLOL_PROXY_ENABLED = 'Включить playlist proxy';
+        STR_WEBOS_TTVLOL_PROXY_ENABLED_SUMMARY = 'Отключи, если стримы не открываются, сильно буферятся или нужны прямые плейлисты Twitch.';
+        STR_WEBOS_TTVLOL_PROXY_URL = 'Прокси-сервер';
+        STR_WEBOS_TTVLOL_PROXY_URL_SUMMARY =
+            'По умолчанию: chromium.api.cdn-perfprod.com:2023,firefox.api.cdn-perfprod.com:2023. Можно указать один прокси или несколько через запятую, точку с запятой или новую строку.';
+        STR_WEBOS_TTVLOL_PROXY_URL_PROMPT =
+            'Укажи HTTP(S) proxy server(s) для TTV LOL. Несколько значений можно разделить запятой, точкой с запятой или новой строкой.';
         SEEK_PREVIEW = 'Предпросмотр при перемотке';
         SEEK_PREVIEW_SUMMARY = 'Позволяет управлять изображением предпросмотра при перемотке VOD, предпросмотр перемотки доступен не для всех VOD.';
         SEEK_PREVIEW_SINGLE = 'Одно изображение';
@@ -7906,6 +7933,84 @@
      *
      */
 
+    //https://developer.android.com/reference/android/view/KeyEvent
+    //overwrite from java dispatchKeyEvent()
+    var KEY_PAUSE = 83; //overwrite key S = stop because p = play
+    var KEY_PLAY = 80; //overwrite key P = play
+
+    var KEY_STOP = 178;
+    var KEY_PLAYPAUSE = 179;
+
+    var KEY_LEFT = 37;
+    var KEY_UP = 38;
+    var KEY_RIGHT = 39;
+    var KEY_DOWN = 40;
+    var KEY_ENTER = 13;
+
+    var KEY_PG_DOWN = 34;
+    var KEY_PG_UP = 33;
+
+    var KEY_RETURN = 113; //key #F2
+
+    var KEY_KEYBOARD_BACKSPACE = 8; // http://developer.samsung.com/tv/develop/guides/user-interaction/keyboardime
+    var KEY_KEYBOARD_DONE = 13;
+    var KEY_KEYBOARD_SPACE = 32;
+
+    var KEY_MEDIA_NEXT = 176;
+    var KEY_MEDIA_PREVIOUS = 177;
+
+    var KEY_MEDIA_FAST_FORWARD = 228;
+    var KEY_MEDIA_REWIND = 227;
+
+    var KEY_0 = 48;
+    var KEY_1 = 49;
+    var KEY_2 = 50;
+    var KEY_3 = 51;
+    var KEY_4 = 52;
+    var KEY_5 = 53;
+    var KEY_6 = 54;
+    var KEY_7 = 55;
+    var KEY_8 = 56;
+    var KEY_9 = 57;
+
+    var KEY_NUMPAD_0 = 96;
+    var KEY_NUMPAD_1 = 97;
+    var KEY_NUMPAD_2 = 98;
+    var KEY_NUMPAD_3 = 99;
+    var KEY_NUMPAD_4 = 100;
+    var KEY_NUMPAD_5 = 101;
+    var KEY_NUMPAD_6 = 102;
+    var KEY_NUMPAD_7 = 103;
+    var KEY_NUMPAD_8 = 104;
+    var KEY_NUMPAD_9 = 105;
+
+    var KEY_A = 65;
+    var KEY_C = 67;
+    var KEY_E = 69;
+    var KEY_J = 74;
+    var KEY_K = 75;
+    var KEY_T = 84;
+    var KEY_U = 85;
+    /*
+     * Copyright (c) 2017–present Felipe de Leon <fglfgl27@gmail.com>
+     *
+     * This file is part of SmartTwitchTV <https://github.com/fgl27/SmartTwitchTV>
+     *
+     * SmartTwitchTV is free software: you can redistribute it and/or modify
+     * it under the terms of the GNU General Public License as published by
+     * the Free Software Foundation, either version 3 of the License, or
+     * (at your option) any later version.
+     *
+     * SmartTwitchTV is distributed in the hope that it will be useful,
+     * but WITHOUT ANY WARRANTY; without even the implied warranty of
+     * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+     * GNU General Public License for more details.
+     *
+     * You should have received a copy of the GNU General Public License
+     * along with SmartTwitchTV.  If not, see <https://github.com/fgl27/SmartTwitchTV/blob/master/LICENSE>.
+     *
+     */
+
     //Used as based https://kevinfaguiar.github.io/vue-twemoji-picker/docs/emoji-datasets/
     //https://github.com/kevinfaguiar/vue-twemoji-picker/tree/master/emoji-data/en
     //https://emojipedia.org/
@@ -8068,84 +8173,6 @@
         if (!Main_IsOn_OSInterface) calculateFontSize();
     }
     /*
-     * Copyright (c) 2017–present Felipe de Leon <fglfgl27@gmail.com>
-     *
-     * This file is part of SmartTwitchTV <https://github.com/fgl27/SmartTwitchTV>
-     *
-     * SmartTwitchTV is free software: you can redistribute it and/or modify
-     * it under the terms of the GNU General Public License as published by
-     * the Free Software Foundation, either version 3 of the License, or
-     * (at your option) any later version.
-     *
-     * SmartTwitchTV is distributed in the hope that it will be useful,
-     * but WITHOUT ANY WARRANTY; without even the implied warranty of
-     * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-     * GNU General Public License for more details.
-     *
-     * You should have received a copy of the GNU General Public License
-     * along with SmartTwitchTV.  If not, see <https://github.com/fgl27/SmartTwitchTV/blob/master/LICENSE>.
-     *
-     */
-
-    //https://developer.android.com/reference/android/view/KeyEvent
-    //overwrite from java dispatchKeyEvent()
-    var KEY_PAUSE = 83; //overwrite key S = stop because p = play
-    var KEY_PLAY = 80; //overwrite key P = play
-
-    var KEY_STOP = 178;
-    var KEY_PLAYPAUSE = 179;
-
-    var KEY_LEFT = 37;
-    var KEY_UP = 38;
-    var KEY_RIGHT = 39;
-    var KEY_DOWN = 40;
-    var KEY_ENTER = 13;
-
-    var KEY_PG_DOWN = 34;
-    var KEY_PG_UP = 33;
-
-    var KEY_RETURN = 113; //key #F2
-
-    var KEY_KEYBOARD_BACKSPACE = 8; // http://developer.samsung.com/tv/develop/guides/user-interaction/keyboardime
-    var KEY_KEYBOARD_DONE = 13;
-    var KEY_KEYBOARD_SPACE = 32;
-
-    var KEY_MEDIA_NEXT = 176;
-    var KEY_MEDIA_PREVIOUS = 177;
-
-    var KEY_MEDIA_FAST_FORWARD = 228;
-    var KEY_MEDIA_REWIND = 227;
-
-    var KEY_0 = 48;
-    var KEY_1 = 49;
-    var KEY_2 = 50;
-    var KEY_3 = 51;
-    var KEY_4 = 52;
-    var KEY_5 = 53;
-    var KEY_6 = 54;
-    var KEY_7 = 55;
-    var KEY_8 = 56;
-    var KEY_9 = 57;
-
-    var KEY_NUMPAD_0 = 96;
-    var KEY_NUMPAD_1 = 97;
-    var KEY_NUMPAD_2 = 98;
-    var KEY_NUMPAD_3 = 99;
-    var KEY_NUMPAD_4 = 100;
-    var KEY_NUMPAD_5 = 101;
-    var KEY_NUMPAD_6 = 102;
-    var KEY_NUMPAD_7 = 103;
-    var KEY_NUMPAD_8 = 104;
-    var KEY_NUMPAD_9 = 105;
-
-    var KEY_A = 65;
-    var KEY_C = 67;
-    var KEY_E = 69;
-    var KEY_J = 74;
-    var KEY_K = 75;
-    var KEY_T = 84;
-    var KEY_U = 85;
-    /*
      * Copyright (c) 2017-∞ Felipe de Leon <fglfgl27@gmail.com>
      *
      * This file is part of SmartTwitchTV <https://github.com/fgl27/SmartTwitchTV>
@@ -8168,11 +8195,25 @@
     //Spacing for release maker not trow errors from jshint
     var version = {
         VersionBase: '3.0',
-        publishVersionCode: 377, //Always update (+1 to current value) Main_version_java after update publishVersionCode or a major update of the apk is released
-        ApkUrl: 'https://github.com/fgl27/SmartTwitchTV/releases/download/377/SmartTV_twitch_3_0_377.apk',
-        WebVersion: 'January 27 2026',
-        WebTag: 727, //Always update (+1 to current value) Main_version_web after update Main_minversion or a major update of the web part of the app
+        publishVersionCode: 379, //Always update (+1 to current value) Main_version_java after update publishVersionCode or a major update of the apk is released
+        ApkUrl: '',
+        WebVersion: 'April 28 2026',
+        WebTag: 728, //Always update (+1 to current value) Main_version_web after update Main_minversion or a major update of the web part of the app
         changelog: [
+            {
+                title: 'April 28 2026',
+                changes: [
+                    'Add configurable webOS TTV LOL playlist proxy for live streams',
+                    'Route webOS update checks through the xenking fork without offering Android APK updates',
+                    'Keep HEVC playback enabled on webOS devices that reject the original codec hint'
+                ]
+            },
+            {
+                title: 'March 17 2026',
+                changes: [
+                    "Allow devices running android 7.0 and older to run the app again (5.0 and up only), GitHub update they encryption done on the application page, the new encryption wasn't supported by old devices."
+                ]
+            },
             {
                 title: 'January 27 2026',
                 changes: ['Add more fast forward speeds', 'General performance improvements and bug fixes']
@@ -11834,6 +11875,9 @@
     var ChannelContent_Ids = ['_ChannelContent_cell_0_1_img', '_ChannelContent_since_'];
     var ChannelContent_enable_mature;
     var ChannelContent_allowMature;
+    var ChannelContent_ActionCount = 4;
+    var ChannelContent_WTVCheckId;
+    var ChannelContent_WTVRequestKey = 0;
     //Variable initialization end
 
     function ChannelContent_init() {
@@ -11879,6 +11923,7 @@
     }
 
     function ChannelContent_exit() {
+        ChannelContent_ClearWTVCheck();
         Main_RestoreTopLabel();
         Main_removeEventListener('keydown', ChannelContent_handleKeyDown);
         Main_HideElement('channel_content_scroll');
@@ -11906,6 +11951,8 @@
         ChannelContent_cursorX = 0;
         ChannelContent_cursorY = 0;
         ChannelContent_DataObj = null;
+        ChannelContent_UpdateWTVControl();
+        ChannelContent_ClearWTVCheck();
         ChannelContent_dataEnded = false;
         ChannelContent_TargetId = undefined;
         Main_FirstLoad = true;
@@ -12017,7 +12064,20 @@
         }
     }
 
+    function ChannelContent_UpdateWTVControl() {
+        if (typeof WTV_GetCurrentChannelMapping !== 'function') return;
+        var mapping = WTV_GetCurrentChannelMapping();
+        Main_innerHTML(
+            'channel_content_titley_3',
+            '<i class="icon-link stream_channel_follow_icon"></i>' +
+                STR_SPACE_HTML +
+                STR_SPACE_HTML +
+                (mapping && mapping.wtv_channel ? 'w.tv: ' + mapping.wtv_channel : 'Set w.tv')
+        );
+    }
+
     function ChannelContent_loadDataSuccess() {
+        ChannelContent_UpdateWTVControl();
         Main_innerHTML(
             'channel_content_thumbdiv0_1',
             '<img class="stream_img_channel_logo" alt="" src="' +
@@ -12075,15 +12135,21 @@
             ChannelContent_createCell(ScreensObj_LiveCellArray(stream));
 
             ChannelContent_cursorX = 1;
-        } else ChannelContent_createCellOffline(allowMature);
+        } else {
+            ChannelContent_createCellOffline(allowMature);
+            ChannelContent_CheckMappedWTVLive(false);
+        }
 
         ChannelContent_loadDataSuccessFinish();
     }
 
     function ChannelContent_createCell(valuesArray) {
         var ishosting = ChannelContent_TargetId !== undefined;
+        var isWTV = typeof WTV_IsData === 'function' && WTV_IsData(valuesArray);
+        var liveBadge = isWTV ? 'W.TV' : valuesArray[5];
 
         ChannelContent_DataObj = valuesArray;
+        ChannelContent_isoffline = false;
 
         Main_innerHTML(
             'channel_content_thumbdiv0_0',
@@ -12107,7 +12173,7 @@
                 '</div><div class="stream_info_live" style="width:' +
                 (ishosting ? 0 : 33) +
                 '%; float: right; text-align: right; display: inline-block;">' +
-                (ishosting ? '' : valuesArray[5]) +
+                (ishosting ? '' : liveBadge) +
                 '</div></div>' +
                 '<div class="stream_info_live_title">' +
                 twemoji.parse(valuesArray[2]) +
@@ -12126,6 +12192,65 @@
                 STR_FOR +
                 valuesArray[4] +
                 '</div></div></div>'
+        );
+    }
+
+    function ChannelContent_ClearWTVCheck() {
+        Main_clearTimeout(ChannelContent_WTVCheckId);
+    }
+
+    function ChannelContent_CheckMappedWTVLive(isPoll) {
+        if (typeof WTV_GetCurrentChannelMapping !== 'function') return;
+
+        var mapping = WTV_GetCurrentChannelMapping();
+        if (!mapping || !mapping.wtv_channel || ChannelContent_responseText) {
+            ChannelContent_ClearWTVCheck();
+            return;
+        }
+
+        ChannelContent_WTVRequestKey++;
+        var requestKey = ChannelContent_WTVRequestKey;
+        WTV_GetLive(
+            mapping.wtv_channel,
+            function (status) {
+                ChannelContent_MappedWTVLiveResult(status, mapping, requestKey);
+            },
+            function () {
+                ChannelContent_MappedWTVLiveResult(null, mapping, requestKey);
+            }
+        );
+
+        if (!isPoll) ChannelContent_ScheduleWTVCheck();
+    }
+
+    function ChannelContent_MappedWTVLiveResult(status, mapping, requestKey) {
+        if (requestKey !== ChannelContent_WTVRequestKey || Main_values.Main_Go !== Main_ChannelContent) return;
+        if (!mapping || mapping.twitch_login !== WTV_NormalizeTwitchLogin(Main_values.Main_selectedChannel)) return;
+
+        if (status && status.online && status.playback_url) {
+            ChannelContent_createCell(WTV_BuildTwitchMappedLiveData(status, mapping, 'live'));
+            if (ChannelContent_cursorY) {
+                ChannelContent_removeFocus();
+                ChannelContent_addFocus();
+            }
+            WTV_AddMappedLiveToUserFeed(status, mapping);
+        } else if (!ChannelContent_isoffline) {
+            ChannelContent_createCellOffline(ChannelContent_allowMature);
+        }
+
+        ChannelContent_ScheduleWTVCheck();
+    }
+
+    function ChannelContent_ScheduleWTVCheck() {
+        ChannelContent_ClearWTVCheck();
+        if (Main_values.Main_Go !== Main_ChannelContent || ChannelContent_responseText) return;
+
+        ChannelContent_WTVCheckId = Main_setTimeout(
+            function () {
+                ChannelContent_CheckMappedWTVLive(true);
+            },
+            60000,
+            ChannelContent_WTVCheckId
         );
     }
 
@@ -12201,6 +12326,7 @@
         Main_RemoveClass('channel_content_thumbdivy_0', 'stream_switch_focused');
         Main_RemoveClass('channel_content_thumbdivy_1', 'stream_switch_focused');
         Main_RemoveClass('channel_content_thumbdivy_2', 'stream_switch_focused');
+        Main_RemoveClass('channel_content_thumbdivy_3', 'stream_switch_focused');
     }
 
     function ChannelContent_keyEnter() {
@@ -12232,6 +12358,10 @@
                 } else {
                     Main_showWarningDialog(STR_NOKEY_WARN, 2000);
                 }
+            } else if (ChannelContent_cursorX === 3) {
+                ChannelContent_removeFocus();
+                Main_removeEventListener('keydown', ChannelContent_handleKeyDown);
+                WTV_ChannelContentPrompt(ChannelContent_WTVPromptDone);
             }
         } else {
             Main_removeEventListener('keydown', ChannelContent_handleKeyDown);
@@ -12283,6 +12413,15 @@
 
                 Main_EventPlay('live', Main_values_Play_data[6], Main_values_Play_data[3], Main_values_Play_data[15], 'ChannelContent');
             }
+        }
+    }
+
+    function ChannelContent_WTVPromptDone(saved) {
+        ChannelContent_UpdateWTVControl();
+        if (saved) ChannelContent_CheckMappedWTVLive(false);
+        if (Main_values.Main_Go === Main_ChannelContent && Main_isScene1DocVisible()) {
+            Main_addEventListener('keydown', ChannelContent_handleKeyDown);
+            ChannelContent_addFocus();
         }
     }
 
@@ -12359,10 +12498,10 @@
                 ChannelContent_handleKeyBakc();
                 break;
             case KEY_LEFT:
-                if (!ChannelContent_cursorY && ChannelContent_cursorX) {
+                if (!ChannelContent_cursorY) {
                     ChannelContent_removeFocus();
                     ChannelContent_cursorX--;
-                    if (ChannelContent_cursorX < 0) ChannelContent_cursorX = 2;
+                    if (ChannelContent_cursorX < 0) ChannelContent_cursorX = ChannelContent_ActionCount - 1;
                     ChannelContent_addFocus();
                 } else {
                     ChannelContent_removeFocus();
@@ -12370,10 +12509,15 @@
                 }
                 break;
             case KEY_RIGHT:
-                if (!ChannelContent_cursorY) {
+                if (ChannelContent_cursorY) {
+                    ChannelContent_removeFocus();
+                    ChannelContent_cursorY = 0;
+                    ChannelContent_cursorX = ChannelContent_ActionCount - 1;
+                    ChannelContent_addFocus();
+                } else {
                     ChannelContent_removeFocus();
                     ChannelContent_cursorX++;
-                    if (ChannelContent_cursorX > 2) ChannelContent_cursorX = 0;
+                    if (ChannelContent_cursorX >= ChannelContent_ActionCount) ChannelContent_cursorX = 0;
                     ChannelContent_addFocus();
                 }
                 break;
@@ -12422,6 +12566,7 @@
             !Main_isStopped &&
             !ChannelContent_isoffline &&
             Settings_Obj_default('show_live_player') &&
+            OSInterface_CanStartSmallPreview() &&
             Main_isScene1DocVisible() &&
             !Sidepannel_isShowingUserLive() &&
             !Sidepannel_isShowingMenus() &&
@@ -12429,6 +12574,7 @@
         ) {
             if (ChannelContent_DataObj) {
                 var obj = Main_Slice(ChannelContent_DataObj);
+                if (typeof WTV_IsData === 'function' && WTV_IsData(obj)) return;
 
                 if ((!Play_PreviewId || !Main_A_equals_B(obj[14].toString(), Play_PreviewId.toString())) && !Play_PreviewVideoEnded) {
                     ChannelContent_LoadPreviewStart(obj);
@@ -16993,6 +17139,7 @@
                         Main_CheckFullxmlHttpGet: Main_CheckFullxmlHttpGet,
                         PlayHLS_GetTokenResult: PlayHLS_GetTokenResult,
                         PlayHLS_PlayListUrlResult: PlayHLS_PlayListUrlResult,
+                        PlayHLS_ExternalPlayListUrlResult: PlayHLS_ExternalPlayListUrlResult,
                         AddCode_AppTokenResult: AddCode_AppTokenResult,
                         Play_UpdateDurationDiv: Play_UpdateDurationDiv,
                         Screens_PlaybackTimeSetVodDuration: Screens_PlaybackTimeSetVodDuration
@@ -17364,6 +17511,10 @@
         Main_innerHTML(
             'channel_content_titley_2',
             '<i class="icon-heart-o" style="color: #FFFFFF; font-size: 100%; "></i>' + STR_SPACE_HTML + STR_SPACE_HTML + STR_FOLLOW
+        );
+        Main_innerHTML(
+            'channel_content_titley_3',
+            '<i class="icon-link stream_channel_follow_icon"></i>' + STR_SPACE_HTML + STR_SPACE_HTML + 'Set w.tv'
         );
 
         Main_textContent('dialog_hist_setting_name_0', STR_SORTING);
@@ -18263,6 +18414,7 @@
         Main_removeEventListener('keydown', handleKeyDownFunction);
         Main_values_Play_data = data;
         Play_data.data = Main_values_Play_data;
+        if (typeof WTV_IsData === 'function' && WTV_IsData(Play_data.data)) checkHistory = false;
 
         if (checkHistory) {
             var historyPos = Main_history_GetById('live', Play_data.data[7]);
@@ -18390,7 +18542,7 @@
     }
 
     function Main_OPenAsVod(historyPos) {
-        if (!historyPos.vodid) {
+        if (!historyPos.vodid && !(window.STTVWebOSLocalVod && window.STTVWebOSLocalVod.getState && window.STTVWebOSLocalVod.getState().enabled)) {
             Main_openStream();
             return;
         }
@@ -18514,6 +18666,8 @@
         Main_removeEventListener('keydown', handleKeyDownFunction);
         Main_RemoveClass(idsArray[1] + id, 'opacity_zero');
         Main_values_Play_data = data;
+
+        if (typeof WTV_OpenHistoryVod === 'function' && WTV_IsData(Main_values_Play_data) && WTV_OpenHistoryVod(Main_values_Play_data)) return;
 
         Main_values.Main_selectedChannelDisplayname = Main_values_Play_data[1];
         ChannelVod_createdAt = Main_values_Play_data[2];
@@ -18852,7 +19006,7 @@
 
         if (UseHeaders) {
             if (AddUser_UserHasToken()) {
-                Main_Bearer_User_Headers[1][1] = Bearer + AddUser_UsernameArray[0].access_token;
+                HttpGetEnsureUserHeader();
 
                 headers = Main_Bearer_User_Headers;
             } else {
@@ -18958,6 +19112,22 @@
         }
 
         Play_Headers = JSON.stringify(header);
+    }
+
+    function HttpGetEnsureUserHeader() {
+        if (!AddUser_UserHasToken()) return;
+
+        if (!Main_Bearer_User_Headers || !Main_Bearer_User_Headers[1] || !Main_OAuth_User_Headers || !Main_OAuth_User_Headers[1]) {
+            HttpGetSetUserHeader();
+            return;
+        }
+
+        Main_Bearer_User_Headers[1][1] = Bearer + AddUser_UsernameArray[0].access_token;
+        Main_OAuth_User_Headers[1][1] = Main_OAuth + AddUser_UsernameArray[0].access_token;
+        Play_Headers = JSON.stringify([
+            [clientIdHeader, AddCode_backup_client_id],
+            [Bearer_Header, Main_OAuth + AddUser_UsernameArray[0].access_token]
+        ]);
     }
 
     function FullxmlHttpGet(theUrl, Headers, callbackSuccess, calbackError, key, checkResult, Method, postMessage) {
@@ -19635,6 +19805,8 @@
         }
 
         for (i; i >= 0; i--) {
+            if (WTV_IsData(array[i].data)) continue;
+
             //TODO remove this workaround after some updates
             if (array[i].data[2] && typeof array[i].data[2] === 'string') {
                 array[i].data[2] = array[i].data[2].replace('Streamed', '');
@@ -19671,6 +19843,8 @@
         }
 
         for (i; i >= 0; i--) {
+            if (WTV_IsData(array[i].data)) continue;
+
             //TODO remove this workaround after some updates
             array[i].data[11] = array[i].data[11].replace('Since', '');
             array[i].data[4] = array[i].data[4].replace('Viewers', '');
@@ -19765,12 +19939,10 @@
         Main_clearInterval(PlayVod_SaveOffsetId);
 
         if (PlayVod_isOn) {
-            var vodOffset = OSInterface_getsavedtime() / 1000;
-            if (vodOffset) {
-                Main_setItem('Main_vodOffset', vodOffset);
-            }
+            if (typeof PlayVod_SaveCurrentOffset === 'function') PlayVod_SaveCurrentOffset();
         } else if (PlayClip_isOn) PlayClip_Resume();
         else if (Play_isOn && !Play_isEndDialogVisible() && !Play_StayDialogVisible()) {
+            Play_WebOSLocalSaveLiveResumePoint();
             if (Play_MultiEnable) {
                 var i = 0;
 
@@ -21280,6 +21452,14 @@
         if (Main_IsOn_OSInterface) Android.SetPreviewOthersAudio(volume * Settings_VolumeScale);
     }
 
+    function OSInterface_CanStartSmallPreview() {
+        if (!Main_IsOn_OSInterface) return false;
+
+        if (Android.CanStartSmallPreview) return Android.CanStartSmallPreview();
+
+        return true;
+    }
+
     //public void StartFeedPlayer(String uri, String mainPlaylistString, int position, long resumePosition, boolean isVod)
     //uri =  the url of the playlist or the clip
     //mainPlaylistString = the stringify version of the url playlist content
@@ -21983,6 +22163,7 @@
 
     var Play_ResumeAfterOnlineCounter = 0;
     var Play_ResumeAfterOnlineId;
+    var Play_WebOSLocalLiveResumeFallback = false;
     var Play_isOn = false;
     var Play_ChatBackgroundID = null;
     var Play_Playing = false;
@@ -22415,6 +22596,7 @@
                 if (PlayExtra_PicturePicture) {
                     PlayExtra_Resume(true);
                 }
+                Play_WebOSLocalLiveResumeFallback = true;
                 Play_loadData();
             }
         }
@@ -22479,6 +22661,10 @@
 
     var Play_updateStreamInfoStartId;
     function Play_updateStreamInfoStart() {
+        if (WTV_IsData(Play_data.data)) {
+            Main_Set_history('live', Play_data.data, !Play_isPlaying());
+            return;
+        }
         if (!Play_data.data[14]) return;
 
         var theUrl = Main_helix_api + 'streams?user_id=' + Play_data.data[14];
@@ -22572,6 +22758,11 @@
                 Play_updateStreamInfoMulti(i);
             }
         } else {
+            if (WTV_IsData(Play_data.data)) {
+                Main_Set_history('live', Play_data.data, !Play_isPlaying());
+                return;
+            }
+
             //When update this also update PlayExtra_updateStreamInfo
             Play_updateStreamInfoGet(Main_helix_api + 'streams?user_id=' + Play_data.data[14], 1);
         }
@@ -22581,6 +22772,10 @@
     function Play_updateStreamLogo() {
         if (Play_data.data && Play_data.data.length && Play_data.data[10] !== null && Play_data.data[9] !== null) {
             Play_updateStreamLogoEnd();
+        }
+
+        if (WTV_IsData(Play_data.data)) {
+            return;
         }
 
         Play_updateStreamLogoValuesId = new Date().getTime();
@@ -22721,7 +22916,9 @@
             Play_loadDataId = new Date().getTime();
 
             //On resume to avoid out of sync resumes we run PP synchronous
-            if (synchronous) {
+            if (WTV_IsData(Play_data.data)) {
+                PlayHLS_GetExternalPlayListAsync(WTV_GetPlaybackUrl(Play_data.data), Play_loadDataId, null, Play_loadDataResult);
+            } else if (synchronous) {
                 var StreamData = Play_getStreamData(Play_data.data[6]);
 
                 if (StreamData) Play_loadDataResultEnd(JSON.parse(StreamData));
@@ -22748,14 +22945,15 @@
 
     function Play_loadDataResultEnd(responseObj) {
         if (responseObj.status === 200) {
+            Play_WebOSLocalLiveResumeFallback = false;
             Play_data.AutoUrl = responseObj.url;
-            Play_loadDataSuccessEnd(responseObj.responseText, true);
+            Play_loadDataSuccessEnd(responseObj.responseText, !WTV_IsData(Play_data.data));
             return;
         } else if (responseObj.status === 1 || responseObj.status === 403 || responseObj.status === 404 || responseObj.status === 410) {
             //404 = off line
             //403 = forbidden access
             //410 = api v3 is gone use v5 bug
-            Play_loadDataErrorFinish(responseObj.status === 410, responseObj.status === 403 || responseObj.status === 1);
+            Play_loadDataErrorFinish(responseObj.status === 410, responseObj.status === 403 || responseObj.status === 1, responseObj.status);
             return;
         }
 
@@ -22795,7 +22993,7 @@
         Main_Log('Play_data.playlist\n' + Play_data.playlist);
     }
 
-    function Play_loadDataErrorFinish(error_410, Isforbiden) {
+    function Play_loadDataErrorFinish(error_410, Isforbiden, status) {
         if (Play_EndDialogEnter) {
             Play_EndDialogEnter = 0;
             Play_HideBufferDialog();
@@ -22808,9 +23006,13 @@
             Play_RestorePlayDataValues();
             Main_values.Play_WasPlaying = 0;
             Main_SaveValues();
+        } else if (!PlayExtra_PicturePicture && Play_WebOSLocalLiveResumeFallback && status === 404 && Play_WebOSLocalOpenLiveResumePoint()) {
+            Play_WebOSLocalLiveResumeFallback = false;
         } else if (Play_OlddataSet()) {
+            Play_WebOSLocalLiveResumeFallback = false;
             Play_RestorePlayData(error_410, Isforbiden);
         } else if (!PlayExtra_PicturePicture) {
+            Play_WebOSLocalLiveResumeFallback = false;
             if (Isforbiden) {
                 Play_ForbiddenLive();
             } else {
@@ -23911,6 +24113,10 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
         //Stop all players to make sure no more end call happen
         if (Main_IsOn_OSInterface && fail_type) {
             OSInterface_stopVideo();
+            if (PlayVodClip === 1 && Play_WebOSLocalLiveResumeFallback && Play_WebOSLocalOpenLiveResumePoint()) {
+                Play_WebOSLocalLiveResumeFallback = false;
+                return;
+            }
             Play_showWarningDialog((fail_type === 1 ? STR_PLAYER_ERROR : STR_PLAYER_LAG_ERRO) + Play_GetErrorCode(errorCode), 2000);
         }
 
@@ -24867,6 +25073,10 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
     }
 
     function PlayClip_CheckIfIsLiveStart() {
+        if (UserLiveFeed_FeedPosX >= UserLiveFeedobj_UserVodPos) {
+            PlayClip_OpenLiveStream();
+            return;
+        }
         if (!Main_IsOn_OSInterface || Play_PreviewId) PlayClip_OpenLiveStream();
         else Play_CheckIfIsLiveStart(PlayClip_CheckIfIsLiveResult);
     }
@@ -25323,11 +25533,25 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
             if (Play_StayDialogVisible()) Play_SetControlsVisibility('ShowInStay');
             else if (Play_MultiEnable) Play_SetControlsVisibility('ShowInMulti');
             else if (PlayExtra_PicturePicture) Play_SetControlsVisibility('ShowInPP');
-            else Play_SetControlsVisibility('ShowInLive');
+            else {
+                Play_SetControlsVisibility('ShowInLive');
+                if (WTV_HasRecordingAction()) {
+                    Play_controls[Play_controlsOpenVod].string = 'Open w.tv recording';
+                    Play_controls[Play_controlsOpenVod].setLabel(Play_data.data[2], Play_data.data[1]);
+                    Play_BottomShow(Play_controlsOpenVod);
+                } else {
+                    Play_controls[Play_controlsOpenVod].string = STR_OPEN_BROADCAST;
+                }
+            }
         } else if (PlayVodClip === 2) {
             Play_SetControlsVisibility('ShowInVod');
-            if (PlayVod_ChaptersArray.length) Play_BottomShow(Play_controlsChapters);
-            if (Play_HasLive) Play_BottomShow(Play_controlsOpenLive);
+            if (WTV_IsData(Main_values_Play_data) || WTV_IsData(Play_data.data)) {
+                Play_BottomHide(Play_controlsLocalVodSource);
+                Play_BottomHide(Play_controlsOpenLive);
+            } else {
+                if (PlayVod_ChaptersArray.length) Play_BottomShow(Play_controlsChapters);
+                if (Play_HasLive) Play_BottomShow(Play_controlsOpenLive);
+            }
         } else if (PlayVodClip === 3) {
             Play_SetControlsVisibility('ShowInClip');
             if (PlayClip_HasVOD) Play_BottomShow(Play_controlsOpenVod);
@@ -25508,6 +25732,85 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
         Play_controls[control].defaultValue = value;
         if (Play_controls[control].bottomArrows) Play_controls[control].bottomArrows();
         Play_controls[control].setLabel();
+    }
+
+    function Play_WebOSLocalArchiveEnabled() {
+        return !!(window.STTVWebOSLocalVod && window.STTVWebOSLocalVod.getState && window.STTVWebOSLocalVod.getState().enabled);
+    }
+
+    var Play_WebOSLocalLiveResumeItem = 'webos_local_live_resume_point';
+
+    function Play_WebOSLocalSaveLiveResumePoint() {
+        if (!Play_WebOSLocalArchiveEnabled() || !Play_isOn || !Play_data || !Play_data.data || !Play_data.data[12]) return;
+        var liveId = Play_data.data[7] || Play_data.data[6] || '';
+        if (!liveId) return;
+        Main_setItem(
+            Play_WebOSLocalLiveResumeItem,
+            JSON.stringify({
+                id: liveId,
+                date: new Date().getTime(),
+                data: Main_Slice(Play_data.data),
+                vodid: ''
+            })
+        );
+    }
+
+    function Play_WebOSLocalGetLiveResumePoint() {
+        if (!Play_WebOSLocalArchiveEnabled() || !Play_data || !Play_data.data || !Play_data.data[12]) return null;
+        var liveId = Play_data.data[7] || Play_data.data[6] || '';
+        var historyPos = AddUser_IsUserSet() && liveId ? Main_history_GetById('live', liveId) : null;
+        var stored = null;
+        try {
+            stored = Main_getItemJson(Play_WebOSLocalLiveResumeItem, null);
+        } catch (e) {}
+        if ((!historyPos || !historyPos.date) && stored && stored.id && String(stored.id) === String(liveId)) {
+            historyPos = stored;
+        }
+        if (!historyPos) {
+            historyPos = {
+                id: liveId,
+                date: new Date().getTime(),
+                data: Play_data.data,
+                vodid: ''
+            };
+        }
+        var startedAtMs = new Date(Play_data.data[12]).getTime();
+        var resumeDate = parseInt(historyPos.date);
+        if (!startedAtMs || !resumeDate || resumeDate <= startedAtMs) return null;
+        return {
+            id: historyPos.id || liveId,
+            date: resumeDate,
+            data: Main_Slice(historyPos.data && historyPos.data.length ? historyPos.data : Play_data.data),
+            vodid: historyPos.vodid || ''
+        };
+    }
+
+    function Play_WebOSLocalOpenLiveResumePoint() {
+        var historyPos = Play_WebOSLocalGetLiveResumePoint();
+        if (!historyPos) return false;
+        Main_values_Play_data = historyPos.data;
+        Play_VodObj = historyPos;
+        Play_OpenRewind = false;
+        Play_showWarningMiddleDialog('Opening local archive at saved position', 2500);
+        Main_OPenAsVod(historyPos);
+        return true;
+    }
+
+    function Play_PrepareLiveAsLocalVod(rewindId) {
+        Main_values_Play_data = Play_data.data;
+        Main_values.Main_selectedChannelDisplayname = Play_data.data[1];
+        Main_values.Main_selectedChannel = Play_data.data[6];
+        Main_values.Main_selectedChannelLogo = Play_data.data[9];
+        Main_values.Main_selectedChannelPartner = Play_data.data[10];
+        Main_values.Main_selectedChannel_id = Play_data.data[14];
+        Main_values.ChannelVod_vodId = rewindId || '';
+        ChannelVod_createdAt = Play_data.data[11] || '';
+        ChannelVod_language = Play_data.data[15] || '';
+        ChannelVod_title = Play_data.data[2] || Play_data.data[1] || '';
+        ChannelVod_game = Play_data.data[3] ? STR_STARTED + STR_PLAYING + Play_data.data[3] : '';
+        ChannelVod_views = Play_data.data[13] ? Main_formatNumber(Play_data.data[13]) : '';
+        if (Play_data.data[12]) Play_DurationSeconds = parseInt((Date.now() - new Date(Play_data.data[12]).getTime()) / 1000);
+        if (!Play_DurationSeconds || Play_DurationSeconds < 0) Play_DurationSeconds = 0;
     }
 
     function Play_SetFullScreen(isFull) {
@@ -25747,7 +26050,8 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
             var isStay = Play_StayDialogVisible();
             var text = STR_LIVE;
 
-            if (rerun) text = STR_RERUN;
+            if (WTV_IsData(Play_data.data)) text = WTV_GetLiveBadgeText(Play_data.data);
+            else if (rerun) text = STR_RERUN;
             else if (isStay) text = STR_CH_IS_OFFLINE;
 
             div +=
@@ -25763,7 +26067,13 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
                 STR_SPACE_HTML +
                 '</div>';
         } else if (live_vod_clip === 1) {
-            div += STR_SPACE_HTML + STR_SPACE_HTML + '<div class="partnericon_text" style="background: #00a94b">&nbsp;&nbsp;VOD&nbsp;&nbsp;</div>';
+            var vodText = WTV_IsData(Main_values_Play_data) || WTV_IsData(Play_data.data) ? 'W.TV VOD' : 'VOD';
+            div +=
+                STR_SPACE_HTML +
+                STR_SPACE_HTML +
+                '<div class="partnericon_text" style="background: #00a94b">&nbsp;&nbsp;' +
+                vodText +
+                '&nbsp;&nbsp;</div>';
         } else {
             div += STR_SPACE_HTML + STR_SPACE_HTML + '<div class="partnericon_text" style="background: #F05700">&nbsp;&nbsp;CLIP&nbsp;&nbsp;</div>';
         }
@@ -26027,10 +26337,14 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
             }
         } else if (Play_EndCounter === 2) {
             if (PlayVodClip === 1) {
-                Main_values_Play_data = Play_VodObj.data;
-                Play_ClearPP();
-                PlayVod_PreshutdownStream();
-                Main_OPenAsVod(Play_VodObj);
+                if (WTV_IsData(Play_data.data)) {
+                    WTV_OpenRecordingFromLive();
+                } else {
+                    Main_values_Play_data = Play_VodObj.data;
+                    Play_ClearPP();
+                    PlayVod_PreshutdownStream();
+                    Main_OPenAsVod(Play_VodObj);
+                }
             } else if (PlayVodClip === 3) {
                 PlayClip_OpenVod();
                 if (!PlayClip_HasVOD) canHide = false;
@@ -26080,13 +26394,23 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
             Play_EndTextsReset();
             Play_HasVod = false;
 
-            if (AddUser_IsUserSet()) {
+            if (WTV_HasRecordingAction()) {
+                Play_VodObj = {data: Play_data.data, vodid: (WTV_GetMeta(Play_data.data) || {}).recording_group_id || ''};
+                Main_textContent('dialog_end_vod_text_2', 'Open w.tv recording');
+                Main_getElementById('dialog_end_2').style.display = 'inline-block';
+                Main_innerHTML('end_vod_name_text_2', Play_data.data[1]);
+                Main_textContent('end_vod_title_text_2', Play_data.data[2]);
+                Play_HasVod = true;
+            } else if (AddUser_IsUserSet()) {
                 var historyPos = Main_history_GetById('live', Play_data.data[7]);
                 if (historyPos) {
                     Play_VodObj = historyPos;
 
-                    if (Play_VodObj.vodid) {
-                        Main_textContent('dialog_end_vod_text_2', STR_OPEN_LAST_BROADCAST);
+                    if (
+                        Play_VodObj.vodid ||
+                        (window.STTVWebOSLocalVod && window.STTVWebOSLocalVod.getState && window.STTVWebOSLocalVod.getState().enabled)
+                    ) {
+                        Main_textContent('dialog_end_vod_text_2', Play_VodObj.vodid ? STR_OPEN_LAST_BROADCAST : 'Open local archive');
                         Main_getElementById('dialog_end_2').style.display = 'inline-block';
                         Main_innerHTML('end_vod_name_text_2', Play_VodObj.data[1]);
                         Main_textContent('end_vod_title_text_2', Play_VodObj.data[2]);
@@ -26281,6 +26605,11 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
 
     function Play_StayCheckLive() {
         Play_loadDataId = new Date().getTime();
+
+        if (WTV_IsData(Play_data.data)) {
+            PlayHLS_GetExternalPlayListAsync(WTV_GetPlaybackUrl(Play_data.data), Play_loadDataId, null, Play_StayCheckLiveResult);
+            return;
+        }
 
         PlayHLS_GetPlayListAsync(true, Play_data.data[6], Play_loadDataId, null, Play_StayCheckLiveResult);
     }
@@ -26698,6 +27027,29 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
         text = Play_MultiEnable ? STR_EXIT_AGAIN_MULTI : text;
         Main_textContent('play_dialog_exit_text', text);
         Play_showExitDialog();
+    }
+
+    function Play_ChannelRockerSwitchLive(direction) {
+        if (Play_isEndDialogVisible() || Play_MultiDialogVisible()) return;
+        if (UserLiveFeed_loadingData[UserLiveFeedobj_UserLivePos]) return;
+        if (!UserLiveFeed_DataObj[UserLiveFeedobj_UserLivePos]) return;
+
+        var size = UserLiveFeed_itemsCount[UserLiveFeedobj_UserLivePos] || Sidepannel_GetSize();
+        var currentId = Play_data && Play_data.data ? Play_data.data[14] : null;
+        var currentPos = currentId && Sidepannel_Positions.hasOwnProperty(currentId) ? Sidepannel_Positions[currentId] : Sidepannel_PosFeed;
+        var nextPos = currentPos + direction;
+        var nextData;
+
+        while (nextPos >= 0 && nextPos < size) {
+            nextData = UserLiveFeed_DataObj[UserLiveFeedobj_UserLivePos][nextPos];
+            if (nextData && !nextData.image && nextData[14]) {
+                Sidepannel_PosFeed = nextPos;
+                Main_values.Play_isHost = false;
+                Main_OpenLiveStream(nextData, nextPos, UserLiveFeed_side_ids, Sidepannel_handleKeyDown, false, 'Side_Panel');
+                return;
+            }
+            nextPos += direction;
+        }
     }
 
     function Play_CheckPreview() {
@@ -27202,14 +27554,10 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
                 Play_controls[Play_controlsChat].enterKey(1);
                 break;
             case KEY_PG_UP:
-                if (UserLiveFeed_isPreviewShowing()) UserLiveFeed_KeyUpDown(-1);
-                else if (Play_isFullScreen && Play_isChatShown()) Play_KeyChatPosChage();
-                else UserLiveFeed_ShowFeed();
+                Play_ChannelRockerSwitchLive(-1);
                 break;
             case KEY_PG_DOWN:
-                if (UserLiveFeed_isPreviewShowing()) UserLiveFeed_KeyUpDown(1);
-                else if (Play_isFullScreen && Play_isChatShown()) Play_KeyChatSizeChage();
-                else UserLiveFeed_ShowFeed();
+                Play_ChannelRockerSwitchLive(1);
                 break;
             case KEY_2:
             case KEY_MEDIA_FAST_FORWARD:
@@ -27272,6 +27620,7 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
     var Play_controlsFollow = temp_controls_pos++;
     var Play_controlsSpeed = temp_controls_pos++;
     var Play_controlsExternal = temp_controls_pos++;
+    var Play_controlsLocalVodSource = temp_controls_pos++;
     var Play_controlsRewind = temp_controls_pos++;
     var Play_controlsQuality = temp_controls_pos++;
     var Play_controlsQualityMini = temp_controls_pos++;
@@ -27496,7 +27845,8 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
             defaultValue: null,
             enterKey: function () {
                 Play_ForceHidePannel();
-                PlayClip_OpenVod();
+                if (WTV_IsData(Play_data.data)) WTV_OpenRecordingFromLive();
+                else PlayClip_OpenVod();
             },
             setLabel: function (title, name) {
                 Main_innerHTML(
@@ -27598,11 +27948,11 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
 
         Play_controls[Play_controlsExternal] = {
             //External
-            ShowInLive: true,
-            ShowInVod: true,
-            ShowInClip: true,
-            ShowInPP: true,
-            ShowInMulti: true,
+            ShowInLive: false,
+            ShowInVod: false,
+            ShowInClip: false,
+            ShowInPP: false,
+            ShowInMulti: false,
             ShowInChat: false,
             ShowInAudio: false,
             ShowInAudioPP: false,
@@ -27641,6 +27991,40 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
             }
         };
 
+        Play_controls[Play_controlsLocalVodSource] = {
+            //webOS local archive VOD source switch
+            ShowInLive: false,
+            ShowInVod: true,
+            ShowInClip: false,
+            ShowInPP: false,
+            ShowInMulti: false,
+            ShowInChat: false,
+            ShowInAudio: false,
+            ShowInAudioPP: false,
+            ShowInAudioMulti: false,
+            ShowInPreview: false,
+            ShowInStay: false,
+            icons: 'refresh',
+            offsetY: -7,
+            string: 'VOD source',
+            values: ['Twitch VOD'],
+            defaultValue: 0,
+            enterKey: function (PlayVodClip) {
+                if (PlayVodClip !== 2) return;
+                PlayVod_WebOSLocalSwitchSource();
+                Play_ResetPanel(PlayVodClip);
+            },
+            updown: function () {
+                PlayVod_WebOSLocalSwitchSource();
+            },
+            setLabel: function () {
+                PlayVod_WebOSLocalUpdateControlLabel();
+            },
+            bottomArrows: function () {
+                Play_BottomArrows(this.position);
+            }
+        };
+
         Play_controls[Play_controlsRewind] = {
             //open rewind
             ShowInLive: true,
@@ -27660,15 +28044,20 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
             values: null,
             defaultValue: null,
             enterKey: function () {
+                if (WTV_IsData(Play_data.data)) {
+                    Play_ForceHidePannel();
+                    WTV_OpenRecordingFromLive();
+                    return;
+                }
+
                 var rewindId = Play_RewindId[Play_data.data[7]];
 
-                if (rewindId) {
-                    Main_values.ChannelVod_vodId = rewindId;
-                } else {
+                if (!rewindId && !Play_WebOSLocalArchiveEnabled()) {
                     Play_showWarningMiddleDialog(STR_OPEN_REWIND_FAIL, 3000);
                     return;
                 }
 
+                Play_PrepareLiveAsLocalVod(rewindId);
                 Play_ForceHidePannel();
                 Main_vodOffset = 0;
 
@@ -30504,6 +30893,39 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
         }
     }
 
+    function PlayHLS_GetExternalPlayListAsync(playbackUrl, CheckId_y, CheckId_x, callBackSuccess) {
+        OSInterface_XmlHttpGetFull(
+            playbackUrl,
+            DefaultHttpGetTimeout,
+            null,
+            null,
+            null,
+            'PlayHLS_ExternalPlayListUrlResult',
+            CheckId_y,
+            '1',
+            '0',
+            playbackUrl,
+            null,
+            CheckId_x,
+            callBackSuccess.name,
+            null
+        );
+    }
+
+    function PlayHLS_ExternalPlayListUrlResult(result, checkResult, check_1, check_2, check_3, check_4, check_5, callBackSuccess) {
+        var response = JSON.parse(result);
+
+        response.checkResult = checkResult;
+        response.url = check_3;
+
+        eval(callBackSuccess)(
+            // jshint ignore:line
+            JSON.stringify(response),
+            check_5 ? parseInt(check_5) : null,
+            parseInt(checkResult)
+        );
+    }
+
     function PlayHLS_GetToken(isLive, Channel_or_VOD_Id, CheckId_y, CheckId_x, callBackSuccess, useProxy) {
         OSInterface_XmlHttpGetFull(
             PlayClip_BaseUrl, //String urlString
@@ -31835,7 +32257,7 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
             } else {
                 if (!Main_vodOffset) {
                     Chat_offset = 0;
-                    Chat_Init();
+                    if (!WTV_IsData(Main_values_Play_data)) Chat_Init();
                 }
 
                 PlayVod_PosStart();
@@ -31970,6 +32392,27 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
         }
     }
 
+    function PlayVod_CurrentOffsetSeconds() {
+        var vodOffset = Main_IsOn_OSInterface ? parseInt(OSInterface_gettime() / 1000) : Chat_fakeClock;
+        if (vodOffset > 0) return vodOffset;
+        if (PlayVod_ResumeTime > 0) return PlayVod_ResumeTime;
+        if (Main_vodOffset > 0) return Main_vodOffset;
+        return 0;
+    }
+
+    function PlayVod_SaveCurrentOffset() {
+        if (!PlayVod_isOn || Play_PreviewId) return 0;
+
+        var vodOffset = PlayVod_CurrentOffsetSeconds();
+        if (vodOffset > 0) {
+            Main_setItem('Main_vodOffset', vodOffset);
+            PlayVod_SaveVodIds(vodOffset);
+            PlayVod_ResumeTime = vodOffset;
+            PlayVod_currentTime = vodOffset * 1000;
+        }
+        return vodOffset;
+    }
+
     //Browsers crash trying to get the streams link
     function PlayVod_loadDataSuccessFake() {
         PlayVod_qualities = [
@@ -32011,9 +32454,144 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
         Main_setTimeout(Play_HideBufferDialog, 1000);
     }
 
-    var PlayVod_autoUrl;
-    var PlayVod_loadDataId = 0;
-    function PlayVod_loadData() {
+    function PlayVod_WebOSLocalBridge() {
+        if (WTV_IsData(Main_values_Play_data) || WTV_IsData(Play_data.data)) return null;
+        return window.STTVWebOSLocalVod && Main_IsOn_OSInterface ? window.STTVWebOSLocalVod : null;
+    }
+
+    function PlayVod_WebOSLocalCurrentSeconds(preferPlayerTime) {
+        var playerPosition = 0;
+        if (preferPlayerTime && Main_IsOn_OSInterface) {
+            playerPosition = OSInterface_gettime() / 1000;
+            if (playerPosition > 0.25) return playerPosition;
+        }
+        var position = Main_vodOffset || PlayVod_ResumeTime || 0;
+        if (!position && Main_IsOn_OSInterface) position = OSInterface_gettime() / 1000;
+        return position > 0 ? position : 0;
+    }
+
+    function PlayVod_WebOSLocalDurationSeconds(startedAt) {
+        var durationSeconds = Play_DurationSeconds || 0;
+        if (!durationSeconds && Main_values_Play_data && Main_values_Play_data.length > 11) {
+            if (typeof Main_values_Play_data[11] === 'number') durationSeconds = Main_values_Play_data[11];
+            else if (typeof Main_values_Play_data[11] === 'string' && Main_values_Play_data[11].indexOf('h') > -1)
+                durationSeconds = Play_timeHMS(Main_values_Play_data[11]);
+        }
+        if (!durationSeconds && Main_values_Play_data && Main_values_Play_data.length > 15 && typeof Main_values_Play_data[15] === 'string') {
+            durationSeconds = Play_timeHMS(Main_values_Play_data[15]);
+        }
+        if (!durationSeconds && startedAt) {
+            durationSeconds = parseInt((Date.now() - new Date(startedAt).getTime()) / 1000);
+        }
+        return durationSeconds > 0 ? durationSeconds : 0;
+    }
+
+    function PlayVod_WebOSLocalMeta(preferPlayerTime) {
+        var startedAt = Main_values_Play_data && Main_values_Play_data.length > 12 ? Main_values_Play_data[12] : '';
+        var durationSeconds = PlayVod_WebOSLocalDurationSeconds(startedAt);
+        var login = Main_values.Main_selectedChannel || Main_values.Main_selectedChannelDisplayname || '';
+        var currentSeconds = PlayVod_WebOSLocalCurrentSeconds(preferPlayerTime);
+
+        if (!login || !startedAt || !durationSeconds) return null;
+
+        return {
+            login: login,
+            vodId: Main_values.ChannelVod_vodId,
+            startedAt: startedAt,
+            durationSeconds: durationSeconds,
+            positionSeconds: currentSeconds,
+            playerPositionSeconds: currentSeconds,
+            toleranceSeconds: 600
+        };
+    }
+
+    function PlayVod_WebOSLocalNotify(message) {
+        if (message) Play_showWarningMiddleDialog(message, 2500);
+    }
+
+    function PlayVod_WebOSLocalUpdateControlLabel(state) {
+        var control = Play_controls[Play_controlsLocalVodSource];
+        if (!control || !control.doc_title || !control.doc_name) return;
+        if (!state && PlayVod_WebOSLocalBridge()) state = PlayVod_WebOSLocalBridge().getState();
+        if (!state) state = {label: 'Twitch VOD'};
+        Main_textContentWithEle(control.doc_title, 'VOD source');
+        Main_textContentWithEle(control.doc_name, state.label || 'Twitch VOD');
+    }
+
+    function PlayVod_WebOSLocalActions() {
+        return {
+            updateState: function (state) {
+                PlayVod_WebOSLocalUpdateControlLabel(state);
+            },
+            notify: function (message) {
+                PlayVod_WebOSLocalNotify(message);
+            },
+            playLocal: function (result) {
+                if (!PlayVod_isOn || !result || !result.url) return;
+                var targetSeconds = result.twitchOffsetSeconds > 0 ? result.twitchOffsetSeconds : result.offsetSeconds || 0;
+                Play_showBufferDialog();
+                PlayVod_autoUrl = result.url;
+                PlayVod_playlist = result.playlist || '';
+                Main_vodOffset = targetSeconds > 0 ? targetSeconds : 0.001;
+                PlayVod_ResumeTime = Main_vodOffset;
+                PlayVod_currentTime = Main_vodOffset * 1000;
+                if (Main_values.ChannelVod_vodId) PlayVod_SaveVodIds(Main_vodOffset);
+                PlayVod_loadDataSuccessEnd(PlayVod_playlist);
+            },
+            playTwitch: function (result) {
+                if (!PlayVod_isOn) return;
+                if (result && result.offsetSeconds > 0) {
+                    Main_vodOffset = result.offsetSeconds;
+                    PlayVod_ResumeTime = Main_vodOffset;
+                    if (Main_values.ChannelVod_vodId) PlayVod_SaveVodIds(Main_vodOffset);
+                }
+                if (!Main_values.ChannelVod_vodId) {
+                    Play_HideBufferDialog();
+                    if (typeof Main_OPenAsVod_PreshutdownStream === 'function' && typeof Main_openStream === 'function') {
+                        Main_OPenAsVod_PreshutdownStream();
+                        Main_openStream();
+                        return;
+                    }
+                    PlayVod_WarnEnd((result && result.reason) || 'Local archive unavailable');
+                    return;
+                }
+                Play_showBufferDialog();
+                PlayVod_loadDataTwitch();
+            }
+        };
+    }
+
+    function PlayVod_WebOSLocalLoadData() {
+        var bridge = PlayVod_WebOSLocalBridge();
+        if (!bridge || Play_PreviewId || PlayVod_replay) return false;
+
+        var meta = PlayVod_WebOSLocalMeta(false);
+        if (!meta) return false;
+
+        return bridge.load(meta, PlayVod_WebOSLocalActions());
+    }
+
+    function PlayVod_WebOSLocalSwitchSource() {
+        var bridge = PlayVod_WebOSLocalBridge();
+        if (WTV_IsData(Main_values_Play_data) || WTV_IsData(Play_data.data)) {
+            PlayVod_WebOSLocalNotify('Already using W.TV archive');
+            return;
+        }
+        if (!bridge || !PlayVod_isOn) {
+            PlayVod_WebOSLocalNotify('Local archive integration is not available');
+            return;
+        }
+
+        var meta = PlayVod_WebOSLocalMeta(true);
+        if (!meta) {
+            PlayVod_WebOSLocalNotify('No VOD metadata for local archive match');
+            return;
+        }
+
+        bridge.switchSource(meta, PlayVod_WebOSLocalActions());
+    }
+
+    function PlayVod_loadDataTwitch() {
         //Main_Log('PlayVod_loadData');
 
         if (Main_IsOn_OSInterface) {
@@ -32023,12 +32601,25 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
         } else PlayVod_loadDataSuccessFake();
     }
 
+    var PlayVod_autoUrl;
+    var PlayVod_loadDataId = 0;
+    function PlayVod_loadData() {
+        if (WTV_IsData(Main_values_Play_data) && WTV_PlayVodLoadData()) return;
+        if (PlayVod_WebOSLocalLoadData()) return;
+
+        PlayVod_loadDataTwitch();
+    }
+
     function PlayVod_loadDataResult(response) {
         if (PlayVod_isOn && response) {
             var responseObj = JSON.parse(response);
 
             if (responseObj.checkResult > 0 && responseObj.checkResult === PlayVod_loadDataId) {
                 if (responseObj.status === 200) {
+                    if (WTV_IsData(Main_values_Play_data)) {
+                        WTV_PlayVodLoadDataSuccess(responseObj);
+                        return;
+                    }
                     PlayVod_autoUrl = responseObj.url;
                     PlayVod_loadDataSuccessEnd(responseObj.responseText);
                     return;
@@ -32130,7 +32721,7 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
             PlayVod_onPlayerStartPlay(Main_vodOffset * 1000);
 
             Chat_offset = Main_vodOffset;
-            Chat_Init();
+            if (!WTV_IsData(Main_values_Play_data)) Chat_Init();
             Main_setItem('Main_vodOffset', Main_vodOffset);
             PlayVod_ResumeTime = Main_vodOffset;
             Main_vodOffset = 0;
@@ -32166,10 +32757,14 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
         }
 
         if (PlayVod_isOn) {
+            if (!SkipSaveOffset) PlayVod_SaveCurrentOffset();
             PlayVod_PreshutdownStream(!SkipSaveOffset);
+            if (PlayVod_WebOSLocalBridge()) PlayVod_WebOSLocalBridge().shutdown();
             PlayVod_qualities = [];
             PlayVod_playlist = null;
             Play_exitMain();
+        } else if (PlayVod_WebOSLocalBridge()) {
+            PlayVod_WebOSLocalBridge().shutdown();
         }
     }
 
@@ -32609,7 +33204,7 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
     }
 
     function PlayVod_SaveVodIds(time) {
-        if (time > 0) Main_history_UpdateVodClip(Main_values.ChannelVod_vodId, time, 'vod');
+        if (time > 0 && Main_values.ChannelVod_vodId) Main_history_UpdateVodClip(Main_values.ChannelVod_vodId, time, 'vod');
     }
 
     var Play_HideVodDialogId;
@@ -32677,6 +33272,8 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
     function PlayVod_CheckIfIsLiveStart() {
         if (UserLiveFeed_DataObj[UserLiveFeed_FeedPosX][UserLiveFeed_FeedPosY[UserLiveFeed_FeedPosX]].image) {
             UserLiveFeed_OpenBanner();
+        } else if (UserLiveFeed_FeedPosX >= UserLiveFeedobj_UserVodPos) {
+            PlayVod_OpenLiveStream();
         } else if (!Main_IsOn_OSInterface || Play_PreviewId) PlayVod_OpenLiveStream();
         else if (Play_CheckLiveThumb()) Play_CheckIfIsLiveStart(PlayVod_CheckIfIsLiveResult);
     }
@@ -33103,6 +33700,11 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
         '{"query":"{video(id:\\"%x\\"){seekPreviewsURL,creator{roles{isPartner},id,login,displayName,language,profileImageURL(width:300)},muteInfo{mutedSegmentConnection{nodes{duration,offset}}},game{displayName,id},duration,viewCount,language,title,animatedPreviewURL,createdAt,id,thumbnailURLs(width:640,height:360),creator{id,displayName,login},moments(momentRequestType:VIDEO_CHAPTER_MARKERS types:[GAME_CHANGE]) {edges{...VideoPlayerVideoMomentEdge}}}}fragment VideoPlayerVideoMomentEdge on VideoMomentEdge{node {...VideoPlayerVideoMoment}}fragment VideoPlayerVideoMoment on VideoMoment{durationMilliseconds positionMilliseconds type description details{...VideoPlayerGameChangeDetails}}fragment VideoPlayerGameChangeDetails on GameChangeMomentDetails{game{id displayName}}"}';
 
     function PlayVod_get_vod_info() {
+        if (WTV_IsData(Main_values_Play_data)) {
+            WTV_PlayVodApplyInfo();
+            return;
+        }
+
         FullxmlHttpGet(
             PlayClip_BaseUrl,
             Play_base_backup_headers_Array,
@@ -34410,6 +35012,8 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
     function Screens_createCellVod(id, idArray, valuesArray, key, Extra_when, Extra_until) {
         ScreenObj[key].DataObj[id] = valuesArray;
 
+        var sourceLabel = WTV_IsData(valuesArray) ? '<span style="color:#b26cff;">W.TV</span>' : valuesArray[5];
+
         return (
             '<div id="' +
             idArray[3] +
@@ -34452,7 +35056,7 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
             '</span>' +
             STR_SPACE_HTML +
             '<span>' +
-            valuesArray[5] +
+            sourceLabel +
             '</span></div></div><div class="' +
             (Extra_when ? 'stream_info_live_title_single_line' : 'stream_info_live_title') +
             '">' +
@@ -34872,6 +35476,7 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
 
         if (
             ScreenObj[key].PreviewEnable &&
+            OSInterface_CanStartSmallPreview() &&
             !Main_isStopped &&
             Screens_IsInUse(key) &&
             Screens_ObjNotNull(key) &&
@@ -40991,7 +41596,7 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
     function ScreensObj_VodCellArray(cell, isQuery, game_id, game_name) {
         if (isQuery) {
             return [
-                ScreensObj_VodGetPreview(cell.thumbnailURLs[0], cell.animatedPreviewURL), //0
+                ScreensObj_VodGetPreview(cell.thumbnailURLs && cell.thumbnailURLs[0] ? cell.thumbnailURLs[0] : '', cell.animatedPreviewURL), //0
                 cell.creator ? cell.creator.displayName : '', //1
                 Main_videoCreatedAt(cell.createdAt), //2
                 cell.game_name ? cell.game_name : game_name, //3
@@ -41364,7 +41969,7 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
 
         if (UseHeaders) {
             if (AddUser_UserHasToken()) {
-                Main_Bearer_User_Headers[1][1] = Bearer + AddUser_UsernameArray[0].access_token;
+                HttpGetEnsureUserHeader();
 
                 headers = Main_Bearer_User_Headers;
             } else {
@@ -41826,6 +42431,28 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
         ttv_lolProxy: {
             //Migrated to dialog
             values: ['no', 'yes'],
+            defaultValue: 1
+        },
+        webos_ttv_lol_proxy: {
+            //Migrated to dialog
+            values: ['no', 'yes'],
+            defaultValue: 2
+        },
+        webos_ttv_lol_proxy_url: {
+            //Migrated to dialog
+            values: ['None'],
+            set_values: [''],
+            defaultValue: 1
+        },
+        webos_ttv_lol_proxy_settings: {
+            values: ['None'],
+            set_values: [''],
+            defaultValue: 1
+        },
+        local_archive_endpoint: {
+            //Migrated to dialog
+            values: ['None'],
+            set_values: [''],
             defaultValue: 1
         },
         proxy_timeout: {
@@ -42664,6 +43291,13 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
         div += Settings_Content('speed_adjust', dis_ena, STR_SPEED_ADJUST, STR_SPEED_ADJUST_SUMMARY);
 
         //Dialog settings
+        div += Settings_Content(
+            'webos_ttv_lol_proxy_settings',
+            [STR_ENTER_TO_OPEN],
+            STR_WEBOS_TTVLOL_PROXY_SETTINGS,
+            STR_WEBOS_TTVLOL_PROXY_SETTINGS_SUMMARY
+        );
+        div += Settings_Content('local_archive_endpoint', [STR_ENTER_TO_OPEN], 'Local archive endpoint', 'Set Local VOD archive endpoint URL.');
         //div += Settings_Content('proxy_settings', [STR_ENTER_TO_OPEN], PROXY_SETTINGS, null);
         div += Settings_Content('player_extracodecs', [STR_ENTER_TO_OPEN], STR_PLAYER_EXTRA_CODEC, STR_PLAYER_EXTRA_CODEC_SUMMARY);
         div += Settings_Content('blocked_codecs', [STR_ENTER_TO_OPEN], STR_BLOCKED_CODEC, STR_BLOCKED_CODEC_SUMMARY);
@@ -42834,6 +43468,7 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
         Settings_set_all_notification();
         Settings_SetLang();
         Settings_SetSpeed_adjust();
+        Settings_SetWebOsTtvLolProxy();
 
         Settings_SetResBitRate(0);
 
@@ -43105,6 +43740,7 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
         else if (position === 'ttv_lolProxy') Settings_set_all_proxy('ttv_lolProxy');
         else if (position === 'k_twitch') Settings_set_all_proxy('k_twitch');
         else if (position === 'T1080') Settings_set_all_proxy('T1080');
+        else if (position === 'webos_ttv_lol_proxy') Settings_SetWebOsTtvLolProxy();
         else if (position === 'vod_seek_min') Settings_check_min_seek();
         else if (position === 'vod_seek_max') Settings_check_max_seek();
         else if (position === 'auto_minimize_inactive') Settings_SetAutoMinimizeTimeout();
@@ -43261,6 +43897,200 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
         }
 
         return 3;
+    }
+
+    var Settings_WebOsTtvLolProxyDefault = 'chromium.api.cdn-perfprod.com:2023,firefox.api.cdn-perfprod.com:2023';
+
+    function Settings_GetWebOsTtvLolProxyUrl() {
+        return Main_getItemString('webos_ttv_lol_proxy_url_value', Settings_WebOsTtvLolProxyDefault);
+    }
+
+    function Settings_SetWebOsTtvLolProxy() {
+        Main_setItem('STTV_TTVLOL_ENABLED', Settings_Obj_default('webos_ttv_lol_proxy') ? '1' : '0');
+        Main_setItem('STTV_TTVLOL_PROXIES', Settings_GetWebOsTtvLolProxyUrl());
+    }
+
+    function Settings_EscapeHtml(value) {
+        return String(value || '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
+    var Settings_TextInputSave = null;
+    var Settings_TextInputCancel = null;
+    var Settings_TextInputFocusId = null;
+
+    function Settings_TextInputShow(title, currentValue, placeholder, saveCallback, cancelCallback) {
+        Settings_DialoghandleKeyReturnAfter();
+        Settings_TextInputSave = saveCallback;
+        Settings_TextInputCancel = cancelCallback;
+
+        Main_innerHTML(
+            'dialog_settings_text',
+            '<div class="about_text_title">' +
+                title +
+                '</div>' +
+                STR_BR +
+                '<input id="settings_text_input" class="input_class" type="text" placeholder="' +
+                Settings_EscapeHtml(placeholder || '') +
+                '" value="' +
+                Settings_EscapeHtml(currentValue || '') +
+                '" />' +
+                STR_BR +
+                '<div class="about_text_title">' +
+                STR_CLOSE_THIS +
+                '</div>'
+        );
+        Main_ShowElement('dialog_settings');
+        Main_addEventListener('keydown', Settings_TextInputHandleKeyDown);
+
+        Settings_TextInputFocusId = Main_setTimeout(
+            function () {
+                var input = Main_getElementById('settings_text_input');
+                if (input) input.focus();
+            },
+            500,
+            Settings_TextInputFocusId
+        );
+    }
+
+    function Settings_TextInputClose() {
+        Main_clearTimeout(Settings_TextInputFocusId);
+        var input = Main_getElementById('settings_text_input');
+        if (input) input.blur();
+        Main_removeEventListener('keydown', Settings_TextInputHandleKeyDown);
+        Main_HideElement('dialog_settings');
+    }
+
+    function Settings_TextInputSaveAndClose() {
+        var input = Main_getElementById('settings_text_input');
+        var value = input ? input.value : '';
+        var saveCallback = Settings_TextInputSave;
+        Settings_TextInputSave = null;
+        Settings_TextInputCancel = null;
+        Settings_TextInputClose();
+        if (saveCallback) saveCallback(value);
+    }
+
+    function Settings_TextInputCancelAndClose() {
+        var cancelCallback = Settings_TextInputCancel;
+        Settings_TextInputSave = null;
+        Settings_TextInputCancel = null;
+        Settings_TextInputClose();
+        if (cancelCallback) cancelCallback();
+    }
+
+    function Settings_TextInputHandleKeyDown(event) {
+        switch (event.keyCode) {
+            case KEY_KEYBOARD_DONE:
+            case KEY_ENTER:
+            case KEY_DOWN:
+                Settings_TextInputSaveAndClose();
+                break;
+            case KEY_KEYBOARD_BACKSPACE:
+            case KEY_RETURN:
+                Settings_TextInputCancelAndClose();
+                break;
+            default:
+                break;
+        }
+    }
+
+    function Settings_WebOsTtvLolProxyUrlSummary() {
+        return STR_WEBOS_TTVLOL_PROXY_URL_SUMMARY + STR_BR + STR_BR + Settings_EscapeHtml(Settings_GetWebOsTtvLolProxyUrl());
+    }
+
+    function Settings_WebOsTtvLolProxyUrlPrompt() {
+        var currentValue = Settings_GetWebOsTtvLolProxyUrl();
+        Settings_TextInputShow(
+            STR_WEBOS_TTVLOL_PROXY_URL_PROMPT,
+            currentValue,
+            Settings_WebOsTtvLolProxyDefault,
+            function (nextValue) {
+                nextValue = String(nextValue || '')
+                    .replace(/[\r\n]+/g, ',')
+                    .trim();
+                if (!nextValue) nextValue = Settings_WebOsTtvLolProxyDefault;
+                Main_setItem('webos_ttv_lol_proxy_url_value', nextValue);
+                Settings_SetWebOsTtvLolProxy();
+                Settings_DialogShowWebOsTtvLolProxy(false);
+            },
+            function () {
+                Settings_DialogShowWebOsTtvLolProxy(false);
+            }
+        );
+    }
+
+    function Settings_GetLocalArchiveEndpoint() {
+        try {
+            var value = localStorage.getItem('sttv_webos_local_archive_endpoint');
+            if (value !== null) return Settings_NormalizeEndpointUrl(value);
+        } catch (e) {}
+        return Settings_NormalizeEndpointUrl('http://192.168.0.109:18080');
+    }
+
+    function Settings_NormalizeEndpointUrl(value) {
+        value = String(value || '')
+            .replace(/\r|\n/g, '')
+            .trim()
+            .replace(/\/+$/, '');
+        if (value && !/^https?:\/\//i.test(value)) value = 'http://' + value;
+        return value;
+    }
+
+    function Settings_LocalArchiveEndpointPrompt() {
+        var currentValue = Settings_GetLocalArchiveEndpoint();
+        Settings_TextInputShow(
+            'Local VOD archive endpoint',
+            currentValue,
+            'http://192.168.1.50:8080',
+            function (nextValue) {
+                nextValue = Settings_NormalizeEndpointUrl(nextValue);
+                Main_setItem('sttv_webos_local_archive_endpoint', nextValue);
+                Main_setItem('localArchiveEndpoint', nextValue);
+                if (window.STTVWebOSLocalVod && window.STTVWebOSLocalVod.updateEndpoint) window.STTVWebOSLocalVod.updateEndpoint();
+                OSInterface_showToast(nextValue ? 'Local VOD archive endpoint saved' : 'Local VOD archive disabled');
+                Settings_DialogShowLocalArchive(false);
+            },
+            function () {
+                Settings_DialogShowLocalArchive(false);
+            }
+        );
+    }
+
+    function Settings_LocalArchiveEndpointSummary() {
+        var endpoint = Settings_GetLocalArchiveEndpoint();
+        return 'Current endpoint:' + STR_BR + STR_BR + Settings_EscapeHtml(endpoint || 'Disabled');
+    }
+
+    function Settings_EnsureLocalArchiveDialogValues() {
+        if (!Settings_value.local_archive_endpoint) {
+            Settings_value.local_archive_endpoint = {
+                values: ['None'],
+                set_values: [''],
+                defaultValue: 1
+            };
+        }
+        Settings_value.local_archive_endpoint.values = [STR_ENTER_TO_OPEN];
+    }
+
+    function Settings_DialogShowLocalArchive(click) {
+        Settings_EnsureLocalArchiveDialogValues();
+
+        var obj = {
+            local_archive_endpoint: {
+                defaultValue: Settings_value.local_archive_endpoint.defaultValue,
+                values: Settings_value.local_archive_endpoint.values,
+                title: 'Local VOD archive endpoint URL',
+                summary: Settings_LocalArchiveEndpointSummary(),
+                keyenter: true
+            }
+        };
+
+        Settings_DialogShow(obj, 'Local archive endpoint' + STR_BR + STR_BR + 'Set Local VOD archive endpoint URL.', click);
     }
 
     function Settings_check_min_seek() {
@@ -43747,6 +44577,8 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
         else if (Main_A_includes_B(Settings_value_keys[Settings_cursorY], 'blocked_codecs')) Settings_CodecsShow(click);
         else if (Main_A_includes_B(Settings_value_keys[Settings_cursorY], 'player_extracodecs')) Settings_DialogShowExtraCodecs(click);
         else if (Main_A_includes_B(Settings_value_keys[Settings_cursorY], 'player_bitrate')) Settings_DialogShowBitrate(click);
+        else if (Main_A_includes_B(Settings_value_keys[Settings_cursorY], 'webos_ttv_lol_proxy_settings')) Settings_DialogShowWebOsTtvLolProxy(click);
+        else if (Main_A_includes_B(Settings_value_keys[Settings_cursorY], 'local_archive_endpoint')) Settings_DialogShowLocalArchive(click);
         else if (Main_A_includes_B(Settings_value_keys[Settings_cursorY], 'proxy_settings')) Settings_DialogShowProxy(click);
         else if (Main_A_includes_B(Settings_value_keys[Settings_cursorY], 'vod_seek')) Settings_vod_seek(click);
         else if (Main_A_includes_B(Settings_value_keys[Settings_cursorY], 'block_qualities')) Settings_block_qualities(click);
@@ -44269,6 +45101,30 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
         Settings_value.app_animations.defaultValue = 1;
         Main_setItem('app_animations', 2);
         Settings_SetAnimations();
+    }
+
+    function Settings_DialogShowWebOsTtvLolProxy(click) {
+        var array_no_yes = [STR_NO, STR_YES];
+        Settings_value.webos_ttv_lol_proxy.values = array_no_yes;
+        Settings_value.webos_ttv_lol_proxy_url.values = [STR_ENTER_TO_OPEN];
+
+        var obj = {
+            webos_ttv_lol_proxy: {
+                defaultValue: Settings_value.webos_ttv_lol_proxy.defaultValue,
+                values: Settings_value.webos_ttv_lol_proxy.values,
+                title: STR_WEBOS_TTVLOL_PROXY_ENABLED,
+                summary: STR_WEBOS_TTVLOL_PROXY_ENABLED_SUMMARY
+            },
+            webos_ttv_lol_proxy_url: {
+                defaultValue: Settings_value.webos_ttv_lol_proxy_url.defaultValue,
+                values: Settings_value.webos_ttv_lol_proxy_url.values,
+                title: STR_WEBOS_TTVLOL_PROXY_URL,
+                summary: Settings_WebOsTtvLolProxyUrlSummary(),
+                keyenter: true
+            }
+        };
+
+        Settings_DialogShow(obj, STR_WEBOS_TTVLOL_PROXY_SETTINGS + STR_BR + STR_BR + STR_WEBOS_TTVLOL_PROXY_SETTINGS_SUMMARY, click);
     }
 
     function Settings_DialogShowProxy(click) {
@@ -45336,7 +46192,7 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
     }
 
     function Settings_DialoghandleKeyReturnAfter() {
-        Settings_RemoveInputFocusKey(Settings_DialogValue[Settings_DialogPos]);
+        if (Settings_DialogValue && Settings_DialogValue.length) Settings_RemoveInputFocusKey(Settings_DialogValue[Settings_DialogPos]);
         Main_HideElement('dialog_settings');
         Main_removeEventListener('keydown', Settings_DialoghandleKeyDown);
     }
@@ -45383,6 +46239,16 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
                         Settings_DialogAddBackupAccount();
                     }
 
+                    break;
+                }
+
+                if (Settings_DialogValue[Settings_DialogPos] === 'webos_ttv_lol_proxy_url') {
+                    Settings_WebOsTtvLolProxyUrlPrompt();
+                    break;
+                }
+
+                if (Settings_DialogValue[Settings_DialogPos] === 'local_archive_endpoint') {
+                    Settings_LocalArchiveEndpointPrompt();
                     break;
                 }
 
@@ -46451,7 +47317,7 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
             Main_innerHTMLWithEle(Sidepannel_UpdateThumbDivViews, STR_FOR + info[4] + STR_SPACE_HTML + Main_GetViewerStrings(info[13]));
             Play_LoadLogo(Sidepannel_UpdateThumbDivThumb, info[9]);
             Sidepannel_UpdateSince();
-            Sidepannel_updateThumbInfo(info);
+            if (!(typeof WTV_IsData === 'function' && WTV_IsData(info))) Sidepannel_updateThumbInfo(info);
         }
     }
 
@@ -46516,11 +47382,15 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
         if (Sidepannel_isShowingUserLive()) {
             Main_RemoveClassWithEle(Sidepannel_ThumbDoc, 'opacity_zero');
 
-            if (!Main_isStopped && Settings_Obj_default('show_side_player')) {
+            if (!Main_isStopped && Settings_Obj_default('show_side_player') && OSInterface_CanStartSmallPreview()) {
                 if (Sidepannel_ObjNotNull()) {
                     var ChannelId = UserLiveFeed_DataObj[UserLiveFeedobj_UserLivePos][Sidepannel_PosFeed][14];
 
-                    if ((!Play_PreviewId || !Main_A_equals_B(ChannelId, Play_PreviewId)) && !Play_PreviewVideoEnded) {
+                    if (
+                        !(typeof WTV_IsData === 'function' && WTV_IsData(UserLiveFeed_DataObj[UserLiveFeedobj_UserLivePos][Sidepannel_PosFeed])) &&
+                        (!Play_PreviewId || !Main_A_equals_B(ChannelId, Play_PreviewId)) &&
+                        !Play_PreviewVideoEnded
+                    ) {
                         Sidepannel_CheckIfIsLiveStart();
                     } else if (Play_PreviewId && Main_IsOn_OSInterface) {
                         Sidepannel_UpdateThumbDoc.src = IMG_404_BANNER;
@@ -46562,6 +47432,7 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
         }
 
         if (!Main_isStopped && Sidepannel_ObjNotNull() && Sidepannel_isShowingUserLive()) {
+            if (typeof WTV_IsData === 'function' && WTV_IsData(UserLiveFeed_DataObj[UserLiveFeedobj_UserLivePos][Sidepannel_PosFeed])) return;
             var channel = UserLiveFeed_DataObj[UserLiveFeedobj_UserLivePos][Sidepannel_PosFeed][6];
 
             PlayHLS_GetPlayListAsync(true, channel, Sidepannel_PosFeed % 100, 0, Sidepannel_CheckIfIsLiveResult);
@@ -46642,6 +47513,8 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
     }
 
     function Sidepannel_partnerIcon(name, partner, isrerun) {
+        var currentObj = Sidepannel_ObjNotNull() ? Sidepannel_GetObj() : null;
+        var isWTV = typeof WTV_IsData === 'function' && WTV_IsData(currentObj);
         return (
             '<div id="feed_thumb_partnericon" class="partnericon_div"> ' +
             name +
@@ -46651,12 +47524,12 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
             (partner
                 ? '<img id="feed_thumb_partnerimg" class="partnericon_img" alt="" src="' + IMG_PARTNER + '">' + STR_SPACE_HTML + STR_SPACE_HTML
                 : '') +
-            '<div id="feed_thumb_partnertext" class="partnericon_text" style="background: #' +
-            (isrerun ? 'FFFFFF; color: #000000;' : 'E21212;') +
+            '<div id="feed_thumb_partnertext" class="partnericon_text" style="background: ' +
+            (isWTV ? '#9146ff;' : '#' + (isrerun ? 'FFFFFF; color: #000000;' : 'E21212;')) +
             '">' +
             STR_SPACE_HTML +
             STR_SPACE_HTML +
-            (isrerun ? STR_RERUN : STR_LIVE) +
+            (isWTV ? 'W.TV' : isrerun ? STR_RERUN : STR_LIVE) +
             STR_SPACE_HTML +
             STR_SPACE_HTML +
             '</div>'
@@ -48036,6 +48909,7 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
             pos === UserLiveFeed_FeedPosX &&
             (!Play_isEndDialogVisible() || !Play_EndFocus) &&
             Settings_Obj_default('show_feed_player') &&
+            OSInterface_CanStartSmallPreview() &&
             UserLiveFeed_obj[UserLiveFeed_FeedPosX].checkPreview &&
             (!Play_MultiEnable || !Settings_Obj_default('disable_feed_player_multi')) &&
             UserLiveFeed_MaxInstances()
@@ -49671,6 +50545,8 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
     }
 
     function UserLiveFeedobj_CreateSideFeed(id, data) {
+        var isWTV = typeof WTV_IsData === 'function' && WTV_IsData(data);
+        var statusText = data[4];
         return (
             '<div id="' +
             UserLiveFeed_side_ids[3] +
@@ -49719,12 +50595,14 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
             UserLiveFeed_side_ids[11] +
             id +
             '" class="icon-' +
-            (!data[8] ? 'circle" style="color: red;' : 'refresh" style="') +
+            (!data[8] ? 'circle" style="color: ' + (isWTV ? '#9146ff' : 'red') + ';' : 'refresh" style="') +
             ' font-size: 55%; "></i><div id="' +
             UserLiveFeed_side_ids[12] +
             id +
-            '" style="font-size: 58%;">' +
-            data[4] +
+            '" style="font-size: 58%;' +
+            (isWTV ? ' color: #b26cff;' : '') +
+            '">' +
+            statusText +
             '</div></div></div></div></div></div></div>'
         );
     }
@@ -49732,6 +50610,8 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
     function UserLiveFeedobj_CreatFeed(pos, y, id, data, Extra_when, Extra_vodimg, force_VOD) {
         if (!data[1]) data[1] = data[6];
         var div = document.createElement('div');
+        var isWTV = typeof WTV_IsData === 'function' && WTV_IsData(data);
+        var sourceLabel = isWTV ? '<span style="color:#b26cff;">' + data[4] + '</span>' : data[5];
 
         div.setAttribute('id', UserLiveFeed_ids[3] + id);
         UserLiveFeed_DataObj[pos][y] = data;
@@ -49766,16 +50646,18 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
             ' live_icon strokedeline' +
             (force_VOD ? ' hideimp' : '') +
             '" style="color: ' +
-            (data[8] ? '#FFFFFF' : 'red') +
+            (data[8] ? '#FFFFFF' : isWTV ? '#9146ff' : 'red') +
             ';"></i> ' +
-            (Extra_vodimg || force_VOD
-                ? '<div class="vodicon_text ' +
-                  (force_VOD ? '' : 'hideimp') +
-                  '" style="background: #00a94b;">&nbsp;&nbsp;VOD&nbsp;&nbsp;</div>&nbsp;'
-                : '<div style="display: none;"></div>') + //empty div to prevent error when childNodes[2].classList.remove
+            (isWTV
+                ? '<div class="partnericon_text" style="background: #9146ff;">&nbsp;&nbsp;W.TV&nbsp;&nbsp;</div>&nbsp;'
+                : Extra_vodimg || force_VOD
+                  ? '<div class="vodicon_text ' +
+                    (force_VOD ? '' : 'hideimp') +
+                    '" style="background: #00a94b;">&nbsp;&nbsp;VOD&nbsp;&nbsp;</div>&nbsp;'
+                  : '<div style="display: none;"></div>') + //empty div to prevent error when childNodes[2].classList.remove
             data[1] +
             '</div><div class="stream_info_live" style="width: 36%; float: right; text-align: right; display: inline-block; font-size: 70%;">' +
-            data[5] +
+            sourceLabel +
             '</div></div><div class="' +
             (Extra_when ? 'stream_info_live_title_single_line' : 'stream_info_live_title') +
             '" id="' +
@@ -49842,6 +50724,7 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
 
     function UserLiveFeedobj_CreateVodFeed(pos, x, id, data, Extra_when, Extra_until) {
         var div = document.createElement('div');
+        var sourceLabel = WTV_IsData(data) ? '<span style="color:#b26cff;">W.TV</span>' : data[5];
 
         div.setAttribute('id', UserLiveFeed_ids[3] + id);
         UserLiveFeed_DataObj[pos][x] = data;
@@ -49871,7 +50754,7 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
             '<i class="icon-circle live_icon strokedeline" style="color: #00a94b;"></i> ' +
             data[1] +
             '</div><div class="stream_info_live" style="width:36%; float: right; text-align: right; display: inline-block; font-size: 70%;">' +
-            data[5] +
+            sourceLabel +
             '</div></div><div class="' +
             (Extra_when ? 'stream_info_live_title_single_line' : 'stream_info_live_title') +
             '">' +
@@ -50074,6 +50957,8 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
         Main_innerHTMLWithEle(Sidepannel_ScroolDoc, Sidepannel_Html);
 
         UserLiveFeed_itemsCount[UserLiveFeedobj_UserLivePos] = itemsCount;
+        if (typeof WTV_CheckMappedChannelsForUserFeed === 'function') WTV_CheckMappedChannelsForUserFeed();
+        if (typeof WTV_StartMappedFeedPolling === 'function') WTV_StartMappedFeedPolling();
 
         Main_setTimeout(function () {
             UserLiveFeedobj_AddBanner(UserLiveFeedobj_UserLivePos);
@@ -50151,6 +51036,7 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
     }
 
     function UserLiveFeedobj_loadUserVodGet() {
+        HttpGetEnsureUserHeader();
         FullxmlHttpGet(
             PlayClip_BaseUrl,
             Main_OAuth_User_Headers,
@@ -50191,17 +51077,25 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
     }
 
     function UserLiveFeedobj_loadDataBaseVodSuccess(responseText, pos) {
-        var response = JSON.parse(responseText),
+        var response,
             response_items,
             id,
             mArray,
+            node,
+            game,
             i = 0,
             itemsCount = UserLiveFeed_itemsCount[pos],
-            hasData =
-                response.data &&
-                response.data.currentUser &&
-                response.data.currentUser.followedVideos &&
-                response.data.currentUser.followedVideos.edges;
+            hasData;
+
+        try {
+            response = JSON.parse(responseText);
+        } catch (e) {
+            UserLiveFeedobj_loadDataError(pos);
+            return;
+        }
+
+        hasData =
+            response.data && response.data.currentUser && response.data.currentUser.followedVideos && response.data.currentUser.followedVideos.edges;
 
         if (hasData) {
             if (UserLiveFeed_obj[pos].HasMore) {
@@ -50214,7 +51108,11 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
             UserLiveFeed_obj[pos].cursor = response && response && response.length ? response[response.length - 1].cursor : null;
 
             for (i; i < response_items; i++) {
-                mArray = ScreensObj_VodCellArray(response[i].node, true, response[i].node.game.id, response[i].node.game.displayName);
+                node = response[i] ? response[i].node : null;
+                if (!node || !node.id) continue;
+
+                game = node.game || {};
+                mArray = ScreensObj_VodCellArray(node, true, game.id || null, game.displayName || '');
                 id = mArray[7];
 
                 if (!UserLiveFeed_idObject[pos].hasOwnProperty(id)) {
@@ -51186,6 +52084,1004 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
             default:
                 break;
         }
+    }
+    /*
+     * Copyright (c) 2017–present Felipe de Leon <fglfgl27@gmail.com>
+     *
+     * This file is part of SmartTwitchTV <https://github.com/fgl27/SmartTwitchTV>
+     *
+     * SmartTwitchTV is free software: you can redistribute it and/or modify
+     * it under the terms of the GNU General Public License as published by
+     * the Free Software Foundation, either version 3 of the License, or
+     * (at your option) any later version.
+     *
+     * SmartTwitchTV is distributed in the hope that it will be useful,
+     * but WITHOUT ANY WARRANTY; without even the implied warranty of
+     * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+     * GNU General Public License for more details.
+     *
+     * You should have received a copy of the GNU General Public License
+     * along with SmartTwitchTV.  If not, see <https://github.com/fgl27/SmartTwitchTV/blob/master/LICENSE>.
+     *
+     */
+
+    var WTV_Platform = 'wtv';
+    var WTV_MetaIndex = 19;
+    var WTV_LastChannelItem = 'sttv_wtv_last_channel';
+    var WTV_ChannelMapIndexItem = 'sttv_wtv_channel_map_index';
+    var WTV_ChannelMapPrefix = 'sttv_wtv_channel_map_';
+    var WTV_UserFeedPollId;
+    var WTV_RequestId = 0;
+    var WTV_RequestCallbacks = {};
+
+    function WTV_IsData(data) {
+        var meta = WTV_GetMeta(data);
+        return !!(meta && meta.source_platform === WTV_Platform);
+    }
+
+    function WTV_GetMeta(data) {
+        if (!data) return null;
+        if (data.source_platform === WTV_Platform) return data;
+        if (data[WTV_MetaIndex] && data[WTV_MetaIndex].source_platform === WTV_Platform) return data[WTV_MetaIndex];
+        return null;
+    }
+
+    function WTV_GetPlaybackUrl(data) {
+        var meta = WTV_GetMeta(data);
+        return meta ? meta.playback_url : '';
+    }
+
+    function WTV_IsVodData(data) {
+        var meta = WTV_GetMeta(data);
+        return !!(meta && (meta.source_kind === 'vod' || meta.source_kind === 'recording' || meta.duration_seconds));
+    }
+
+    function WTV_GetLiveBadgeText(data) {
+        var meta = WTV_GetMeta(data);
+        if (!meta) return STR_LIVE;
+        return meta.source_kind === 'vod' || meta.source_kind === 'recording' ? 'W.TV VOD' : 'W.TV LIVE';
+    }
+
+    function WTV_HasRecordingAction() {
+        var meta = WTV_GetMeta(Play_data.data);
+        return !!(meta && (meta.vod_url || meta.recording_group_id || meta.source_channel));
+    }
+
+    function WTV_GetDataId(data) {
+        var meta = WTV_GetMeta(data);
+        if (meta && (meta.recording_group_id || meta.stream_id)) return meta.recording_group_id || meta.stream_id;
+        return data && data[7] ? data[7] : '';
+    }
+
+    function WTV_GetEndpoint() {
+        if (typeof Settings_GetLocalArchiveEndpoint === 'function') return Settings_GetLocalArchiveEndpoint();
+        return Main_getItemString('sttv_webos_local_archive_endpoint', '');
+    }
+
+    function WTV_NormalizeChannel(channel) {
+        channel = String(channel || '').replace(/^[\s@]+|\s+$/g, '');
+        channel = channel.replace(/^https?:\/\/(www\.)?w\.tv\//i, '');
+        channel = channel.replace(/^w\.tv\//i, '');
+        channel = channel.replace(/^wtv\//i, '');
+        channel = channel.split(/[/?#]/)[0];
+        return channel.replace(/[^a-zA-Z0-9_.-]/g, '');
+    }
+
+    function WTV_Request(path, method, body, success, error) {
+        var endpoint = WTV_GetEndpoint();
+        if (!endpoint) {
+            if (error) error('Local archive endpoint is not configured.');
+            return;
+        }
+
+        WTV_RequestId++;
+        WTV_RequestCallbacks[WTV_RequestId] = {
+            success: success,
+            error: error
+        };
+
+        FullxmlHttpGet(
+            endpoint + path,
+            body ? [['Content-Type', 'application/json']] : null,
+            WTV_RequestResult,
+            WTV_RequestResult,
+            null,
+            WTV_RequestId,
+            method || null,
+            body ? JSON.stringify(body) : null
+        );
+    }
+
+    function WTV_RequestResult(response, key, requestId) {
+        var callbacks = WTV_RequestCallbacks[requestId];
+        var status = response && typeof response.status !== 'undefined' ? response.status : 0;
+        var responseText = response && response.responseText ? response.responseText : '';
+        var data = null;
+
+        delete WTV_RequestCallbacks[requestId];
+
+        if (!callbacks) return;
+
+        if (responseText) {
+            try {
+                data = JSON.parse(responseText);
+            } catch (e) {
+                data = responseText;
+            }
+        }
+
+        if (status >= 200 && status < 300) {
+            if (callbacks.success) callbacks.success(data, status);
+        } else if (callbacks.error) {
+            callbacks.error(WTV_RequestErrorText(status, data));
+        }
+    }
+
+    function WTV_RequestErrorText(status, data) {
+        if (data && data.error) return data.error;
+        if (data && data.message) return data.message;
+        if (status) return 'HTTP ' + status;
+        return 'Request failed';
+    }
+
+    function WTV_AddSource(channel, success, error) {
+        WTV_Request('/api/sources', 'POST', {platform: WTV_Platform, channel: channel}, success, error);
+    }
+
+    function WTV_GetLive(channel, success, error) {
+        WTV_Request('/api/sources/wtv/' + encodeURIComponent(channel) + '/live', null, null, success, function () {
+            WTV_GetLiveFromActiveArchive(channel, success, error);
+        });
+    }
+
+    function WTV_GetChannelVods(channel, success, error) {
+        WTV_Request('/archive/sources/wtv/' + encodeURIComponent(channel) + '/vods', null, null, success, error);
+    }
+
+    function WTV_GetLiveFromActiveArchive(channel, success, error) {
+        WTV_GetChannelVods(
+            channel,
+            function (response) {
+                var vod = WTV_FindActiveVod(response);
+                if (!vod) {
+                    if (success) success({platform: WTV_Platform, channel: channel, online: false});
+                    return;
+                }
+                if (success) success(WTV_BuildLiveStatusFromArchiveVod(vod, channel));
+            },
+            error
+        );
+    }
+
+    function WTV_NormalizeTwitchLogin(login) {
+        return String(login || '')
+            .replace(/^[\s@]+|\s+$/g, '')
+            .toLowerCase()
+            .replace(/[^a-z0-9_]/g, '');
+    }
+
+    function WTV_GetMappingKey(twitchLogin) {
+        return WTV_ChannelMapPrefix + WTV_NormalizeTwitchLogin(twitchLogin);
+    }
+
+    function WTV_ReadMappingIndex() {
+        var raw = Main_getItemString(WTV_ChannelMapIndexItem, '[]');
+        try {
+            var list = JSON.parse(raw);
+            return list && list.length ? list : [];
+        } catch (e) {
+            return [];
+        }
+    }
+
+    function WTV_WriteMappingIndex(list) {
+        Main_setItem(WTV_ChannelMapIndexItem, JSON.stringify(list || []));
+    }
+
+    function WTV_GetChannelMapping(twitchLogin) {
+        twitchLogin = WTV_NormalizeTwitchLogin(twitchLogin);
+        if (!twitchLogin) return null;
+
+        var raw = Main_getItemString(WTV_GetMappingKey(twitchLogin), '');
+        if (!raw) return null;
+
+        try {
+            var mapping = JSON.parse(raw);
+            if (mapping && mapping.wtv_channel) return mapping;
+        } catch (e) {}
+
+        return null;
+    }
+
+    function WTV_GetCurrentChannelMapping() {
+        return WTV_GetChannelMapping(Main_values.Main_selectedChannel);
+    }
+
+    function WTV_GetPlaybackMapping() {
+        var meta = WTV_GetMeta(Play_data && Play_data.data);
+        var login = meta && meta.twitch_login ? meta.twitch_login : '';
+
+        if (!login && Play_data && Play_data.data && Play_data.data[6]) login = Play_data.data[6];
+        if (!login && Main_values && Main_values.Main_selectedChannel) login = Main_values.Main_selectedChannel;
+
+        return login ? WTV_GetChannelMapping(login) : null;
+    }
+
+    function WTV_SaveChannelMapping(twitchLogin, wtvChannel, meta) {
+        twitchLogin = WTV_NormalizeTwitchLogin(twitchLogin);
+        wtvChannel = WTV_NormalizeChannel(wtvChannel);
+        if (!twitchLogin) return null;
+
+        var list = WTV_ReadMappingIndex(),
+            found = false,
+            i = 0,
+            mapping = null;
+
+        if (!wtvChannel) {
+            for (i = list.length - 1; i >= 0; i--) {
+                if (list[i].twitch_login === twitchLogin) {
+                    WTV_RemoveMappedLiveFromUserFeed(list[i]);
+                    list.splice(i, 1);
+                }
+            }
+            localStorage.removeItem(WTV_GetMappingKey(twitchLogin));
+            WTV_WriteMappingIndex(list);
+            return null;
+        }
+
+        mapping = {
+            twitch_login: twitchLogin,
+            twitch_display_name: (meta && meta.twitch_display_name) || twitchLogin,
+            twitch_id: (meta && meta.twitch_id) || twitchLogin,
+            twitch_logo: (meta && meta.twitch_logo) || IMG_404_LOGO,
+            twitch_partner: !!(meta && meta.twitch_partner),
+            wtv_channel: wtvChannel,
+            updated_at: new Date().toISOString()
+        };
+
+        Main_setItem(WTV_GetMappingKey(twitchLogin), JSON.stringify(mapping));
+
+        for (i = 0; i < list.length; i++) {
+            if (list[i].twitch_login === twitchLogin) {
+                list[i] = mapping;
+                found = true;
+                break;
+            }
+        }
+        if (!found) list.push(mapping);
+
+        WTV_WriteMappingIndex(list);
+        Main_setItem(WTV_LastChannelItem, wtvChannel);
+        return mapping;
+    }
+
+    function WTV_ChannelContentPrompt(done) {
+        var currentMapping = WTV_GetCurrentChannelMapping();
+        var currentValue = currentMapping ? currentMapping.wtv_channel : Main_getItemString(WTV_LastChannelItem, Main_values.Main_selectedChannel);
+
+        Settings_TextInputShow(
+            'w.tv channel for ' + Main_values.Main_selectedChannelDisplayname,
+            currentValue,
+            Main_values.Main_selectedChannel,
+            function (value) {
+                WTV_ChannelContentPromptSave(value, done);
+            },
+            function () {
+                if (done) done(false);
+            }
+        );
+    }
+
+    function WTV_ChannelContentPromptSave(value, done) {
+        var channel = WTV_NormalizeChannel(value);
+        var mapping = WTV_SaveChannelMapping(Main_values.Main_selectedChannel, channel, {
+            twitch_display_name: Main_values.Main_selectedChannelDisplayname,
+            twitch_id: Main_values.Main_selectedChannel_id,
+            twitch_logo: Main_values.Main_selectedChannelLogo,
+            twitch_partner: Main_values.Main_selectedChannelPartner
+        });
+
+        if (!channel) {
+            OSInterface_showToast('w.tv mapping cleared');
+            if (done) done(true);
+            return;
+        }
+
+        WTV_AddSource(channel, noop_fun, noop_fun);
+        OSInterface_showToast('w.tv mapped: ' + mapping.twitch_display_name + ' -> ' + channel);
+        if (done) done(true);
+    }
+
+    function WTV_BuildTwitchMappedLiveData(status, mapping, sourceKind) {
+        var data = WTV_BuildLiveData(status, sourceKind || 'live');
+        var meta = WTV_GetMeta(data);
+
+        data[1] = mapping.twitch_display_name || mapping.twitch_login;
+        data[5] = '[W.TV]';
+        data[6] = mapping.twitch_login;
+        data[9] = mapping.twitch_logo || data[9] || IMG_404_LOGO;
+        data[10] = mapping.twitch_partner;
+        data[14] = mapping.twitch_id || mapping.twitch_login;
+        data[15] = WTV_Platform;
+
+        if (meta) {
+            meta.twitch_login = mapping.twitch_login;
+            meta.twitch_display_name = mapping.twitch_display_name;
+            meta.twitch_id = mapping.twitch_id;
+            meta.twitch_logo = mapping.twitch_logo;
+        }
+
+        return data;
+    }
+
+    function WTV_MappedFeedSlotIsWTV(pos, itemPos, mapping) {
+        var current = UserLiveFeed_DataObj[pos] && UserLiveFeed_DataObj[pos][itemPos],
+            meta = WTV_GetMeta(current);
+        return !!(meta && meta.source_platform === WTV_Platform && (!mapping || !mapping.twitch_id || meta.twitch_id === mapping.twitch_id));
+    }
+
+    function WTV_RemoveMappedLiveFromUserFeed(mapping) {
+        if (!mapping || !mapping.twitch_id || !UserLiveFeed_idObject || !UserLiveFeed_DataObj) return;
+
+        var pos = UserLiveFeedobj_UserLivePos,
+            itemPos =
+                UserLiveFeed_idObject[pos] && UserLiveFeed_idObject[pos].hasOwnProperty(mapping.twitch_id)
+                    ? UserLiveFeed_idObject[pos][mapping.twitch_id]
+                    : null;
+
+        if (itemPos === null || !WTV_MappedFeedSlotIsWTV(pos, itemPos, mapping)) return;
+
+        if (typeof UserLiveFeedobj_StartDefault === 'function' && UserLiveFeed_obj[pos] && UserLiveFeed_obj[pos].load) {
+            UserLiveFeedobj_StartDefault(pos);
+            UserLiveFeed_obj[pos].load();
+            return;
+        }
+
+        delete UserLiveFeed_idObject[pos][mapping.twitch_id];
+        delete UserLiveFeed_DataObj[pos][itemPos];
+        if (UserLiveFeed_cell[pos] && UserLiveFeed_cell[pos][itemPos] && UserLiveFeed_cell[pos][itemPos].parentNode) {
+            UserLiveFeed_cell[pos][itemPos].parentNode.removeChild(UserLiveFeed_cell[pos][itemPos]);
+        }
+        if (UserLiveFeed_cell[pos]) delete UserLiveFeed_cell[pos][itemPos];
+        Sidepannel_Positions = JSON.parse(JSON.stringify(UserLiveFeed_idObject[pos] || {}));
+    }
+
+    function WTV_AddMappedLiveToUserFeed(status, mapping) {
+        if (!status || !status.online || !status.playback_url || !mapping || !mapping.twitch_id) {
+            WTV_RemoveMappedLiveFromUserFeed(mapping);
+            return;
+        }
+        if (!UserLiveFeed_obj || !UserLiveFeed_obj[UserLiveFeedobj_UserLivePos]) return;
+
+        var pos = UserLiveFeedobj_UserLivePos,
+            id = mapping.twitch_id,
+            data = WTV_BuildTwitchMappedLiveData(status, mapping, 'live'),
+            existingPos = UserLiveFeed_idObject[pos] && UserLiveFeed_idObject[pos].hasOwnProperty(id) ? UserLiveFeed_idObject[pos][id] : null,
+            itemPos = existingPos !== null ? existingPos : UserLiveFeed_itemsCount[pos],
+            oldCell,
+            newCell,
+            sideHtml;
+
+        if (existingPos !== null && !WTV_MappedFeedSlotIsWTV(pos, existingPos, mapping)) return;
+
+        if (!UserLiveFeed_idObject[pos]) UserLiveFeed_idObject[pos] = {};
+        if (!UserLiveFeed_DataObj[pos]) UserLiveFeed_DataObj[pos] = {};
+        if (!UserLiveFeed_cell[pos]) UserLiveFeed_cell[pos] = [];
+
+        UserLiveFeed_idObject[pos][id] = itemPos;
+        UserLiveFeed_itemsCount[pos] = Math.max(UserLiveFeed_itemsCount[pos], itemPos + 1);
+        UserLiveFeed_PreloadImgs.push(data[0]);
+
+        oldCell = UserLiveFeed_cell[pos][itemPos];
+        newCell = UserLiveFeedobj_CreatFeed(pos, itemPos, pos + '_' + itemPos, data);
+        UserLiveFeed_cell[pos][itemPos] = newCell;
+
+        if (oldCell && oldCell.parentNode) {
+            oldCell.parentNode.replaceChild(newCell, oldCell);
+            newCell.style.position = oldCell.style.position;
+            newCell.style.transition = oldCell.style.transition || 'none';
+            newCell.style.transform = oldCell.style.transform;
+        } else if (UserLiveFeed_status[pos] && UserLiveFeed_obj[pos] && UserLiveFeed_obj[pos].div && itemPos < UserLiveFeed_cellVisible[pos]) {
+            UserLiveFeed_obj[pos].div.appendChild(newCell);
+            newCell.style.position = '';
+            newCell.style.transition = 'none';
+        }
+
+        sideHtml = UserLiveFeedobj_CreateSideFeed(itemPos, data);
+        if (existingPos === null) {
+            Sidepannel_Html += sideHtml;
+            if (Sidepannel_ScroolDoc) Sidepannel_ScroolDoc.insertAdjacentHTML('beforeend', sideHtml);
+        }
+        Sidepannel_Positions = JSON.parse(JSON.stringify(UserLiveFeed_idObject[pos]));
+    }
+
+    function WTV_CheckMappedUserFeedItem(mapping) {
+        WTV_GetLive(
+            mapping.wtv_channel,
+            function (status) {
+                WTV_AddMappedLiveToUserFeed(status, mapping);
+            },
+            noop_fun
+        );
+    }
+
+    function WTV_CheckMappedChannelsForUserFeed() {
+        var list = WTV_ReadMappingIndex(),
+            i = 0,
+            mapping;
+
+        for (i; i < list.length; i++) {
+            mapping = list[i];
+            if (!mapping || !mapping.wtv_channel || !mapping.twitch_id) continue;
+
+            WTV_CheckMappedUserFeedItem(mapping);
+        }
+    }
+
+    function WTV_StartMappedFeedPolling() {
+        Main_clearTimeout(WTV_UserFeedPollId);
+        WTV_UserFeedPollId = Main_setTimeout(
+            function () {
+                WTV_CheckMappedChannelsForUserFeed();
+                WTV_StartMappedFeedPolling();
+            },
+            60000,
+            WTV_UserFeedPollId
+        );
+    }
+
+    function WTV_GetVodList(response) {
+        if (response && response.vods) return response.vods;
+        if (response && response.recordings) return response.recordings;
+        if (response && response.data) return response.data;
+        return response;
+    }
+
+    function WTV_FindVod(response) {
+        var list = WTV_GetVodList(response);
+        var i;
+
+        if (!list || !list.length) return null;
+
+        for (i = 0; i < list.length; i++) {
+            if (WTV_ArchiveVodPlaybackUrl(list[i])) return list[i];
+        }
+
+        return null;
+    }
+
+    function WTV_FindActiveVod(response) {
+        var list = WTV_GetVodList(response);
+        var i;
+
+        if (!list || !list.length) return null;
+
+        for (i = 0; i < list.length; i++) {
+            if (
+                (list[i].active || list[i].growing || list[i].status === 'open' || list[i].status === 'recording') &&
+                WTV_ArchiveVodPlaybackUrl(list[i])
+            ) {
+                return list[i];
+            }
+        }
+
+        return null;
+    }
+
+    function WTV_AbsoluteArchiveUrl(url) {
+        var endpoint = WTV_GetEndpoint();
+        if (!url) return '';
+        if (/^https?:\/\//i.test(url)) return url;
+        if (url.charAt(0) !== '/') url = '/' + url;
+        return endpoint + url;
+    }
+
+    function WTV_IsArchiveVodUrl(url) {
+        return !!(url && String(url).indexOf('/archive/vods/') !== -1);
+    }
+
+    function WTV_ArchiveVodPlaybackUrl(vod) {
+        var url = WTV_VodPlaybackUrl(vod);
+        return WTV_IsArchiveVodUrl(url) ? url : '';
+    }
+
+    function WTV_BuildLiveStatusFromArchiveVod(vod, channel) {
+        var playbackURL = WTV_AbsoluteArchiveUrl(WTV_ArchiveVodPlaybackUrl(vod));
+        return {
+            platform: WTV_Platform,
+            channel: vod.source_channel || vod.channel || channel,
+            online: true,
+            title: vod.title || vod.channel || channel,
+            viewer_count: vod.viewer_count || 0,
+            started_at: vod.source_started_at || vod.started_at || new Date().toISOString(),
+            thumbnail_url: vod.thumbnail_url || vod.preview_url || IMG_404_BANNER,
+            playback_url: playbackURL,
+            playback_kind: 'archive_hls',
+            vod_url: playbackURL,
+            recording_group_id: vod.recording_group_id || vod.id || '',
+            stream_id: vod.recording_group_id || vod.id || WTV_Platform + ':' + channel
+        };
+    }
+
+    function WTV_FindVodByRecordingGroup(response, recordingGroupId) {
+        var list = WTV_GetVodList(response);
+        var i;
+
+        if (!list || !list.length || !recordingGroupId) return null;
+
+        for (i = 0; i < list.length; i++) {
+            if ((list[i].recording_group_id || list[i].id || '') === recordingGroupId && WTV_ArchiveVodPlaybackUrl(list[i])) return list[i];
+        }
+
+        return null;
+    }
+
+    function WTV_VodPlaybackUrl(vod) {
+        return vod
+            ? vod.webos_playback_url ||
+                  vod.compat_playback_url ||
+                  vod.h264_playback_url ||
+                  vod.playback_url ||
+                  vod.vod_url ||
+                  vod.playlist_url ||
+                  vod.hls_url ||
+                  vod.url ||
+                  ''
+            : '';
+    }
+
+    function WTV_VodStartedAt(vod) {
+        return vod
+            ? vod.source_started_at || vod.started_at || vod.created_at || vod.start_time || new Date().toISOString()
+            : new Date().toISOString();
+    }
+
+    function WTV_VodDurationSeconds(vod) {
+        var duration = vod ? vod.duration_seconds || vod.duration || vod.length_seconds || 0 : 0;
+        if (typeof duration === 'string') duration = Play_timeHMS(duration);
+        duration = parseInt(duration);
+        if ((!duration || duration < 0) && vod && (vod.active || vod.growing || vod.status === 'open' || vod.status === 'recording')) {
+            duration = parseInt((Date.now() - new Date(WTV_VodStartedAt(vod)).getTime()) / 1000);
+        }
+        return duration > 0 ? duration : 1;
+    }
+
+    function WTV_VodId(vod, channel) {
+        return vod && (vod.recording_group_id || vod.id || vod.stream_id) ? vod.recording_group_id || vod.id || vod.stream_id : 'wtv-vod:' + channel;
+    }
+
+    function WTV_IdentityFromLiveMeta(meta, channel) {
+        return {
+            display_name: (meta && meta.twitch_display_name) || (Play_data && Play_data.data && Play_data.data[1]) || 'w.tv / ' + channel,
+            login: (meta && meta.twitch_login) || (Play_data && Play_data.data && Play_data.data[6]) || channel,
+            id: (meta && meta.twitch_id) || (Play_data && Play_data.data && Play_data.data[14]) || WTV_Platform + ':' + channel,
+            logo: (meta && meta.twitch_logo) || (Play_data && Play_data.data && Play_data.data[9]) || IMG_404_LOGO,
+            partner: (Play_data && Play_data.data && Play_data.data[10]) || false
+        };
+    }
+
+    function WTV_IdentityFromData(data, channel) {
+        var meta = WTV_GetMeta(data);
+        return {
+            display_name: (meta && meta.twitch_display_name) || (data && data[1]) || 'w.tv / ' + channel,
+            login: (meta && meta.twitch_login) || (data && data[6]) || channel,
+            id: (meta && meta.twitch_id) || (data && data[14]) || WTV_Platform + ':' + channel,
+            logo: (meta && meta.twitch_logo) || (data && data[9]) || IMG_404_LOGO,
+            partner: (data && data[10]) || false
+        };
+    }
+
+    function WTV_IdentityFromMapping(mapping, channel) {
+        return {
+            display_name: (mapping && mapping.twitch_display_name) || (Play_data && Play_data.data && Play_data.data[1]) || 'w.tv / ' + channel,
+            login: (mapping && mapping.twitch_login) || (Play_data && Play_data.data && Play_data.data[6]) || channel,
+            id: (mapping && mapping.twitch_id) || (Play_data && Play_data.data && Play_data.data[14]) || WTV_Platform + ':' + channel,
+            logo: (mapping && mapping.twitch_logo) || (Play_data && Play_data.data && Play_data.data[9]) || IMG_404_LOGO,
+            partner: (mapping && mapping.twitch_partner) || (Play_data && Play_data.data && Play_data.data[10]) || false
+        };
+    }
+
+    function WTV_BuildVodData(vod, channel, identity) {
+        channel = WTV_NormalizeChannel((vod && (vod.source_channel || vod.channel)) || channel);
+        if (channel.indexOf('wtv/') === 0) channel = WTV_NormalizeChannel(channel.substring(4));
+
+        var playbackURL = WTV_AbsoluteArchiveUrl(WTV_ArchiveVodPlaybackUrl(vod));
+        var startedAt = WTV_VodStartedAt(vod);
+        var durationSeconds = WTV_VodDurationSeconds(vod);
+        var vodId = WTV_VodId(vod, channel);
+        var title = (vod && (vod.title || vod.name)) || 'w.tv recording';
+        var views = (vod && (vod.view_count || vod.views || vod.viewer_count || 0)) || 0;
+        var sourceCount = vod && vod.source_count ? vod.source_count : 0;
+        var meta = {
+            source_platform: WTV_Platform,
+            source_channel: channel,
+            source_kind: 'vod',
+            playback_url: playbackURL,
+            playback_kind: 'archive_hls',
+            vod_url: playbackURL,
+            recording_group_id: vodId,
+            stream_id: vodId,
+            title: title,
+            started_at: startedAt,
+            duration_seconds: durationSeconds,
+            viewer_count: views,
+            source_count: sourceCount
+        };
+        var data;
+
+        identity = identity || WTV_IdentityFromLiveMeta(null, channel);
+
+        meta.twitch_login = identity.login;
+        meta.twitch_display_name = identity.display_name;
+        meta.twitch_id = identity.id;
+        meta.twitch_logo = identity.logo;
+
+        data = [
+            (vod && (vod.thumbnail_url || vod.preview_url)) || IMG_404_VOD,
+            identity.display_name,
+            Main_videoCreatedAt(startedAt),
+            'w.tv',
+            Main_formatNumber(views),
+            'W.TV',
+            identity.login,
+            vodId,
+            null,
+            WTV_Platform,
+            twemoji.parse(title),
+            durationSeconds,
+            startedAt,
+            views,
+            identity.id,
+            Play_timeS(durationSeconds),
+            WTV_Platform
+        ];
+
+        data[WTV_MetaIndex] = meta;
+        data.source_platform = WTV_Platform;
+        data.source_channel = channel;
+        data.playback_url = playbackURL;
+        data.playback_kind = meta.playback_kind;
+        data.source_kind = meta.source_kind;
+        data.vod_url = playbackURL;
+        data.recording_group_id = vodId;
+
+        return data;
+    }
+
+    function WTV_OpenVodData(data) {
+        var meta = WTV_GetMeta(data);
+        if (!meta || !WTV_IsVodData(data)) return false;
+
+        Main_clearAllPlayerEvents();
+        if (Play_isOn) Play_PreshutdownStream(true);
+        else if (PlayVod_isOn) PlayVod_PreshutdownStream(true);
+        else if (PlayClip_isOn) PlayClip_PreshutdownStream(true);
+
+        Main_values_Play_data = data;
+        Play_data.data = Main_values_Play_data;
+        Main_values.Play_isHost = false;
+        Main_values.Main_selectedChannelDisplayname = meta.twitch_display_name || data[1];
+        Main_values.Main_selectedChannel = meta.twitch_login || data[6];
+        Main_values.Main_selectedChannelLogo = meta.twitch_logo || data[9] || IMG_404_LOGO;
+        Main_values.Main_selectedChannelPartner = data[10] || false;
+        Main_values.Main_selectedChannel_id = meta.twitch_id || data[14];
+        Main_values.ChannelVod_vodId = data[7];
+        ChannelVod_createdAt = data[2];
+        ChannelVod_language = 'W.TV';
+        ChannelVod_title = data[10];
+        ChannelVod_game = STR_STARTED + STR_PLAYING + 'w.tv';
+        ChannelVod_views = data[4];
+        Play_DurationSeconds = parseInt(data[11]) || meta.duration_seconds || 1;
+
+        WTV_SaveVodHistory(data);
+        Main_EventPlay('vod', data[6], data[3], WTV_Platform, 'WTV');
+        Main_openVod();
+        return true;
+    }
+
+    function WTV_OpenVod(vod, channel, identity, liveData) {
+        var data = WTV_BuildVodData(vod, channel, identity),
+            previousLiveData = liveData || (Play_data && Play_data.data ? Main_Slice(Play_data.data) : null);
+
+        Main_clearAllPlayerEvents();
+        if (Play_isOn) Play_PreshutdownStream(true);
+        else if (PlayVod_isOn) PlayVod_PreshutdownStream(true);
+        else if (PlayClip_isOn) PlayClip_PreshutdownStream(true);
+
+        Main_values_Play_data = data;
+        Play_data.data = Main_values_Play_data;
+        Main_values.Play_isHost = false;
+        Main_values.Main_selectedChannelDisplayname = data[1];
+        Main_values.Main_selectedChannel = data[6];
+        Main_values.Main_selectedChannelLogo = identity && identity.logo ? identity.logo : IMG_404_LOGO;
+        Main_values.Main_selectedChannelPartner = identity && identity.partner ? identity.partner : false;
+        Main_values.Main_selectedChannel_id = data[14];
+        Main_values.ChannelVod_vodId = data[7];
+        ChannelVod_createdAt = data[2];
+        ChannelVod_language = 'W.TV';
+        ChannelVod_title = data[10];
+        ChannelVod_game = STR_STARTED + STR_PLAYING + 'w.tv';
+        ChannelVod_views = data[4];
+        Play_DurationSeconds = data[11];
+        Main_vodOffset = 0.001;
+        PlayVod_ResumeTime = 0.001;
+
+        WTV_SaveVodHistory(data);
+        WTV_LinkLiveHistoryToVod(data, previousLiveData);
+
+        Main_EventPlay('vod', data[6], data[3], WTV_Platform, 'WTV');
+        Main_openVod();
+    }
+
+    function WTV_OpenHistoryVod(data) {
+        var meta = WTV_GetMeta(data);
+        var mapping;
+        var sourceChannel;
+        var identity;
+
+        if (!meta) return false;
+        if (WTV_IsVodData(data)) return WTV_OpenVodData(data);
+
+        mapping = WTV_GetChannelMapping((meta && meta.twitch_login) || (data && data[6]) || '');
+        sourceChannel = (meta && meta.source_channel) || (mapping && mapping.wtv_channel) || '';
+        identity = WTV_IdentityFromData(data, sourceChannel);
+
+        if (!sourceChannel) {
+            OSInterface_showToast('No w.tv archive channel metadata');
+            return true;
+        }
+
+        Main_showLoadDialog();
+        WTV_GetChannelVods(
+            sourceChannel,
+            function (response) {
+                var vod =
+                    WTV_FindVodByRecordingGroup(response, meta.recording_group_id || meta.stream_id) ||
+                    WTV_FindActiveVod(response) ||
+                    WTV_FindVod(response);
+                Main_HideLoadDialog();
+                if (vod) WTV_OpenVod(vod, sourceChannel, identity, data);
+                else OSInterface_showToast('No local w.tv archive recording yet');
+            },
+            function (error) {
+                Main_HideLoadDialog();
+                OSInterface_showToast('w.tv local archive lookup failed: ' + error);
+            }
+        );
+        return true;
+    }
+
+    function WTV_OpenRecordingFromLive() {
+        var meta = WTV_GetMeta(Play_data.data);
+        var mapping = WTV_GetPlaybackMapping();
+        var sourceChannel = (meta && meta.source_channel) || (mapping && mapping.wtv_channel) || '';
+        var liveData = Play_data && Play_data.data ? Main_Slice(Play_data.data) : null;
+        var identity = meta ? WTV_IdentityFromLiveMeta(meta, sourceChannel) : WTV_IdentityFromMapping(mapping, sourceChannel);
+
+        if (!sourceChannel) {
+            OSInterface_showToast('No w.tv recording metadata yet');
+            return;
+        }
+
+        Main_showLoadDialog();
+        WTV_GetChannelVods(
+            sourceChannel,
+            function (response) {
+                var vod =
+                    WTV_FindVodByRecordingGroup(response, meta && meta.recording_group_id) || WTV_FindActiveVod(response) || WTV_FindVod(response);
+                Main_HideLoadDialog();
+                if (vod) WTV_OpenVod(vod, sourceChannel, identity, liveData);
+                else OSInterface_showToast('No local w.tv archive recording yet');
+            },
+            function (error) {
+                Main_HideLoadDialog();
+                OSInterface_showToast('w.tv local archive lookup failed: ' + error);
+            }
+        );
+    }
+
+    function WTV_SaveVodHistory(data) {
+        if (!data || !WTV_IsData(data) || !WTV_IsVodData(data)) return;
+        Main_Set_history('vod', data);
+    }
+
+    function WTV_LinkLiveHistoryToVod(data, liveData) {
+        var meta = WTV_GetMeta(data);
+        var liveId = liveData ? WTV_GetDataId(liveData) : '';
+        if (!meta || !liveId || !data[7]) return;
+        Main_history_UpdateLiveVod(liveId, data[7], data[0]);
+    }
+
+    function WTV_PlayVodApplyInfo() {
+        var meta = WTV_GetMeta(Main_values_Play_data) || WTV_GetMeta(Play_data.data);
+        if (!meta) return false;
+
+        Play_DurationSeconds = meta.duration_seconds || Play_DurationSeconds || 1;
+        ChannelVod_title = Main_values_Play_data[10] || meta.title || ChannelVod_title;
+        ChannelVod_createdAt = Main_values_Play_data[2] || Main_videoCreatedAt(meta.started_at);
+        ChannelVod_views = Main_values_Play_data[4] || Main_formatNumber(meta.viewer_count || 0);
+        ChannelVod_language = 'W.TV';
+
+        Main_values.Main_selectedChannelLogo = meta.twitch_logo || Main_values.Main_selectedChannelLogo || IMG_404_LOGO;
+        Main_values.Main_selectedChannelDisplayname = meta.twitch_display_name || Main_values.Main_selectedChannelDisplayname;
+        Main_values.Main_selectedChannel = meta.twitch_login || Main_values.Main_selectedChannel;
+        Main_values.Main_selectedChannel_id = meta.twitch_id || Main_values.Main_selectedChannel_id;
+
+        Play_LoadLogo(Main_getElementById('stream_info_icon'), meta.twitch_logo || IMG_404_LOGO);
+        Main_innerHTML(
+            'stream_info_name',
+            Play_partnerIcon(Main_values.Main_selectedChannelDisplayname, Main_values.Main_selectedChannelPartner, 1, '[W.TV]')
+        );
+        Main_innerHTML('stream_info_title', ChannelVod_title);
+        Main_textContent('stream_info_game', STR_PLAYING + 'w.tv');
+        Main_innerHTMLWithEle(
+            Play_infoLiveTime,
+            STR_STREAM_ON + ChannelVod_createdAt + ',' + STR_SPACE_HTML + ChannelVod_views + Main_GetViewsStrings(meta.viewer_count || 0)
+        );
+        Main_textContent('stream_live_viewers', '');
+        Main_textContentWithEle(Play_infoWatchingTime, '');
+        Main_textContentWithEle(Play_BottonIcons_Progress_Duration, Play_timeS(Play_DurationSeconds));
+        PlayVod_currentTime = Main_vodOffset * 1000;
+        PlayVod_ProgressBarrUpdate(Main_vodOffset, Play_DurationSeconds, true);
+        WTV_SaveVodHistory(Main_values_Play_data);
+        return true;
+    }
+
+    function WTV_PlayVodLoadData() {
+        var meta = WTV_GetMeta(Main_values_Play_data) || WTV_GetMeta(Play_data.data);
+        if (!meta || !meta.playback_url) return false;
+
+        if (Main_IsOn_OSInterface) {
+            PlayVod_loadDataId = new Date().getTime();
+            PlayHLS_GetExternalPlayListAsync(meta.playback_url, PlayVod_loadDataId, null, PlayVod_loadDataResult);
+        } else {
+            PlayVod_loadDataSuccessFake();
+        }
+        return true;
+    }
+
+    var WTV_PlayVodBlobUrl = '';
+
+    function WTV_PatchVodPlaylist(playlist, baseUrl) {
+        if (!playlist || typeof playlist !== 'string') return playlist || '';
+
+        var lines = playlist.replace(/\r/g, '').split('\n'),
+            out = [],
+            hasPlaylistType = false,
+            hasEndList = false,
+            i = 0,
+            line,
+            trimmed;
+
+        for (i; i < lines.length; i++) {
+            line = lines[i];
+            trimmed = line.trim();
+
+            if (trimmed.toUpperCase().indexOf('#EXT-X-PLAYLIST-TYPE:') === 0) {
+                out.push('#EXT-X-PLAYLIST-TYPE:VOD');
+                hasPlaylistType = true;
+            } else if (trimmed.toUpperCase() === '#EXT-X-ENDLIST') {
+                hasEndList = true;
+                out.push('#EXT-X-ENDLIST');
+            } else if (trimmed && trimmed.charAt(0) !== '#') {
+                out.push(WTV_ToAbsolutePlaylistUrl(trimmed, baseUrl));
+            } else if (trimmed && trimmed.charAt(0) === '#' && trimmed.toUpperCase().indexOf('URI=') !== -1) {
+                out.push(WTV_PatchPlaylistTagUris(line, baseUrl));
+            } else {
+                out.push(line);
+            }
+        }
+
+        if (!hasPlaylistType) {
+            for (i = 0; i < out.length; i++) {
+                if (out[i].toUpperCase().indexOf('#EXT-X-VERSION:') === 0) {
+                    out.splice(i + 1, 0, '#EXT-X-PLAYLIST-TYPE:VOD');
+                    hasPlaylistType = true;
+                    break;
+                }
+            }
+            if (!hasPlaylistType) out.splice(1, 0, '#EXT-X-PLAYLIST-TYPE:VOD');
+        }
+
+        if (!hasEndList) out.push('#EXT-X-ENDLIST');
+
+        return out.join('\n');
+    }
+
+    function WTV_ToAbsolutePlaylistUrl(url, baseUrl) {
+        if (!url || /^https?:\/\//i.test(url) || /^data:/i.test(url) || /^blob:/i.test(url)) return url;
+
+        if (url.charAt(0) === '/') {
+            var endpoint = WTV_GetEndpoint();
+            return endpoint ? endpoint + url : url;
+        }
+
+        if (baseUrl && /^https?:\/\//i.test(baseUrl)) {
+            return baseUrl.replace(/[^/]*$/, '') + url;
+        }
+
+        return url;
+    }
+
+    function WTV_PatchPlaylistTagUris(line, baseUrl) {
+        return line.replace(/(URI=")([^"]+)(")/gi, function (_, prefix, uri, suffix) {
+            return prefix + WTV_ToAbsolutePlaylistUrl(uri, baseUrl) + suffix;
+        });
+    }
+
+    function WTV_CreatePlaylistObjectUrl(playlist) {
+        if (WTV_PlayVodBlobUrl && window.URL && window.URL.revokeObjectURL) {
+            try {
+                window.URL.revokeObjectURL(WTV_PlayVodBlobUrl);
+            } catch (e) {}
+        }
+
+        if (window.Blob && window.URL && window.URL.createObjectURL) {
+            WTV_PlayVodBlobUrl = window.URL.createObjectURL(new Blob([playlist], {type: 'application/vnd.apple.mpegurl'}));
+            return WTV_PlayVodBlobUrl;
+        }
+
+        return 'data:application/vnd.apple.mpegurl;charset=utf-8,' + encodeURIComponent(playlist);
+    }
+
+    function WTV_PlayVodLoadDataSuccess(responseObj) {
+        var patchedPlaylist = WTV_PatchVodPlaylist(responseObj.responseText || '', responseObj.url || WTV_GetPlaybackUrl(Main_values_Play_data));
+        PlayVod_autoUrl = WTV_CreatePlaylistObjectUrl(patchedPlaylist) || responseObj.url || WTV_GetPlaybackUrl(Main_values_Play_data);
+        PlayVod_loadDataSuccessEnd(patchedPlaylist);
+    }
+
+    function WTV_BuildLiveData(status, sourceKind) {
+        var channel = WTV_NormalizeChannel(status.channel || status.source_channel || '');
+        var startedAt = status.started_at || new Date().toISOString();
+        var streamId = status.stream_id || status.recording_group_id || WTV_Platform + ':' + channel;
+        var viewerCount = status.viewer_count || 0;
+        var title = status.title || channel;
+        var playbackUrl = status.playback_url || status.vod_url || '';
+        var meta = {
+            source_platform: WTV_Platform,
+            source_channel: channel,
+            source_kind: sourceKind || 'live',
+            playback_url: playbackUrl,
+            playback_kind: status.playback_kind || 'direct_hls',
+            vod_url: status.vod_url || '',
+            recording_group_id: status.recording_group_id || '',
+            stream_id: streamId,
+            title: title,
+            started_at: startedAt,
+            viewer_count: viewerCount
+        };
+        var data = [
+            status.preview_url || status.thumbnail_url || IMG_404_BANNER,
+            'w.tv / ' + channel,
+            title,
+            'w.tv',
+            Main_formatNumber(viewerCount),
+            '[W.TV]',
+            channel,
+            streamId,
+            false,
+            status.profile_image_url || IMG_404_LOGO,
+            false,
+            Play_streamLiveAt(startedAt),
+            startedAt,
+            viewerCount,
+            WTV_Platform + ':' + channel,
+            WTV_Platform,
+            null,
+            null,
+            null
+        ];
+
+        data[WTV_MetaIndex] = meta;
+        data.source_platform = WTV_Platform;
+        data.source_channel = channel;
+        data.playback_url = playbackUrl;
+        data.playback_kind = meta.playback_kind;
+        data.source_kind = meta.source_kind;
+        data.vod_url = meta.vod_url;
+        data.recording_group_id = meta.recording_group_id;
+
+        return data;
     }
     /*
     Copyright (c) 2013-2015, Fionn Kelleher All rights reserved.
@@ -52279,6 +54175,7 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
         Main_CheckFullxmlHttpGet: Main_CheckFullxmlHttpGet,
         PlayHLS_GetTokenResult: PlayHLS_GetTokenResult,
         PlayHLS_PlayListUrlResult: PlayHLS_PlayListUrlResult,
+        PlayHLS_ExternalPlayListUrlResult: PlayHLS_ExternalPlayListUrlResult,
         AddCode_AppTokenResult: AddCode_AppTokenResult,
         Play_UpdateDurationDiv: Play_UpdateDurationDiv,
         Screens_PlaybackTimeSetVodDuration: Screens_PlaybackTimeSetVodDuration

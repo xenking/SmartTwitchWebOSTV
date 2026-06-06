@@ -793,6 +793,8 @@ function Screens_createCellClip(id, idArray, valuesArray, key, Extra_when, Extra
 function Screens_createCellVod(id, idArray, valuesArray, key, Extra_when, Extra_until) {
     ScreenObj[key].DataObj[id] = valuesArray;
 
+    var sourceLabel = WTV_IsData(valuesArray) ? '<span style="color:#b26cff;">W.TV</span>' : valuesArray[5];
+
     return (
         '<div id="' +
         idArray[3] +
@@ -833,7 +835,7 @@ function Screens_createCellVod(id, idArray, valuesArray, key, Extra_when, Extra_
         '</span>' +
         STR_SPACE_HTML +
         '<span>' +
-        valuesArray[5] +
+        sourceLabel +
         '</span></div></div><div class="' +
         (Extra_when ? 'stream_info_live_title_single_line' : 'stream_info_live_title') +
         '">' +
@@ -1251,6 +1253,7 @@ function Screens_LoadPreview(key) {
 
     if (
         ScreenObj[key].PreviewEnable &&
+        OSInterface_CanStartSmallPreview() &&
         !Main_isStopped &&
         Screens_IsInUse(key) &&
         Screens_ObjNotNull(key) &&

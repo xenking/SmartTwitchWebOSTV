@@ -3047,7 +3047,7 @@ function ScreensObj_LiveCellArray(cell, logo, partner) {
 function ScreensObj_VodCellArray(cell, isQuery, game_id, game_name) {
     if (isQuery) {
         return [
-            ScreensObj_VodGetPreview(cell.thumbnailURLs[0], cell.animatedPreviewURL), //0
+            ScreensObj_VodGetPreview(cell.thumbnailURLs && cell.thumbnailURLs[0] ? cell.thumbnailURLs[0] : '', cell.animatedPreviewURL), //0
             cell.creator ? cell.creator.displayName : '', //1
             Main_videoCreatedAt(cell.createdAt), //2
             cell.game_name ? cell.game_name : game_name, //3
@@ -3417,7 +3417,7 @@ function BaseXmlHttpGetFull(
 
     if (UseHeaders) {
         if (AddUser_UserHasToken()) {
-            Main_Bearer_User_Headers[1][1] = Bearer + AddUser_UsernameArray[0].access_token;
+            HttpGetEnsureUserHeader();
 
             headers = Main_Bearer_User_Headers;
         } else {

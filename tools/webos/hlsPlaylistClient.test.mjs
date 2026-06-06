@@ -1,0 +1,199 @@
+import assert from 'node:assert/strict';
+import { createRequire } from 'node:module';
+
+const require = createRequire(import.meta.url);
+const client = require('../../webos/service/hls_playlist_client.js');
+
+function parse(url) {
+  return new URL(url);
+}
+
+const liveUrl = 'https://usher.ttvnw.net/api/channel/hls/somechannel.m3u8?sig=s&token=t';
+const vodUrl = 'https://usher.ttvnw.net/vod/12345.m3u8?sig=s&token=t';
+const gqlUrl = 'https://gql.twitch.tv/gql';
+const livePlaybackTokenBody =
+  '{"operationName":"PlaybackAccessToken","variables":{"isLive":true,"isVod":false,"login":"somechannel","platform":"web","playerType":"site","vodID":""}}';
+const vodPlaybackTokenBody =
+  '{"operationName":"PlaybackAccessToken","variables":{"isLive":false,"isVod":true,"login":"","platform":"web","playerType":"site","vodID":"12345"}}';
+
+{
+  assert.deepEqual(client.DEFAULT_OPTIMIZED_PROXIES, [
+    'chromium.api.cdn-perfprod.com:2023',
+    'firefox.api.cdn-perfprod.com:2023'
+  ]);
+}
+
+{
+  const attempts = client.buildFetchAttempts(parse(liveUrl), liveUrl, {});
+  assert.equal(attempts.length, 3);
+  assert.equal(attempts[0].type, 'ttvlol_proxy');
+  assert.equal(attempts[0].proxy.source, 'chromium.api.cdn-perfprod.com:2023');
+  assert.equal(attempts[0].proxy.protocol, 'http:');
+  assert.equal(attempts[0].proxy.hostname, 'chromium.api.cdn-perfprod.com');
+  assert.equal(attempts[0].proxy.port, 2023);
+  assert.equal(attempts[1].type, 'ttvlol_proxy');
+  assert.equal(attempts[1].proxy.source, 'firefox.api.cdn-perfprod.com:2023');
+  assert.equal(attempts[2].type, 'direct');
+}
+
+{
+  const attempts = client.buildFetchAttempts(parse(liveUrl), liveUrl, {
+    optimizedProxies: 'https://user:pass@example.test:9443; http://backup.test:8080, bad://ignored'
+  });
+  assert.equal(attempts.length, 3);
+  assert.deepEqual(
+    attempts.map(attempt => attempt.proxy && `${attempt.proxy.protocol}//${attempt.proxy.hostname}:${attempt.proxy.port}`),
+    ['https://example.test:9443', 'http://backup.test:8080', null]
+  );
+  assert.equal(attempts[0].proxy.auth, 'user:pass');
+}
+
+{
+  const attempts = client.buildFetchAttempts(parse(liveUrl), liveUrl, {
+    ttvLolEnabled: false,
+    optimizedProxies: ['custom.test:3128']
+  });
+  assert.equal(attempts.length, 1);
+  assert.equal(attempts[0].type, 'direct');
+}
+
+{
+  const attempts = client.buildFetchAttempts(parse(vodUrl), vodUrl, {
+    optimizedProxies: ['custom.test:3128']
+  });
+  assert.equal(attempts.length, 1);
+  assert.equal(attempts[0].type, 'direct');
+}
+
+{
+  const attempts = client.buildFetchAttempts(parse(gqlUrl), gqlUrl, {
+    method: 'POST',
+    body: livePlaybackTokenBody,
+    optimizedProxies: ['custom.test:3128']
+  });
+  assert.equal(attempts.length, 2);
+  assert.equal(attempts[0].type, 'ttvlol_proxy');
+  assert.equal(attempts[0].proxy.hostname, 'custom.test');
+  assert.equal(attempts[1].type, 'direct');
+}
+
+{
+  const attempts = client.buildFetchAttempts(parse(gqlUrl), gqlUrl, {
+    method: 'POST',
+    body: vodPlaybackTokenBody,
+    optimizedProxies: ['custom.test:3128']
+  });
+  assert.equal(attempts.length, 1);
+  assert.equal(attempts[0].type, 'direct');
+}
+
+{
+  assert.equal(client.isLivePlaybackAccessTokenRequest(parse(gqlUrl), { method: 'POST', body: livePlaybackTokenBody }), true);
+  assert.equal(client.isLivePlaybackAccessTokenRequest(parse(gqlUrl), { method: 'POST', body: vodPlaybackTokenBody }), false);
+}
+
+{
+  assert.equal(client.isAllowedPlaylistUrl(parse(liveUrl)), true);
+  assert.equal(client.isAllowedPlaylistUrl(parse(vodUrl)), true);
+  assert.equal(client.isAllowedPlaylistUrl(parse('https://usher.ttvnw.net/api/channel/hls/somechannel.ts')), false);
+  assert.equal(client.isAllowedPlaylistUrl(parse('https://evil.example/api/channel/hls/somechannel.m3u8')), false);
+}
+
+{
+  assert.deepEqual(
+    client.normalizeList('["one.test:1", "two.test:2", "one.test:1"]', []),
+    ['one.test:1', 'two.test:2']
+  );
+  assert.deepEqual(client.normalizeList('', ['fallback.test:3128']), ['fallback.test:3128']);
+}
+
+{
+  const headers = client.buildRequestHeaders({
+    origin: 'https://player.twitch.tv\r\nInjected: yes',
+    referer: 'https://player.twitch.tv/',
+    userAgent: 'UA\nInjected: yes',
+    acceptLanguage: ''
+  });
+  assert.equal(headers.Origin, 'https://player.twitch.tv  Injected: yes');
+  assert.equal(headers['User-Agent'], 'UA Injected: yes');
+  assert.equal(headers['Accept-Language'], 'en-US,en;q=0.9');
+}
+
+{
+  const headers = client.buildRequestHeaders({
+    headers: [
+      ['Client-ID', 'client123'],
+      ['Authorization', 'Bearer token123'],
+      ['X-Not-Allowed', 'drop-me']
+    ]
+  });
+  assert.equal(headers['Client-ID'], 'client123');
+  assert.equal(headers.Authorization, 'Bearer token123');
+  assert.equal(headers['X-Not-Allowed'], undefined);
+}
+
+{
+  const fs = require('node:fs');
+  const settingsSource = fs.readFileSync('app/specific/Settings.js', 'utf8');
+  assert.match(settingsSource, /webos_ttv_lol_proxy_settings/);
+  assert.match(settingsSource, /STTV_TTVLOL_ENABLED/);
+  assert.match(settingsSource, /STTV_TTVLOL_PROXIES/);
+  assert.match(settingsSource, /Settings_DialogShowWebOsTtvLolProxy/);
+
+  const bridgeSource = fs.readFileSync('webos/bridge/webosCompatBridge.js', 'utf8');
+  assert.match(bridgeSource, /webos_ttv_lol_proxy/);
+  assert.match(bridgeSource, /webos_ttv_lol_proxy_url_value/);
+  assert.match(bridgeSource, /isLiveGqlPlaybackAccessTokenRequest/);
+  assert.match(bridgeSource, /callTwitchProxyService/);
+  assert.match(bridgeSource, /function normalizeServiceTwitchResult/);
+  assert.match(bridgeSource, /function patchLiveProxyAsyncLoadFlow/);
+  assert.match(bridgeSource, /live_sync_load_forced_async_proxy/);
+  assert.match(bridgeSource, /wrap\('Play_loadData'\)/);
+  assert.match(bridgeSource, /wrap\('PlayExtra_Resume'\)/);
+  assert.match(bridgeSource, /function playlistHasTwitchStitchedAds/);
+  assert.match(bridgeSource, /twitch_stitched_ad_marker_detected/);
+  assert.match(bridgeSource, /isUsherPlaylistRequest\(meta\) && !hasUsablePlaylistBody\(text\)/);
+  assert.match(bridgeSource, /3\.0\.379/);
+  assert.match(bridgeSource, /remoteWebTag <= localWebTag/);
+
+  const controlsSource = fs.readFileSync('app/specific/PlayEtc.js', 'utf8');
+  assert.match(controlsSource, /Play_controls\[Play_controlsExternal\] = \{/);
+  assert.ok(
+    controlsSource.includes('ShowInLive: false,\n        ShowInVod: false,\n        ShowInClip: false'),
+    'external player control stays hidden in live, VOD, and clip panels'
+  );
+  assert.match(bridgeSource, /STTV_WEBOS_PREVIEW_DEFAULTS_RESTORED/);
+  assert.match(bridgeSource, /CanStartSmallPreview/);
+  assert.match(bridgeSource, /PREVIEW_VIDEO_Z_INDEX/);
+  assert.match(bridgeSource, /appendChild\(pv\)/);
+  assert.match(bridgeSource, /pv\.muted = false/);
+  assert.match(bridgeSource, /isSingleSmallPreviewMode/);
+  assert.match(bridgeSource, /var previewEnabled = !!audioEnabled\[s\] \|\| isSingleSmallPreviewMode\(ps\.mode\)/);
+  assert.match(bridgeSource, /applyPreviewModeLayout\(\);\n            applyAudio\(\);/);
+  assert.match(bridgeSource, /mainPauseRequested = false/);
+  assert.match(bridgeSource, /function handleMainPlaybackFinished\(failType, errorCode\)/);
+  assert.match(bridgeSource, /call\('Play_PannelEndStart', \[type, ft, ec\]\)/);
+  assert.doesNotMatch(
+    bridgeSource,
+    /function handleMainPlaybackFailure[\s\S]*?Play_CheckIfIsLiveClean[\s\S]*?function scheduleMainStallCheck/,
+    'main playback failures must use Play_PannelEndStart, not preview-clean flow'
+  );
+  assert.match(bridgeSource, /A\.StartFeedPlayer = function \(uri, playlist, position, resumePosition, isVod\)/);
+  assert.match(bridgeSource, /A\.StartSidePanelPlayer = function \(uri, playlist\)/);
+  assert.match(bridgeSource, /A\.StartScreensPlayer = function \(uri, playlist, resumePosition, bottom, right, left, webHeight, whoCalled, isBig\)/);
+  assert.match(bridgeSource, /instances: 2/);
+  assert.match(bridgeSource, /mode === 'multi' \|\| mode === 'extra' \|\| mode === 'feed' \|\| mode === 'side' \|\| mode === 'screens'/);
+
+  const osInterfaceSource = fs.readFileSync('app/specific/OSInterface.js', 'utf8');
+  assert.match(osInterfaceSource, /OSInterface_CanStartSmallPreview/);
+
+  const userLiveFeedSource = fs.readFileSync('app/specific/UserLiveFeed.js', 'utf8');
+  assert.match(userLiveFeedSource, /OSInterface_CanStartSmallPreview\(\)/);
+
+  const versionSource = fs.readFileSync('app/general/version.js', 'utf8');
+  assert.match(versionSource, /April 28 2026/);
+  assert.match(versionSource, /WebTag: 728/);
+  assert.match(versionSource, /ApkUrl: ''/);
+}
+
+console.log('hlsPlaylistClient tests passed');

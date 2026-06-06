@@ -769,6 +769,14 @@ function OSInterface_SetPreviewOthersAudio(volume) {
     if (Main_IsOn_OSInterface) Android.SetPreviewOthersAudio(volume * Settings_VolumeScale);
 }
 
+function OSInterface_CanStartSmallPreview() {
+    if (!Main_IsOn_OSInterface) return false;
+
+    if (Android.CanStartSmallPreview) return Android.CanStartSmallPreview();
+
+    return true;
+}
+
 //public void StartFeedPlayer(String uri, String mainPlaylistString, int position, long resumePosition, boolean isVod)
 //uri =  the url of the playlist or the clip
 //mainPlaylistString = the stringify version of the url playlist content

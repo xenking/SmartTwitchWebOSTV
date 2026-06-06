@@ -21,18 +21,36 @@
 //Spacing for release maker not trow errors from jshint
 var version = {
     VersionBase: '3.0',
-    publishVersionCode: 377, //Always update (+1 to current value) Main_version_java after update publishVersionCode or a major update of the apk is released
-    ApkUrl: 'https://github.com/fgl27/SmartTwitchTV/releases/download/377/SmartTV_twitch_3_0_377.apk',
-    WebVersion: 'January 27 2026',
-    WebTag: 727, //Always update (+1 to current value) Main_version_web after update Main_minversion or a major update of the web part of the app
+    publishVersionCode: 379, //Always update (+1 to current value) Main_version_java after update publishVersionCode or a major update of the apk is released
+    ApkUrl: '',
+    WebVersion: 'April 28 2026',
+    WebTag: 728, //Always update (+1 to current value) Main_version_web after update Main_minversion or a major update of the web part of the app
     changelog: [
         {
+            title: 'April 28 2026',
+            changes: [
+                'Add configurable webOS TTV LOL playlist proxy for live streams',
+                'Route webOS update checks through the xenking fork without offering Android APK updates',
+                'Keep HEVC playback enabled on webOS devices that reject the original codec hint'
+            ]
+        },
+        {
+            title: 'March 17 2026',
+            changes: ["Allow devices running android 7.0 and older to run the app again (5.0 and up only), GitHub update they encryption done on the application page, the new encryption wasn't supported by old devices."]
+        },
+        {
             title: 'January 27 2026',
-            changes: ['Add more fast forward speeds', 'General performance improvements and bug fixes']
+            changes: [
+                'Add more fast forward speeds',
+                'General performance improvements and bug fixes'
+            ]
         },
         {
             title: 'Version December 30',
-            changes: ['Add French application language by @UnicodeApocalypse', 'General performance improvements and bug fixes']
+            changes: [
+                'Add French application language by @UnicodeApocalypse',
+                'General performance improvements and bug fixes'
+            ]
         },
         {
             title: 'Version June 17',

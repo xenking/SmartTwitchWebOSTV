@@ -752,6 +752,7 @@ function UserLiveFeed_CheckIfIsLiveStart(pos) {
         pos === UserLiveFeed_FeedPosX &&
         (!Play_isEndDialogVisible() || !Play_EndFocus) &&
         Settings_Obj_default('show_feed_player') &&
+        OSInterface_CanStartSmallPreview() &&
         UserLiveFeed_obj[UserLiveFeed_FeedPosX].checkPreview &&
         (!Play_MultiEnable || !Settings_Obj_default('disable_feed_player_multi')) &&
         UserLiveFeed_MaxInstances()
