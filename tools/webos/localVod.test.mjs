@@ -145,6 +145,7 @@ assert.match(functionBody(playVodSource, 'PlayVod_WebOSLocalDurationSeconds'), /
       source_started_at: '2026-06-07T05:12:10.127333703Z',
       duration_seconds: 4185,
       playback_url: '/archive/vods/grp-melharucos-20260607T051210.127333703Z/playlist.m3u8',
+      thumbnail_url: '/archive/vods/grp-melharucos-20260607T051210.127333703Z/thumbnail.jpg',
     },
     {
       id: 'grp-melharucos-20260606T062240.114395769Z',
@@ -158,6 +159,11 @@ assert.match(functionBody(playVodSource, 'PlayVod_WebOSLocalDurationSeconds'), /
 
   const merged = context.LocalVod_MergeWithTwitchVods(twitchVods, localVods, 'melharucos');
   assert.equal(merged[0][7], 'grp-melharucos-20260607T051210.127333703Z', 'nanosecond local VOD date sorts above old Twitch VODs');
+  assert.equal(
+    merged[0][0],
+    'http://192.168.0.109:18080/archive/vods/grp-melharucos-20260607T051210.127333703Z/thumbnail.jpg',
+    'local archive thumbnail URLs are absolute for file:// webOS app pages'
+  );
   assert.equal(merged[1][7], 'grp-melharucos-20260606T062240.114395769Z', 'June 6 local joined VOD stays near top');
   assert.equal(merged[1][0], 'jun6-thumb.jpg', 'local joined VOD inherits overlapping Twitch thumbnail preview');
   assert.equal(merged.some(vod => vod.id === 'twitch-jun6'), false, 'overlapping Twitch VOD is replaced by local joined VOD');

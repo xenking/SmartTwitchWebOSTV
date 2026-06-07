@@ -440,7 +440,10 @@ function LocalVod_BuildData(vod, channel, identity, twitchVod) {
     identity = identity || LocalVod_CurrentIdentity();
 
     data = [
-        (vod && (vod.thumbnail_url || vod.preview_url)) || LocalVod_TwitchThumbnail(twitchVod) || LocalVod_LivePreviewUrl(vod, channel) || IMG_404_VOD,
+        LocalVod_AbsoluteUrl(vod && (vod.thumbnail_url || vod.preview_url)) ||
+            LocalVod_TwitchThumbnail(twitchVod) ||
+            LocalVod_LivePreviewUrl(vod, channel) ||
+            IMG_404_VOD,
         identity.display_name,
         startedAt ? Main_videoCreatedAt(startedAt) : '',
         (vod && vod.game_name) || (twitchVod && twitchVod.game_name) || '',

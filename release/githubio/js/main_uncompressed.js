@@ -12848,7 +12848,7 @@
         identity = identity || LocalVod_CurrentIdentity();
 
         data = [
-            (vod && (vod.thumbnail_url || vod.preview_url)) ||
+            LocalVod_AbsoluteUrl(vod && (vod.thumbnail_url || vod.preview_url)) ||
                 LocalVod_TwitchThumbnail(twitchVod) ||
                 LocalVod_LivePreviewUrl(vod, channel) ||
                 IMG_404_VOD,
