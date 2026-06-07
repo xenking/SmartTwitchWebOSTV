@@ -138,6 +138,7 @@ function LocalVod_PlaybackUrl(vod) {
           vod.vod_url ||
           vod.playlist_url ||
           vod.file_url ||
+          vod.final_url ||
           vod.url ||
           ''
         : '';

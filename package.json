@@ -3,6 +3,7 @@
     "lint": "node release/scripts/maker.js jsh && node tools/webos/lintWebosBridge.js",
     "release:prepare": "npm run webos:prepare-release && npm run lint && npm run webos:package && npm run release:artifacts",
     "release:artifacts": "node tools/release/generateHomebrewArtifacts.js",
+    "hosted:prepare": "npm run webos:prepare-release",
     "release:build": "node release/scripts/maker.js",
     "webos:prepare-release": "node tools/webos/prepareReleaseArtifact.js",
     "webos:package": "npm run release:build && npm run webos:prepare-release && npm run webos:prepare-app && ares-package webos/app webos/service -o build/",

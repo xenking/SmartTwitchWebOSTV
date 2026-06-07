@@ -488,17 +488,25 @@ function Chat_loadChatRequest(id) {
 }
 
 function Chat_loadTwitchChatRequest(id) {
+    Chat_loadTwitchChatOffsetRequest(id, Chat_offset || 0, Chat_loadChatRequestResult);
+}
+
+function Chat_loadTwitchChatNextOffsetRequest(id) {
+    Chat_loadTwitchChatOffsetRequest(id, Chat_LocalVodNextOffsetSeconds(), Chat_loadChatNextResult);
+}
+
+function Chat_loadTwitchChatOffsetRequest(id, offsetSeconds, resultCallback) {
     FullxmlHttpGet(
         PlayClip_BaseUrl,
         Play_base_chat_headers_Array,
-        Chat_loadChatRequestResult,
+        resultCallback,
         noop_fun,
         id,
         0,
         'POST', //Method, null for get
         Chat_loadChatRequestPost.replace('%v', PlayVod_ExternalTwitchVodId()).replace(
             '%o',
-            parseInt(PlayVod_PlayerSecondsToChatSeconds(Chat_offset || 0))
+            parseInt(PlayVod_PlayerSecondsToChatSeconds(offsetSeconds || 0))
         )
     );
 }
@@ -877,7 +885,7 @@ function Chat_loadChatNextRequest(id) {
             function () {
                 if (PlayVod_ExternalTwitchVodId()) {
                     Chat_LocalVodChatUnavailable = true;
-                    Chat_loadTwitchChatRequest(id);
+                    Chat_loadTwitchChatNextOffsetRequest(id);
                 } else {
                     Chat_loadChatNextError(id);
                 }

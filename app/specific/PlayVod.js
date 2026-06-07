@@ -337,6 +337,7 @@ function PlayVod_LocalVodMeta() {
 function PlayVod_ExternalTwitchVodId() {
     var meta = PlayVod_LocalVodMeta();
     if (meta && meta.twitch_vod_id) return meta.twitch_vod_id;
+    if (meta) return '';
     if (WTV_IsData(Main_values_Play_data)) return '';
     return Main_values.ChannelVod_vodId || '';
 }

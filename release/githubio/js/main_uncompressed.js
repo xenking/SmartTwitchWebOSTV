@@ -11919,17 +11919,25 @@
     }
 
     function Chat_loadTwitchChatRequest(id) {
+        Chat_loadTwitchChatOffsetRequest(id, Chat_offset || 0, Chat_loadChatRequestResult);
+    }
+
+    function Chat_loadTwitchChatNextOffsetRequest(id) {
+        Chat_loadTwitchChatOffsetRequest(id, Chat_LocalVodNextOffsetSeconds(), Chat_loadChatNextResult);
+    }
+
+    function Chat_loadTwitchChatOffsetRequest(id, offsetSeconds, resultCallback) {
         FullxmlHttpGet(
             PlayClip_BaseUrl,
             Play_base_chat_headers_Array,
-            Chat_loadChatRequestResult,
+            resultCallback,
             noop_fun,
             id,
             0,
             'POST', //Method, null for get
             Chat_loadChatRequestPost.replace('%v', PlayVod_ExternalTwitchVodId()).replace(
                 '%o',
-                parseInt(PlayVod_PlayerSecondsToChatSeconds(Chat_offset || 0))
+                parseInt(PlayVod_PlayerSecondsToChatSeconds(offsetSeconds || 0))
             )
         );
     }
@@ -12308,7 +12316,7 @@
                 function () {
                     if (PlayVod_ExternalTwitchVodId()) {
                         Chat_LocalVodChatUnavailable = true;
-                        Chat_loadTwitchChatRequest(id);
+                        Chat_loadTwitchChatNextOffsetRequest(id);
                     } else {
                         Chat_loadChatNextError(id);
                     }
@@ -12563,6 +12571,7 @@
               vod.vod_url ||
               vod.playlist_url ||
               vod.file_url ||
+              vod.final_url ||
               vod.url ||
               ''
             : '';
@@ -28723,6 +28732,7 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
     function PlayVod_ExternalTwitchVodId() {
         var meta = PlayVod_LocalVodMeta();
         if (meta && meta.twitch_vod_id) return meta.twitch_vod_id;
+        if (meta) return '';
         if (WTV_IsData(Main_values_Play_data)) return '';
         return Main_values.ChannelVod_vodId || '';
     }
@@ -32042,7 +32052,10 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
 
         playbackUrl = meta && meta.playback_url ? meta.playback_url : '';
         if (!playbackUrl) return false;
-        if (meta.playback_kind === 'archive_file') return true;
+        if (meta.playback_kind === 'archive_file') {
+            Screens_LoadPreviewSTop();
+            return true;
+        }
 
         PlayHLS_GetExternalPlayListAsync(
             playbackUrl,

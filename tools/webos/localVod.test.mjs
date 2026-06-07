@@ -10,6 +10,7 @@ const localVodSource = fs.readFileSync('app/specific/LocalVod.js', 'utf8');
 const wtvSource = fs.readFileSync('app/specific/WTV.js', 'utf8');
 const bridgeSource = fs.readFileSync('webos/bridge/webosCompatBridge.js', 'utf8');
 const indexSource = fs.readFileSync('app/index.html', 'utf8');
+const packageJson = JSON.parse(fs.readFileSync('package.json', 'utf8'));
 
 function functionBody(source, name) {
   const start = source.indexOf(`function ${name}`);
@@ -68,8 +69,10 @@ assert.match(indexSource, /specific\/LocalVod\.js/, 'LocalVod runtime module is 
 assert.match(localVodSource, /function LocalVod_SaveVodHistory/, 'local VOD playback saves independent VOD history');
 assert.match(functionBody(localVodSource, 'LocalVod_ApplyVodInfo'), /LocalVod_SaveVodHistory/, 'local VOD info path records resume history');
 assert.match(functionBody(localVodSource, 'LocalVod_PlayVodLoadData'), /LocalVod_SaveVodHistory/, 'local VOD load path records resume history even without Twitch info lookup');
+assert.match(functionBody(localVodSource, 'LocalVod_PlaybackUrl'), /final_url/, 'local archive finalized direct URLs are playable');
 assert.match(wtvSource, /function WTV_SaveVodHistory/, 'w.tv VOD playback has independent VOD history path');
 assert.match(functionBody(playVodSource, 'PlayVod_ExternalTwitchVodId'), /meta\.twitch_vod_id/, 'local VOD chat and previews use linked Twitch VOD id when present');
+assert.match(functionBody(playVodSource, 'PlayVod_ExternalTwitchVodId'), /if \(meta\) return '';/, 'unlinked local archive VOD ids are not treated as Twitch VOD ids');
 assert.match(functionBody(playVodSource, 'PlayVod_CanLoadVodChat'), /LocalVod_CanLoadChat/, 'local-only archive VODs can load archived local chat without a Twitch VOD id');
 assert.match(functionBody(playVodSource, 'PlayVod_get_vod_info'), /PlayVod_ExternalTwitchVodId/, 'local VOD info fetch can still load linked Twitch preview metadata');
 assert.doesNotMatch(functionBody(playVodSource, 'PlayVod_get_vod_info'), /LocalVod_ApplyVodInfo\(\);\s*return;/, 'local VOD info path must not block linked Twitch seek preview lookup');
@@ -80,22 +83,25 @@ assert.match(functionBody(playVodSource, 'PlayVod_previews_move'), /PlayVod_Play
 assert.match(functionBody(chatVodSource, 'Chat_loadChatRequest'), /PlayVod_ExternalTwitchVodId/, 'VOD chat request uses linked Twitch VOD id');
 assert.match(functionBody(chatVodSource, 'Chat_loadChatRequest'), /LocalVod_LoadChat/, 'local archive VOD chat request uses local archive chat endpoint first');
 assert.match(functionBody(chatVodSource, 'Chat_loadChatRequest'), /Chat_LocalVodChatUnavailable/, 'missing local archive chat falls back to linked Twitch VOD comments');
-assert.match(functionBody(chatVodSource, 'Chat_loadTwitchChatRequest'), /PlayVod_PlayerSecondsToChatSeconds/, 'Twitch VOD chat fallback keeps local-to-Twitch offset mapping');
-assert.match(functionBody(chatVodSource, 'Chat_loadTwitchChatRequest'), /PlayVod_PlayerSecondsToChatSeconds/, 'VOD chat request offset maps local player time to Twitch time');
+assert.match(functionBody(chatVodSource, 'Chat_loadTwitchChatOffsetRequest'), /PlayVod_PlayerSecondsToChatSeconds/, 'Twitch VOD chat fallback keeps local-to-Twitch offset mapping');
+assert.match(functionBody(chatVodSource, 'Chat_loadTwitchChatOffsetRequest'), /PlayVod_PlayerSecondsToChatSeconds/, 'VOD chat request offset maps local player time to Twitch time');
 assert.doesNotMatch(functionBody(chatVodSource, 'Chat_loadChatRequest'), /Chat_offset\s*\?\s*parseInt\(PlayVod_PlayerSecondsToChatSeconds\(Chat_offset\)\)\s*:\s*0/, 'zero-offset local VOD chat requests still apply local-to-Twitch timeline mapping');
 assert.match(functionBody(chatVodSource, 'Chat_LocalVodNextOffsetSeconds'), /Chat_Messages/, 'local archive VOD chat pagination advances from loaded message times');
 assert.match(functionBody(chatVodSource, 'Chat_loadChatSuccess'), /sourcePlatform === 'local_archive'[\s\S]*PlayVod_ChatSecondsToPlayerSeconds/, 'local archive chat stays on local timeline while Twitch comments map to player time');
 assert.match(functionBody(chatVodSource, 'Chat_loadChatNextRequest'), /PlayVod_ExternalTwitchVodId/, 'VOD chat cursor request uses linked Twitch VOD id');
 assert.match(functionBody(chatVodSource, 'Chat_loadChatNextRequest'), /Chat_LocalVodNextOffsetSeconds/, 'local archive VOD chat next request is offset based');
+assert.match(functionBody(chatVodSource, 'Chat_loadChatNextRequest'), /Chat_loadTwitchChatNextOffsetRequest/, 'local chat next-page fallback uses the next-result path');
+assert.match(functionBody(chatVodSource, 'Chat_loadTwitchChatNextOffsetRequest'), /Chat_LocalVodNextOffsetSeconds\(\)[\s\S]*Chat_loadChatNextResult/, 'local chat next-page Twitch fallback continues from the current local offset');
 assert.match(functionBody(localVodSource, 'LocalVod_MergeChannelVodResponse'), /LocalVod_FilterTwitchVodsForExistingLocalData/, 'paginated channel VOD loads suppress Twitch entries already represented by local archive cards');
 assert.match(functionBody(screensSource, 'Screens_LoadPreviewStart'), /Screens_LoadExternalVodPreview/, 'local and w.tv VOD previews use their external archive playlist');
 assert.match(functionBody(screensSource, 'Screens_LoadPreviewResult'), /Screens_PatchExternalVodPreviewPlaylist/, 'external archive VOD previews patch relative playlist URLs before starting preview');
-assert.match(functionBody(screensSource, 'Screens_LoadExternalVodPreview'), /playback_kind === 'archive_file'[\s\S]*return true/, 'direct local archive files skip HLS preview playlist fetch');
+assert.match(functionBody(screensSource, 'Screens_LoadExternalVodPreview'), /playback_kind === 'archive_file'[\s\S]*Screens_LoadPreviewSTop\(\)[\s\S]*return true/, 'direct local archive files clear stale previews and skip HLS preview playlist fetch');
 assert.doesNotMatch(functionBody(wtvSource, 'WTV_GetMeta'), /if \(data\.source_platform === WTV_Platform\) return data;\s*if \(data\[WTV_MetaIndex\]/, 'w.tv array cells must prefer meta index over array object');
 assert.doesNotMatch(functionBody(wtvSource, 'WTV_VodStartedAt'), /new Date\(\)\.toISOString/, 'missing w.tv VOD dates must not sort as current wall clock');
 assert.doesNotMatch(functionBody(wtvSource, 'WTV_VodDurationSeconds'), /Date\.now\(\)/, 'w.tv VOD duration must come from archive metadata, not wall clock');
 assert.match(functionBody(playVodSource, 'PlayVod_WebOSLocalDurationSeconds'), /Play_OpenRewind/, 'ongoing local rewind metadata must avoid wall-clock VOD duration');
 assert.match(functionBody(bridgeSource, 'localVodMatchFromVod'), /boundedActiveSeconds/, 'active local VOD matching uses a bounded active duration when archive duration is not finalized');
+assert.equal(packageJson.scripts['hosted:prepare'], 'npm run webos:prepare-release', 'release workflow hosted prepare entrypoint stays available');
 
 {
   const storage = new Map([['sttv_webos_local_archive_endpoint', 'http://192.168.0.109:18080']]);
@@ -290,6 +296,23 @@ assert.match(functionBody(bridgeSource, 'localVodMatchFromVod'), /boundedActiveS
     'pruned local archive VODs keep their playable file URL'
   );
   assert.equal(context.LocalVod_GetMeta(prunedLocal).playback_kind, 'archive_file', 'file URL local VODs are direct media, not HLS playlists');
+
+  const finalizedLocal = context.LocalVod_BuildData(
+    {
+      id: 'grp-finalized',
+      channel: 'melharucos',
+      title: 'finalized local',
+      source_started_at: '2026-06-05T10:28:34.567965595Z',
+      duration_seconds: 46362,
+      final_url: '/archive/vods/grp-finalized/file',
+    },
+    'melharucos'
+  );
+  assert.equal(
+    context.LocalVod_GetMeta(finalizedLocal).playback_url,
+    'http://192.168.0.109:18080/archive/vods/grp-finalized/file',
+    'final_url-only local archive VODs keep their playable file URL'
+  );
 
   context.Main_values_Play_data = prunedLocal;
   context.Play_data = { data: prunedLocal };
