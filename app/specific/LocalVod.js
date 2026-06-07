@@ -137,6 +137,183 @@ function LocalVod_PlaybackUrl(vod) {
     return LocalVod_AbsoluteUrl(url);
 }
 
+function LocalVod_ChatPath(meta, offsetSeconds) {
+    var vodId = meta && (meta.recording_group_id || meta.stream_id);
+    if (!vodId) return '';
+    offsetSeconds = parseFloat(offsetSeconds) || 0;
+    if (offsetSeconds < 0) offsetSeconds = 0;
+    return '/archive/vods/' + encodeURIComponent(vodId) + '/chat?offset_seconds=' + encodeURIComponent(offsetSeconds);
+}
+
+function LocalVod_CanLoadChat() {
+    var meta = typeof PlayVod_LocalVodMeta === 'function' ? PlayVod_LocalVodMeta() : null;
+    return !!(meta && LocalVod_ChatPath(meta, 0));
+}
+
+function LocalVod_LoadChat(offsetSeconds, success, error) {
+    var meta = typeof PlayVod_LocalVodMeta === 'function' ? PlayVod_LocalVodMeta() : null;
+    var path = LocalVod_ChatPath(meta, offsetSeconds);
+    if (!path) {
+        if (error) error('Local archive chat is not available.');
+        return false;
+    }
+    LocalVod_Request(path, null, null, success, error);
+    return true;
+}
+
+function LocalVod_ParseChatJSONValue(value, fallback) {
+    if (!value) return fallback;
+    if (typeof value !== 'string') return value;
+    try {
+        return JSON.parse(value);
+    } catch (e) {
+        return fallback;
+    }
+}
+
+function LocalVod_ChatBadgesToTwitchBadges(badges) {
+    var parsed = LocalVod_ParseChatJSONValue(badges, badges);
+    var out = [];
+    var key;
+    var list;
+    var i;
+    var parts;
+
+    if (!parsed) return out;
+    if (typeof parsed === 'string') {
+        list = parsed.split(',');
+        for (i = 0; i < list.length; i++) {
+            parts = list[i].split('/');
+            if (parts[0] && parts[1]) {
+                out.push({
+                    setID: parts[0],
+                    version: parts[1]
+                });
+            }
+        }
+        return out;
+    }
+    if (Array.isArray(parsed)) {
+        for (i = 0; i < parsed.length; i++) {
+            if (parsed[i] && parsed[i].setID && parsed[i].version) out.push(parsed[i]);
+        }
+        return out;
+    }
+    for (key in parsed) {
+        if (parsed.hasOwnProperty(key)) {
+            out.push({
+                setID: key,
+                version: String(parsed[key])
+            });
+        }
+    }
+    return out;
+}
+
+function LocalVod_ChatEmotesToFragments(body, emotes) {
+    var parsed = LocalVod_ParseChatJSONValue(emotes, emotes);
+    var ranges = [];
+    var fragments = [];
+    var cursor = 0;
+    var key;
+    var entries;
+    var i;
+    var split;
+    var start;
+    var end;
+
+    body = body || '';
+    if (typeof parsed === 'string') {
+        parsed = {};
+        entries = emotes.split('/');
+        for (i = 0; i < entries.length; i++) {
+            split = entries[i].split(':');
+            if (split[0] && split[1]) parsed[split[0]] = split[1];
+        }
+    }
+    if (parsed && typeof parsed === 'object') {
+        for (key in parsed) {
+            if (!parsed.hasOwnProperty(key)) continue;
+            entries = String(parsed[key]).split(',');
+            for (i = 0; i < entries.length; i++) {
+                split = entries[i].split('-');
+                start = parseInt(split[0]);
+                end = parseInt(split[1]);
+                if (!isNaN(start) && !isNaN(end) && start <= end) {
+                    ranges.push({
+                        start: start,
+                        end: end,
+                        id: key
+                    });
+                }
+            }
+        }
+    }
+    ranges.sort(function (a, b) {
+        return a.start - b.start;
+    });
+    for (i = 0; i < ranges.length; i++) {
+        if (ranges[i].start < cursor || ranges[i].start >= body.length) continue;
+        if (ranges[i].start > cursor) fragments.push({text: body.slice(cursor, ranges[i].start)});
+        fragments.push({
+            text: body.slice(ranges[i].start, ranges[i].end + 1),
+            emote: {emoteID: ranges[i].id}
+        });
+        cursor = ranges[i].end + 1;
+    }
+    if (cursor < body.length || !fragments.length) fragments.push({text: body.slice(cursor)});
+    return fragments;
+}
+
+function LocalVod_ChatMessageToTwitchComment(message) {
+    var body = message && message.body ? String(message.body) : '';
+    var id = (message && (message.msg_id || message.id)) || 'local-chat-' + (message ? message.offset_ms || 0 : 0);
+
+    if (!message || (message.deleted && !body)) return null;
+
+    return {
+        cursor: id,
+        node: {
+            id: id,
+            contentOffsetSeconds: (parseInt(message.offset_ms) || 0) / 1000,
+            commenter: {
+                id: message.user_id || '',
+                login: message.login || message.display_name || '',
+                displayName: message.display_name || message.login || ''
+            },
+            message: {
+                body: body,
+                fragments: LocalVod_ChatEmotesToFragments(body, message.emotes),
+                userBadges: LocalVod_ChatBadgesToTwitchBadges(message.badges),
+                userColor: message.color || '',
+                is_action: !!message.is_action
+            }
+        }
+    };
+}
+
+function LocalVod_ChatResponseToTwitchComments(response) {
+    var messages = response && response.messages ? response.messages : [];
+    var edges = [];
+    var i;
+    var edge;
+
+    for (i = 0; i < messages.length; i++) {
+        edge = LocalVod_ChatMessageToTwitchComment(messages[i]);
+        if (edge) edges.push(edge);
+    }
+
+    return JSON.stringify({
+        data: {
+            video: {
+                comments: {
+                    edges: edges
+                }
+            }
+        }
+    });
+}
+
 function LocalVod_StartedAt(vod) {
     return vod ? vod.source_started_at || vod.started_at || vod.start_time || vod.created_at || vod.startedAt || vod.createdAt || '' : '';
 }

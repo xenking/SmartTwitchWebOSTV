@@ -70,6 +70,7 @@ assert.match(functionBody(localVodSource, 'LocalVod_ApplyVodInfo'), /LocalVod_Sa
 assert.match(functionBody(localVodSource, 'LocalVod_PlayVodLoadData'), /LocalVod_SaveVodHistory/, 'local VOD load path records resume history even without Twitch info lookup');
 assert.match(wtvSource, /function WTV_SaveVodHistory/, 'w.tv VOD playback has independent VOD history path');
 assert.match(functionBody(playVodSource, 'PlayVod_ExternalTwitchVodId'), /meta\.twitch_vod_id/, 'local VOD chat and previews use linked Twitch VOD id when present');
+assert.match(functionBody(playVodSource, 'PlayVod_CanLoadVodChat'), /LocalVod_CanLoadChat/, 'local-only archive VODs can load archived local chat without a Twitch VOD id');
 assert.match(functionBody(playVodSource, 'PlayVod_get_vod_info'), /PlayVod_ExternalTwitchVodId/, 'local VOD info fetch can still load linked Twitch preview metadata');
 assert.doesNotMatch(functionBody(playVodSource, 'PlayVod_get_vod_info'), /LocalVod_ApplyVodInfo\(\);\s*return;/, 'local VOD info path must not block linked Twitch seek preview lookup');
 assert.match(functionBody(playVodSource, 'PlayVod_get_vod_infoResult'), /LocalVod_IsData\(Main_values_Play_data\)[\s\S]*return;/, 'linked Twitch info must not overwrite local VOD playback data');
@@ -77,9 +78,12 @@ assert.match(functionBody(playVodSource, 'PlayVod_previews_success'), /PlayVod_E
 assert.match(functionBody(playVodSource, 'PlayVod_previews_success_end'), /PlayVod_ExternalTwitchVodId/, 'seek preview sprite base URL uses linked Twitch VOD id');
 assert.match(functionBody(playVodSource, 'PlayVod_previews_move'), /PlayVod_PlayerPositionToPreviewPosition/, 'local joined VOD seek preview positions map to Twitch timeline');
 assert.match(functionBody(chatVodSource, 'Chat_loadChatRequest'), /PlayVod_ExternalTwitchVodId/, 'VOD chat request uses linked Twitch VOD id');
+assert.match(functionBody(chatVodSource, 'Chat_loadChatRequest'), /LocalVod_LoadChat/, 'local archive VOD chat request uses local archive chat endpoint first');
 assert.match(functionBody(chatVodSource, 'Chat_loadChatRequest'), /PlayVod_PlayerSecondsToChatSeconds/, 'VOD chat request offset maps local player time to Twitch time');
+assert.match(functionBody(chatVodSource, 'Chat_LocalVodNextOffsetSeconds'), /Chat_Messages/, 'local archive VOD chat pagination advances from loaded message times');
 assert.match(functionBody(chatVodSource, 'Chat_loadChatSuccess'), /PlayVod_ChatSecondsToPlayerSeconds/, 'VOD chat message timestamps map Twitch time to local player time');
 assert.match(functionBody(chatVodSource, 'Chat_loadChatNextRequest'), /PlayVod_ExternalTwitchVodId/, 'VOD chat cursor request uses linked Twitch VOD id');
+assert.match(functionBody(chatVodSource, 'Chat_loadChatNextRequest'), /Chat_LocalVodNextOffsetSeconds/, 'local archive VOD chat next request is offset based');
 assert.match(functionBody(screensSource, 'Screens_LoadPreviewStart'), /Screens_LoadExternalVodPreview/, 'local and w.tv VOD previews use their external archive playlist');
 assert.match(functionBody(screensSource, 'Screens_LoadPreviewResult'), /Screens_PatchExternalVodPreviewPlaylist/, 'external archive VOD previews patch relative playlist URLs before starting preview');
 assert.doesNotMatch(functionBody(wtvSource, 'WTV_GetMeta'), /if \(data\.source_platform === WTV_Platform\) return data;\s*if \(data\[WTV_MetaIndex\]/, 'w.tv array cells must prefer meta index over array object');
@@ -179,6 +183,51 @@ assert.match(functionBody(playVodSource, 'PlayVod_WebOSLocalDurationSeconds'), /
     'https://static-cdn.jtvnw.net/previews-ttv/live_user_melharucos-640x360.jpg',
     'active local Twitch VOD cards use Twitch live preview when archive has no thumbnail'
   );
+
+  const localMeta = {
+    source_platform: 'local_archive',
+    recording_group_id: 'grp-melharucos-20260606T062240.114395769Z',
+  };
+  context.PlayVod_LocalVodMeta = () => localMeta;
+  assert.equal(context.LocalVod_CanLoadChat(), true, 'local-only VOD can load archived chat');
+  assert.equal(
+    context.LocalVod_ChatPath(localMeta, 12.425),
+    '/archive/vods/grp-melharucos-20260606T062240.114395769Z/chat?offset_seconds=12.425',
+    'local archived chat path uses recording group id and fractional offset seconds'
+  );
+
+  const twitchLikeChat = JSON.parse(
+    context.LocalVod_ChatResponseToTwitchComments({
+      messages: [
+        {
+          msg_id: 'a4ba2223-0f47-4eb9-aa8d-c71c4c78f73c',
+          offset_ms: 12425,
+          user_id: '73935315',
+          login: 'o_ozzie',
+          display_name: 'o_OZzie',
+          color: '#FF7F50',
+          body: 'Kappa test',
+          is_action: false,
+          badges: 'subscriber/24,bits-charity/1',
+          emotes: '25:0-4',
+          deleted: false,
+        },
+      ],
+    })
+  );
+  const twitchLikeNode = twitchLikeChat.data.video.comments.edges[0].node;
+  assert.equal(twitchLikeNode.id, 'a4ba2223-0f47-4eb9-aa8d-c71c4c78f73c', 'local chat msg id maps to Twitch-like comment id');
+  assert.equal(twitchLikeNode.contentOffsetSeconds, 12.425, 'local chat offset_ms maps to contentOffsetSeconds');
+  assert.equal(twitchLikeNode.commenter.displayName, 'o_OZzie', 'local chat display name maps to Twitch-like commenter');
+  assert.deepEqual(
+    twitchLikeNode.message.userBadges,
+    [
+      { setID: 'subscriber', version: '24' },
+      { setID: 'bits-charity', version: '1' },
+    ],
+    'local chat badges map to Twitch-like userBadges'
+  );
+  assert.equal(twitchLikeNode.message.fragments[0].emote.emoteID, '25', 'local chat emote ranges map to Twitch-like fragments');
 }
 
 {

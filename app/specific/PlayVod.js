@@ -342,6 +342,7 @@ function PlayVod_ExternalTwitchVodId() {
 }
 
 function PlayVod_CanLoadVodChat() {
+    if (typeof LocalVod_CanLoadChat === 'function' && LocalVod_CanLoadChat()) return true;
     return !!PlayVod_ExternalTwitchVodId();
 }
 
