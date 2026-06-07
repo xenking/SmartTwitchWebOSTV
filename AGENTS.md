@@ -1,5 +1,11 @@
 # AGENTS
 
+## Long Work Progress
+- Do not go silent during long work. Post a short progress update before any phase likely to exceed 60 seconds, then every 3-5 minutes while actively working.
+- Each update must include current phase, evidence or artifact path if any, decision made since the last update, and next action.
+- For long commands, state what is running and why, log bounded output to `/tmp/...`, and poll/stream progress instead of waiting silently for 10+ minutes.
+- For long reasoning or investigation, emit checkpoint summaries: assumptions, branch chosen, branch rejected, interim findings, and next verification.
+
 ## Canonical Agent Policy
 - This file is the canonical agent instruction source for this repository.
 - `CLAUDE.md` and `CODEX.md` are intentionally thin compatibility pointers and must not duplicate policy content.
