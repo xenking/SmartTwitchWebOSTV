@@ -79,19 +79,26 @@ assert.match(functionBody(playVodSource, 'PlayVod_previews_success_end'), /PlayV
 assert.match(functionBody(playVodSource, 'PlayVod_previews_move'), /PlayVod_PlayerPositionToPreviewPosition/, 'local joined VOD seek preview positions map to Twitch timeline');
 assert.match(functionBody(chatVodSource, 'Chat_loadChatRequest'), /PlayVod_ExternalTwitchVodId/, 'VOD chat request uses linked Twitch VOD id');
 assert.match(functionBody(chatVodSource, 'Chat_loadChatRequest'), /LocalVod_LoadChat/, 'local archive VOD chat request uses local archive chat endpoint first');
-assert.match(functionBody(chatVodSource, 'Chat_loadChatRequest'), /PlayVod_PlayerSecondsToChatSeconds/, 'VOD chat request offset maps local player time to Twitch time');
+assert.match(functionBody(chatVodSource, 'Chat_loadChatRequest'), /Chat_LocalVodChatUnavailable/, 'missing local archive chat falls back to linked Twitch VOD comments');
+assert.match(functionBody(chatVodSource, 'Chat_loadTwitchChatRequest'), /PlayVod_PlayerSecondsToChatSeconds/, 'Twitch VOD chat fallback keeps local-to-Twitch offset mapping');
+assert.match(functionBody(chatVodSource, 'Chat_loadTwitchChatRequest'), /PlayVod_PlayerSecondsToChatSeconds/, 'VOD chat request offset maps local player time to Twitch time');
+assert.doesNotMatch(functionBody(chatVodSource, 'Chat_loadChatRequest'), /Chat_offset\s*\?\s*parseInt\(PlayVod_PlayerSecondsToChatSeconds\(Chat_offset\)\)\s*:\s*0/, 'zero-offset local VOD chat requests still apply local-to-Twitch timeline mapping');
 assert.match(functionBody(chatVodSource, 'Chat_LocalVodNextOffsetSeconds'), /Chat_Messages/, 'local archive VOD chat pagination advances from loaded message times');
-assert.match(functionBody(chatVodSource, 'Chat_loadChatSuccess'), /PlayVod_ChatSecondsToPlayerSeconds/, 'VOD chat message timestamps map Twitch time to local player time');
+assert.match(functionBody(chatVodSource, 'Chat_loadChatSuccess'), /sourcePlatform === 'local_archive'[\s\S]*PlayVod_ChatSecondsToPlayerSeconds/, 'local archive chat stays on local timeline while Twitch comments map to player time');
 assert.match(functionBody(chatVodSource, 'Chat_loadChatNextRequest'), /PlayVod_ExternalTwitchVodId/, 'VOD chat cursor request uses linked Twitch VOD id');
 assert.match(functionBody(chatVodSource, 'Chat_loadChatNextRequest'), /Chat_LocalVodNextOffsetSeconds/, 'local archive VOD chat next request is offset based');
+assert.match(functionBody(localVodSource, 'LocalVod_MergeChannelVodResponse'), /LocalVod_FilterTwitchVodsForExistingLocalData/, 'paginated channel VOD loads suppress Twitch entries already represented by local archive cards');
 assert.match(functionBody(screensSource, 'Screens_LoadPreviewStart'), /Screens_LoadExternalVodPreview/, 'local and w.tv VOD previews use their external archive playlist');
 assert.match(functionBody(screensSource, 'Screens_LoadPreviewResult'), /Screens_PatchExternalVodPreviewPlaylist/, 'external archive VOD previews patch relative playlist URLs before starting preview');
+assert.match(functionBody(screensSource, 'Screens_LoadExternalVodPreview'), /playback_kind === 'archive_file'[\s\S]*return true/, 'direct local archive files skip HLS preview playlist fetch');
 assert.doesNotMatch(functionBody(wtvSource, 'WTV_GetMeta'), /if \(data\.source_platform === WTV_Platform\) return data;\s*if \(data\[WTV_MetaIndex\]/, 'w.tv array cells must prefer meta index over array object');
 assert.doesNotMatch(functionBody(wtvSource, 'WTV_VodStartedAt'), /new Date\(\)\.toISOString/, 'missing w.tv VOD dates must not sort as current wall clock');
 assert.doesNotMatch(functionBody(wtvSource, 'WTV_VodDurationSeconds'), /Date\.now\(\)/, 'w.tv VOD duration must come from archive metadata, not wall clock');
 assert.match(functionBody(playVodSource, 'PlayVod_WebOSLocalDurationSeconds'), /Play_OpenRewind/, 'ongoing local rewind metadata must avoid wall-clock VOD duration');
+assert.match(functionBody(bridgeSource, 'localVodMatchFromVod'), /boundedActiveSeconds/, 'active local VOD matching uses a bounded active duration when archive duration is not finalized');
 
 {
+  const storage = new Map([['sttv_webos_local_archive_endpoint', 'http://192.168.0.109:18080']]);
   const context = {
     Main_values: {
       Main_selectedChannel: 'melharucos',
@@ -104,6 +111,9 @@ assert.match(functionBody(playVodSource, 'PlayVod_WebOSLocalDurationSeconds'), /
     IMG_404_LOGO: '404-logo.png',
     Settings_GetLocalArchiveEndpoint: () => 'http://192.168.0.109:18080',
     Main_getItemString: () => '',
+    localStorage: {
+      getItem: key => (storage.has(key) ? storage.get(key) : null),
+    },
     Main_videoCreatedAt: value => `created:${value}`,
     Main_formatNumber: value => String(value),
     Play_timeHMS(value) {
@@ -171,6 +181,79 @@ assert.match(functionBody(playVodSource, 'PlayVod_WebOSLocalDurationSeconds'), /
   assert.equal(context.LocalVod_GetMeta(merged[1]).twitch_started_at, '2026-06-06T06:48:00Z', 'local joined VOD keeps linked Twitch start time');
   assert.equal(context.LocalVod_GetMeta(merged[1]).twitch_duration_seconds, 24480, 'local joined VOD keeps linked Twitch duration for preview mapping');
   assert.equal(context.LocalVod_GetMeta(merged[1]).twitch_timeline_delta_seconds, -1520, 'local joined VOD stores local-to-Twitch timeline delta');
+
+  const viewSorted = context.LocalVod_MergeWithTwitchVods(
+    [
+      {
+        id: 'twitch-most-viewed',
+        title: 'popular twitch',
+        createdAt: '2026-06-01T00:00:00Z',
+        duration: '01:00:00',
+        viewCount: 999,
+      },
+    ],
+    [
+      {
+        id: 'grp-low-views',
+        channel: 'melharucos',
+        title: 'low views',
+        source_started_at: '2026-06-07T00:00:00Z',
+        duration_seconds: 60,
+        playback_url: '/archive/vods/grp-low-views/playlist.m3u8',
+        viewer_count: 1,
+      },
+    ],
+    'melharucos',
+    undefined,
+    'views'
+  );
+  assert.equal(viewSorted[0].id, 'twitch-most-viewed', 'views sort keeps most-viewed Twitch VOD ahead of newer local VODs');
+
+  const unplayableOverlap = context.LocalVod_MergeWithTwitchVods(
+    [
+      {
+        id: 'twitch-playable',
+        title: 'twitch playable',
+        createdAt: '2026-06-06T06:48:00Z',
+        duration: '06:48:00',
+      },
+    ],
+    [
+      {
+        id: 'grp-unplayable',
+        channel: 'melharucos',
+        title: 'failed local',
+        source_started_at: '2026-06-06T06:22:40.114395769Z',
+        duration_seconds: 53246,
+      },
+    ],
+    'melharucos'
+  );
+  assert.equal(unplayableOverlap.some(vod => vod.id === 'twitch-playable'), true, 'unplayable overlapping local VOD does not suppress Twitch VOD');
+
+  const pageTwoFiltered = context.LocalVod_FilterTwitchVodsForExistingLocalData(
+    [
+      {
+        id: 'twitch-jun6',
+        title: 'matching twitch',
+        createdAt: '2026-06-06T06:48:00Z',
+        duration: '06:48:00',
+      },
+      {
+        id: 'twitch-other',
+        title: 'other twitch',
+        createdAt: '2026-06-02T00:00:00Z',
+        duration: '01:00:00',
+      },
+    ],
+    [merged[1]]
+  );
+  assert.equal(pageTwoFiltered.some(vod => vod.id === 'twitch-jun6'), false, 'paginated Twitch VOD overlapping an existing local card is suppressed');
+  assert.equal(pageTwoFiltered.some(vod => vod.id === 'twitch-other'), true, 'paginated Twitch VOD without local overlap is retained');
+
+  assert.equal(context.LocalVod_HasConfiguredEndpoint(), true, 'explicit local archive endpoint enables blocking local merge path');
+  storage.delete('sttv_webos_local_archive_endpoint');
+  assert.equal(context.LocalVod_HasConfiguredEndpoint(), false, 'default-only local archive endpoint does not block Twitch VOD rendering');
 
   const activeLocal = context.LocalVod_BuildData(
     {
@@ -272,6 +355,7 @@ assert.match(functionBody(playVodSource, 'PlayVod_WebOSLocalDurationSeconds'), /
   const twitchLikeNode = twitchLikeChat.data.video.comments.edges[0].node;
   assert.equal(twitchLikeNode.id, 'a4ba2223-0f47-4eb9-aa8d-c71c4c78f73c', 'local chat msg id maps to Twitch-like comment id');
   assert.equal(twitchLikeNode.contentOffsetSeconds, 12.425, 'local chat offset_ms maps to contentOffsetSeconds');
+  assert.equal(twitchLikeNode.sourcePlatform, 'local_archive', 'local chat comments are marked so the player does not remap them from Twitch timeline');
   assert.equal(twitchLikeNode.commenter.displayName, 'o_OZzie', 'local chat display name maps to Twitch-like commenter');
   assert.deepEqual(
     twitchLikeNode.message.userBadges,

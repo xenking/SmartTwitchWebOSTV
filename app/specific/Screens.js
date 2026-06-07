@@ -1407,6 +1407,7 @@ function Screens_LoadExternalVodPreview(obj, key) {
 
     playbackUrl = meta && meta.playback_url ? meta.playback_url : '';
     if (!playbackUrl) return false;
+    if (meta.playback_kind === 'archive_file') return true;
 
     PlayHLS_GetExternalPlayListAsync(
         playbackUrl,

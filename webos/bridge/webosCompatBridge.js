@@ -545,6 +545,10 @@
         var localEndMs = 0;
         if (durationSeconds) localEndMs = sourceStartMs + durationSeconds * 1000;
         else localEndMs = localVodParseTimeMs(vod.last_ended_at);
+        if (!localEndMs && localVodIsGrowingMatch({vod: vod})) {
+            var boundedActiveSeconds = Math.max(meta.durationSeconds || 0, meta.playerPositionSeconds || 0, meta.positionSeconds || 0, 1);
+            localEndMs = sourceStartMs + boundedActiveSeconds * 1000;
+        }
         if (!localEndMs) return null;
         var toleranceMs = meta.toleranceSeconds * 1000;
         var twitchStartMs = meta.startedAtMs;

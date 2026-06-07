@@ -40,6 +40,14 @@ function LocalVod_GetEndpoint() {
     return Main_getItemString('sttv_webos_local_archive_endpoint', '');
 }
 
+function LocalVod_HasConfiguredEndpoint() {
+    try {
+        if (localStorage.getItem('sttv_webos_local_archive_endpoint') !== null) return true;
+        if (localStorage.getItem('localArchiveEndpoint') !== null) return true;
+    } catch (e) {}
+    return false;
+}
+
 function LocalVod_Request(path, method, body, success, error) {
     var endpoint = LocalVod_GetEndpoint();
     if (!endpoint) {
@@ -296,6 +304,7 @@ function LocalVod_ChatMessageToTwitchComment(message) {
         node: {
             id: id,
             contentOffsetSeconds: (parseInt(message.offset_ms) || 0) / 1000,
+            sourcePlatform: LocalVod_Platform,
             commenter: {
                 id: message.user_id || '',
                 login: message.login || message.display_name || '',
@@ -335,12 +344,29 @@ function LocalVod_ChatResponseToTwitchComments(response) {
 }
 
 function LocalVod_StartedAt(vod) {
-    return vod ? vod.source_started_at || vod.started_at || vod.start_time || vod.created_at || vod.startedAt || vod.createdAt || '' : '';
+    var meta = LocalVod_GetMeta(vod);
+    return vod
+        ? vod.source_started_at ||
+              vod.started_at ||
+              vod.start_time ||
+              vod.created_at ||
+              vod.startedAt ||
+              vod.createdAt ||
+              (meta && meta.started_at) ||
+              ''
+        : '';
 }
 
 function LocalVod_DurationSeconds(vod) {
+    var meta = LocalVod_GetMeta(vod);
     var duration = vod
-        ? vod.duration_seconds || vod.duration || vod.length_seconds || vod.available_duration_seconds || vod.media_duration_seconds || 0
+        ? vod.duration_seconds ||
+          vod.duration ||
+          vod.length_seconds ||
+          vod.available_duration_seconds ||
+          vod.media_duration_seconds ||
+          (meta && meta.duration_seconds) ||
+          0
         : 0;
     if (typeof duration === 'string') {
         if (/^\d+$/.test(duration)) duration = parseInt(duration);
@@ -365,6 +391,13 @@ function LocalVod_TwitchVodStartMs(vod) {
 
 function LocalVod_TwitchVodDurationSeconds(vod) {
     return vod ? Play_timeHMS(vod.duration || '') || 0 : 0;
+}
+
+function LocalVod_ViewCount(vod) {
+    var meta = LocalVod_IsData(vod) ? LocalVod_GetMeta(vod) : null;
+    var views = meta ? meta.viewer_count : vod && (vod.viewCount || vod.view_count || vod.views || 0);
+    views = typeof views === 'string' ? parseInt(views.replace(/[^\d]/g, '')) : parseInt(views);
+    return isNaN(views) ? 0 : views;
 }
 
 function LocalVod_LocalStartMs(vod) {
@@ -495,8 +528,9 @@ function LocalVod_BuildData(vod, channel, identity, twitchVod) {
     return data;
 }
 
-function LocalVod_MergeWithTwitchVods(twitchVods, localVods, sourceChannel, identity) {
+function LocalVod_MergeWithTwitchVods(twitchVods, localVods, sourceChannel, identity, sortMode) {
     var merged = [];
+    var playableLocalVods = [];
     var seen = {};
     var i;
     var j;
@@ -512,6 +546,7 @@ function LocalVod_MergeWithTwitchVods(twitchVods, localVods, sourceChannel, iden
     for (i = 0; i < localVods.length; i++) {
         vod = localVods[i];
         if (!LocalVod_PlaybackUrl(vod)) continue;
+        playableLocalVods.push(vod);
         matchedTwitchVod = null;
         for (j = 0; j < twitchVods.length; j++) {
             if (LocalVod_OverlapsTwitchVod(vod, twitchVods[j])) {
@@ -530,8 +565,8 @@ function LocalVod_MergeWithTwitchVods(twitchVods, localVods, sourceChannel, iden
         vod = twitchVods[i];
         if (!vod || !vod.id) continue;
         overlapsLocal = false;
-        for (j = 0; j < localVods.length; j++) {
-            if (LocalVod_OverlapsTwitchVod(localVods[j], vod)) {
+        for (j = 0; j < playableLocalVods.length; j++) {
+            if (LocalVod_OverlapsTwitchVod(playableLocalVods[j], vod)) {
                 overlapsLocal = true;
                 break;
             }
@@ -539,6 +574,13 @@ function LocalVod_MergeWithTwitchVods(twitchVods, localVods, sourceChannel, iden
         if (overlapsLocal || seen[vod.id]) continue;
         seen[vod.id] = true;
         merged.push(vod);
+    }
+
+    if (sortMode === 'views') {
+        merged.sort(function (a, b) {
+            return LocalVod_ViewCount(b) - LocalVod_ViewCount(a);
+        });
+        return merged;
     }
 
     merged.sort(function (a, b) {
@@ -550,10 +592,46 @@ function LocalVod_MergeWithTwitchVods(twitchVods, localVods, sourceChannel, iden
     return merged;
 }
 
+function LocalVod_FilterTwitchVodsForExistingLocalData(twitchVods, existingData) {
+    var out = [];
+    var localVods = [];
+    var i;
+    var j;
+    var vod;
+    var overlapsLocal;
+
+    twitchVods = twitchVods || [];
+    existingData = existingData || [];
+
+    for (i = 0; i < existingData.length; i++) {
+        if (LocalVod_IsData(existingData[i]) && LocalVod_PlaybackUrl(existingData[i])) localVods.push(existingData[i]);
+    }
+
+    for (i = 0; i < twitchVods.length; i++) {
+        vod = twitchVods[i];
+        overlapsLocal = false;
+        for (j = 0; j < localVods.length; j++) {
+            if (LocalVod_OverlapsTwitchVod(localVods[j], vod)) {
+                overlapsLocal = true;
+                break;
+            }
+        }
+        if (!overlapsLocal) out.push(vod);
+    }
+
+    return out;
+}
+
 function LocalVod_MergeChannelVodResponse(screenObj, responseObj, done) {
     var localChannel = LocalVod_NormalizeTwitchLogin(Main_values.Main_selectedChannel);
 
-    if (!screenObj || screenObj.highlight || screenObj.data || !localChannel || !LocalVod_GetEndpoint()) {
+    if (!screenObj || screenObj.highlight || !localChannel || !LocalVod_GetEndpoint() || !LocalVod_HasConfiguredEndpoint()) {
+        done(responseObj);
+        return true;
+    }
+
+    if (screenObj.data) {
+        responseObj.edges = LocalVod_FilterTwitchVodsForExistingLocalData(responseObj.edges, screenObj.data);
         done(responseObj);
         return true;
     }
@@ -562,7 +640,13 @@ function LocalVod_MergeChannelVodResponse(screenObj, responseObj, done) {
         localChannel,
         function (localResponse) {
             var localVods = LocalVod_GetVodList(localResponse) || [];
-            responseObj.edges = LocalVod_MergeWithTwitchVods(responseObj.edges || [], localVods, localChannel, LocalVod_CurrentIdentity());
+            responseObj.edges = LocalVod_MergeWithTwitchVods(
+                responseObj.edges || [],
+                localVods,
+                localChannel,
+                LocalVod_CurrentIdentity(),
+                screenObj.periodPos === 2 ? 'views' : 'recent'
+            );
             done(responseObj);
         },
         function () {
