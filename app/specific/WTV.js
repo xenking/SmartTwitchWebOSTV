@@ -34,8 +34,8 @@ function WTV_IsData(data) {
 
 function WTV_GetMeta(data) {
     if (!data) return null;
-    if (data.source_platform === WTV_Platform) return data;
     if (data[WTV_MetaIndex] && data[WTV_MetaIndex].source_platform === WTV_Platform) return data[WTV_MetaIndex];
+    if (data.source_platform === WTV_Platform) return data;
     return null;
 }
 
@@ -532,15 +532,21 @@ function WTV_VodPlaybackUrl(vod) {
 }
 
 function WTV_VodStartedAt(vod) {
-    return vod ? vod.source_started_at || vod.started_at || vod.created_at || vod.start_time || new Date().toISOString() : new Date().toISOString();
+    return vod ? vod.source_started_at || vod.started_at || vod.start_time || vod.created_at || vod.startedAt || vod.createdAt || '' : '';
+}
+
+function WTV_ParseTimeMs(value) {
+    if (typeof value === 'string') value = value.replace(/(\.\d{3})\d+(Z|[+-]\d\d:?\d\d)?$/i, '$1$2');
+    var ms = value ? new Date(value).getTime() : 0;
+    return isNaN(ms) ? 0 : ms;
 }
 
 function WTV_VodDurationSeconds(vod) {
     var duration = vod ? vod.duration_seconds || vod.duration || vod.length_seconds || 0 : 0;
     if (typeof duration === 'string') duration = Play_timeHMS(duration);
     duration = parseInt(duration);
-    if ((!duration || duration < 0) && vod && (vod.active || vod.growing || vod.status === 'open' || vod.status === 'recording')) {
-        duration = parseInt((Date.now() - new Date(WTV_VodStartedAt(vod)).getTime()) / 1000);
+    if ((!duration || duration < 0) && vod && vod.ended_at) {
+        duration = parseInt((WTV_ParseTimeMs(vod.ended_at) - WTV_ParseTimeMs(WTV_VodStartedAt(vod))) / 1000);
     }
     return duration > 0 ? duration : 1;
 }
@@ -618,7 +624,7 @@ function WTV_BuildVodData(vod, channel, identity) {
     data = [
         (vod && (vod.thumbnail_url || vod.preview_url)) || IMG_404_VOD,
         identity.display_name,
-        Main_videoCreatedAt(startedAt),
+        startedAt ? Main_videoCreatedAt(startedAt) : '',
         'w.tv',
         Main_formatNumber(views),
         'W.TV',

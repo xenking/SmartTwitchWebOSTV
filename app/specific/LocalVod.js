@@ -219,6 +219,13 @@ function LocalVod_TwitchThumbnail(vod) {
     return vod.animatedPreviewURL || vod.thumbnailURL || vod.thumbnail_url || '';
 }
 
+function LocalVod_LivePreviewUrl(vod, channel) {
+    var status = String((vod && vod.status) || '').toLowerCase();
+    var isActive = vod && (vod.active || vod.growing || status === 'open' || status === 'recording');
+    if (!isActive || !channel) return '';
+    return 'https://static-cdn.jtvnw.net/previews-ttv/live_user_' + channel + '-640x360.jpg';
+}
+
 function LocalVod_BuildData(vod, channel, identity, twitchVod) {
     channel = LocalVod_NormalizeTwitchLogin((vod && (vod.source_channel || vod.channel)) || channel);
 
@@ -247,7 +254,7 @@ function LocalVod_BuildData(vod, channel, identity, twitchVod) {
     identity = identity || LocalVod_CurrentIdentity();
 
     data = [
-        (vod && (vod.thumbnail_url || vod.preview_url)) || LocalVod_TwitchThumbnail(twitchVod) || IMG_404_VOD,
+        (vod && (vod.thumbnail_url || vod.preview_url)) || LocalVod_TwitchThumbnail(twitchVod) || LocalVod_LivePreviewUrl(vod, channel) || IMG_404_VOD,
         identity.display_name,
         startedAt ? Main_videoCreatedAt(startedAt) : '',
         (vod && vod.game_name) || (twitchVod && twitchVod.game_name) || '',
@@ -383,12 +390,20 @@ function LocalVod_ApplyVodInfo() {
     Main_textContentWithEle(Play_BottonIcons_Progress_Duration, Play_timeS(Play_DurationSeconds));
     PlayVod_currentTime = Main_vodOffset * 1000;
     PlayVod_ProgressBarrUpdate(Main_vodOffset, Play_DurationSeconds, true);
+    LocalVod_SaveVodHistory(Main_values_Play_data);
     return true;
+}
+
+function LocalVod_SaveVodHistory(data) {
+    if (!data || !LocalVod_IsData(data)) return;
+    Main_Set_history('vod', data);
 }
 
 function LocalVod_PlayVodLoadData() {
     var meta = LocalVod_GetMeta(Main_values_Play_data) || LocalVod_GetMeta(Play_data.data);
     if (!meta || !meta.playback_url) return false;
+
+    LocalVod_SaveVodHistory(Main_values_Play_data);
 
     if (Main_IsOn_OSInterface) {
         PlayVod_loadDataId = new Date().getTime();

@@ -64,6 +64,16 @@ assert.match(
 assert.match(screensSource, /LocalVod_IsData\(valuesArray\)/, 'local VOD cells render as LOCAL, not W.TV');
 assert.doesNotMatch(wtvSource, /WTV_MergeChannelVodResponse|WTV_MergeLocalVodsWithTwitchVods/, 'WTV module does not own generic joined local VOD merge');
 assert.match(indexSource, /specific\/LocalVod\.js/, 'LocalVod runtime module is loaded');
+assert.match(localVodSource, /function LocalVod_SaveVodHistory/, 'local VOD playback saves independent VOD history');
+assert.match(functionBody(localVodSource, 'LocalVod_ApplyVodInfo'), /LocalVod_SaveVodHistory/, 'local VOD info path records resume history');
+assert.match(functionBody(localVodSource, 'LocalVod_PlayVodLoadData'), /LocalVod_SaveVodHistory/, 'local VOD load path records resume history even without Twitch info lookup');
+assert.match(wtvSource, /function WTV_SaveVodHistory/, 'w.tv VOD playback has independent VOD history path');
+assert.match(functionBody(screensSource, 'Screens_LoadPreviewStart'), /Screens_LoadExternalVodPreview/, 'local and w.tv VOD previews use their external archive playlist');
+assert.match(functionBody(screensSource, 'Screens_LoadPreviewResult'), /Screens_PatchExternalVodPreviewPlaylist/, 'external archive VOD previews patch relative playlist URLs before starting preview');
+assert.doesNotMatch(functionBody(wtvSource, 'WTV_GetMeta'), /if \(data\.source_platform === WTV_Platform\) return data;\s*if \(data\[WTV_MetaIndex\]/, 'w.tv array cells must prefer meta index over array object');
+assert.doesNotMatch(functionBody(wtvSource, 'WTV_VodStartedAt'), /new Date\(\)\.toISOString/, 'missing w.tv VOD dates must not sort as current wall clock');
+assert.doesNotMatch(functionBody(wtvSource, 'WTV_VodDurationSeconds'), /Date\.now\(\)/, 'w.tv VOD duration must come from archive metadata, not wall clock');
+assert.match(functionBody(playVodSource, 'PlayVod_WebOSLocalDurationSeconds'), /Play_OpenRewind/, 'ongoing local rewind metadata must avoid wall-clock VOD duration');
 
 {
   const context = {
@@ -135,6 +145,65 @@ assert.match(indexSource, /specific\/LocalVod\.js/, 'LocalVod runtime module is 
   assert.equal(merged[1][7], 'grp-melharucos-20260606T062240.114395769Z', 'June 6 local joined VOD stays near top');
   assert.equal(merged[1][0], 'jun6-thumb.jpg', 'local joined VOD inherits overlapping Twitch thumbnail preview');
   assert.equal(merged.some(vod => vod.id === 'twitch-jun6'), false, 'overlapping Twitch VOD is replaced by local joined VOD');
+
+  const activeLocal = context.LocalVod_BuildData(
+    {
+      id: 'grp-active',
+      channel: 'melharucos',
+      title: 'active local',
+      active: true,
+      source_started_at: '2026-06-07T05:12:10.127333703Z',
+      duration_seconds: 60,
+      playback_url: '/archive/vods/grp-active/playlist.m3u8',
+    },
+    'melharucos'
+  );
+  assert.equal(
+    activeLocal[0],
+    'https://static-cdn.jtvnw.net/previews-ttv/live_user_melharucos-640x360.jpg',
+    'active local Twitch VOD cards use Twitch live preview when archive has no thumbnail'
+  );
+}
+
+{
+  const context = {
+    IMG_404_VOD: '404-vod.png',
+    IMG_404_LOGO: '404-logo.png',
+    Main_values: {},
+    Play_data: { data: [] },
+    Main_Slice: value => value.slice(),
+    Main_getItemString: () => 'http://192.168.0.109:18080',
+    Main_videoCreatedAt: value => (value ? `created:${value}` : ''),
+    Main_formatNumber: value => String(value),
+    Play_timeHMS(value) {
+      const parts = String(value || '').split(':').map(Number);
+      if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
+      if (parts.length === 2) return parts[0] * 60 + parts[1];
+      return Number(value) || 0;
+    },
+    Play_timeS: value => `${value}s`,
+    WTV_AbsoluteArchiveUrl: value => value,
+    twemoji: { parse: value => value },
+  };
+  vm.createContext(context);
+  vm.runInContext(wtvSource, context);
+
+  const wtvData = context.WTV_BuildVodData(
+    {
+      id: 'grp-wtv-20260607T051210.127333703Z',
+      channel: 'sosohe',
+      title: 'w.tv recording',
+      source_started_at: '2026-06-07T05:12:10.127333703Z',
+      duration_seconds: 1234,
+      playback_url: '/archive/sources/wtv/sosohe/vods/grp/playlist.m3u8',
+    },
+    'sosohe',
+    { display_name: 'mapped twitch', login: 'mapped_login', id: '42', logo: 'logo.png', partner: false }
+  );
+
+  assert.equal(context.WTV_GetMeta(wtvData).recording_group_id, 'grp-wtv-20260607T051210.127333703Z', 'w.tv array cell returns metadata object');
+  assert.equal(context.WTV_VodStartedAt({}), '', 'w.tv missing start time is empty, not current time');
+  assert.equal(context.WTV_VodDurationSeconds({ active: true, source_started_at: '2026-01-01T00:00:00Z' }), 1, 'w.tv active duration does not grow from wall clock');
 }
 
 console.log('local VOD tests passed');

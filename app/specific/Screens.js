@@ -1361,6 +1361,8 @@ function Screens_LoadPreviewStart(key, obj) {
 
         isLive = false;
         id = obj[7];
+
+        if (Screens_LoadExternalVodPreview(obj, key)) return;
     } else {
         //live
 
@@ -1391,6 +1393,40 @@ function Screens_LoadPreviewStart(key, obj) {
         key,
         Screens_LoadPreviewResult
     );
+}
+
+function Screens_LoadExternalVodPreview(obj, key) {
+    var meta = null;
+    var playbackUrl = '';
+
+    if (typeof LocalVod_IsData === 'function' && LocalVod_IsData(obj)) {
+        meta = LocalVod_GetMeta(obj);
+    } else if (typeof WTV_IsData === 'function' && WTV_IsData(obj)) {
+        meta = WTV_GetMeta(obj);
+    }
+
+    playbackUrl = meta && meta.playback_url ? meta.playback_url : '';
+    if (!playbackUrl) return false;
+
+    PlayHLS_GetExternalPlayListAsync(
+        playbackUrl,
+        (ScreenObj[key].posY * ScreenObj[key].ColumnsCount + ScreenObj[key].posX) % 100,
+        key,
+        Screens_LoadPreviewResult
+    );
+    return true;
+}
+
+function Screens_PatchExternalVodPreviewPlaylist(streamInfo, playlist, responseUrl) {
+    if (typeof LocalVod_IsData === 'function' && LocalVod_IsData(streamInfo)) {
+        return LocalVod_PatchPlaylist(playlist, responseUrl || (LocalVod_GetMeta(streamInfo) || {}).playback_url);
+    }
+
+    if (typeof WTV_IsData === 'function' && WTV_IsData(streamInfo)) {
+        return WTV_PatchVodPlaylist(playlist, responseUrl || (WTV_GetMeta(streamInfo) || {}).playback_url);
+    }
+
+    return playlist;
 }
 
 function Screens_LoadPreviewResult(StreamData, x, y) {
@@ -1442,6 +1478,7 @@ function Screens_LoadPreviewResult(StreamData, x, y) {
                 } else if (isVod) {
                     //vod
                     Play_PreviewId = StreamInfo[7];
+                    PreviewResponseText = Screens_PatchExternalVodPreviewPlaylist(StreamInfo, PreviewResponseText, Play_PreviewURL);
 
                     if (Settings_Obj_default('vod_dialog') < 2) {
                         //Check if the vod exist in the history

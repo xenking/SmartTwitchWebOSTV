@@ -387,6 +387,13 @@ function PlayVod_WebOSLocalCurrentSeconds(preferPlayerTime) {
 
 function PlayVod_WebOSLocalDurationSeconds(startedAt) {
     var durationSeconds = Play_DurationSeconds || 0;
+    var isLiveRewind = Play_OpenRewind && Main_IsOn_OSInterface && window.STTVWebOSLocalVod;
+
+    if (isLiveRewind) {
+        var currentSeconds = PlayVod_WebOSLocalCurrentSeconds(false);
+        return currentSeconds > 0 ? currentSeconds + 1 : 1;
+    }
+
     if (!durationSeconds && Main_values_Play_data && Main_values_Play_data.length > 11) {
         if (typeof Main_values_Play_data[11] === 'number') durationSeconds = Main_values_Play_data[11];
         else if (typeof Main_values_Play_data[11] === 'string' && Main_values_Play_data[11].indexOf('h') > -1) durationSeconds = Play_timeHMS(Main_values_Play_data[11]);
