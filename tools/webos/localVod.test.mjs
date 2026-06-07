@@ -101,6 +101,9 @@ assert.doesNotMatch(functionBody(wtvSource, 'WTV_VodStartedAt'), /new Date\(\)\.
 assert.doesNotMatch(functionBody(wtvSource, 'WTV_VodDurationSeconds'), /Date\.now\(\)/, 'w.tv VOD duration must come from archive metadata, not wall clock');
 assert.match(functionBody(playVodSource, 'PlayVod_WebOSLocalDurationSeconds'), /Play_OpenRewind/, 'ongoing local rewind metadata must avoid wall-clock VOD duration');
 assert.match(functionBody(bridgeSource, 'localVodMatchFromVod'), /boundedActiveSeconds/, 'active local VOD matching uses a bounded active duration when archive duration is not finalized');
+assert.match(functionBody(bridgeSource, 'localVodMatchFromVod'), /final_url/, 'webOS bridge match carries final_url from local archive records');
+assert.match(functionBody(bridgeSource, 'localVodNormalizeBackendMatch'), /final_url/, 'webOS bridge backend match normalization preserves final_url');
+assert.match(functionBody(bridgeSource, 'localVodPlaybackUrl'), /finalUrl[\s\S]*playlistUrl \|\| fileUrl \|\| finalUrl/, 'webOS bridge playback URL can use final_url direct archive files');
 assert.equal(packageJson.scripts['hosted:prepare'], 'npm run webos:prepare-release', 'release workflow hosted prepare entrypoint stays available');
 
 {

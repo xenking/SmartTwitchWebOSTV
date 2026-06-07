@@ -569,6 +569,7 @@
             position_within_recording: positionWithin,
             playback_url: vod.playback_url || '',
             file_url: vod.file_url || '',
+            final_url: vod.final_url || '',
             score: (positionWithin ? 0 : 1000000000) + Math.abs(deltaSeconds) - (vod.growing || vod.active ? 100 : 0)
         };
     }
@@ -594,6 +595,7 @@
         fallback.position_within_recording = data.position_within_recording !== false;
         fallback.playback_url = data.playback_url || fallback.playback_url || data.vod.playback_url || '';
         fallback.file_url = data.file_url || fallback.file_url || data.vod.file_url || '';
+        fallback.final_url = data.final_url || fallback.final_url || data.vod.final_url || '';
         return fallback;
     }
     function localVodFetchFallbackMatch(meta, callback) {
@@ -647,8 +649,9 @@
         var compatibleUrl = localVodCompatiblePlaybackUrl(match);
         if (compatibleUrl) return localArchiveUrl(compatibleUrl);
         var fileUrl = match.file_url || match.vod.file_url || '';
+        var finalUrl = match.final_url || match.vod.final_url || '';
         var playlistUrl = match.playback_url || match.vod.playback_url || '';
-        return localArchiveUrl(playlistUrl || fileUrl);
+        return localArchiveUrl(playlistUrl || fileUrl || finalUrl);
     }
     function localVodHasUsableCurrentMatch() {
         return !!(localVodOverride.match && localVodOverride.match.matched && localVodOverride.match.position_within_recording && localVodPlaybackUrl(localVodOverride.match));
