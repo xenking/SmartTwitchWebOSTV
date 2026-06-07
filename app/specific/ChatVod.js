@@ -29,6 +29,7 @@ var Chat_loadChatNextId;
 var Chat_offset = 0;
 var Chat_lastMsgTime = 0;
 var Chat_loadingMore = false;
+var Chat_LocalVodChatUnavailable = false;
 var Chat_fakeClock = 0;
 var Chat_fakeClockOld = 0;
 var Chat_title = '';
@@ -441,16 +442,72 @@ function Chat_loadChat(id) {
     if (Chat_Id[0] === id) Chat_loadChatRequest(id);
 }
 
+function Chat_LocalVodNextOffsetSeconds() {
+    var list = Chat_Messages.length ? Chat_Messages : Chat_MessagesNext;
+    var offset = Chat_lastMsgTime || Chat_offset || 0;
+    var i;
+
+    for (i = 0; i < list.length; i++) {
+        if (list[i] && list[i].time > offset) offset = list[i].time;
+    }
+
+    return offset + 0.001;
+}
+
 function Chat_loadChatRequest(id) {
+    if (!PlayVod_CanLoadVodChat()) {
+        Chat_NoVod();
+        return;
+    }
+
+    if (!Chat_LocalVodChatUnavailable && typeof LocalVod_CanLoadChat === 'function' && LocalVod_CanLoadChat()) {
+        LocalVod_LoadChat(
+            Chat_offset ? parseFloat(Chat_offset) : 0,
+            function (response) {
+                Chat_loadChatRequestResult(
+                    {
+                        status: 200,
+                        responseText: LocalVod_ChatResponseToTwitchComments(response)
+                    },
+                    id
+                );
+            },
+            function () {
+                if (PlayVod_ExternalTwitchVodId()) {
+                    Chat_LocalVodChatUnavailable = true;
+                    Chat_loadTwitchChatRequest(id);
+                } else {
+                    Chat_loadChatError(id);
+                }
+            }
+        );
+        return;
+    }
+
+    Chat_loadTwitchChatRequest(id);
+}
+
+function Chat_loadTwitchChatRequest(id) {
+    Chat_loadTwitchChatOffsetRequest(id, Chat_offset || 0, Chat_loadChatRequestResult);
+}
+
+function Chat_loadTwitchChatNextOffsetRequest(id) {
+    Chat_loadTwitchChatOffsetRequest(id, Chat_LocalVodNextOffsetSeconds(), Chat_loadChatNextResult);
+}
+
+function Chat_loadTwitchChatOffsetRequest(id, offsetSeconds, resultCallback) {
     FullxmlHttpGet(
         PlayClip_BaseUrl,
         Play_base_chat_headers_Array,
-        Chat_loadChatRequestResult,
+        resultCallback,
         noop_fun,
         id,
         0,
         'POST', //Method, null for get
-        Chat_loadChatRequestPost.replace('%v', Main_values.ChannelVod_vodId).replace('%o', Chat_offset ? parseInt(Chat_offset) : 0)
+        Chat_loadChatRequestPost.replace('%v', PlayVod_ExternalTwitchVodId()).replace(
+            '%o',
+            parseInt(PlayVod_PlayerSecondsToChatSeconds(offsetSeconds || 0))
+        )
     );
 }
 
@@ -499,6 +556,7 @@ function Chat_loadChatSuccess(responseObj, id) {
         message_text,
         badges,
         fragment,
+        playerOffsetSeconds,
         i,
         len,
         j,
@@ -545,6 +603,10 @@ function Chat_loadChatSuccess(responseObj, id) {
 
         div = '';
         mmessage = comments[i].message;
+        playerOffsetSeconds =
+            comments[i].sourcePlatform === 'local_archive'
+                ? parseFloat(comments[i].contentOffsetSeconds) || 0
+                : PlayVod_ChatSecondsToPlayerSeconds(comments[i].contentOffsetSeconds);
 
         //TODO check support for this feature
         // if (
@@ -557,7 +619,7 @@ function Chat_loadChatSuccess(responseObj, id) {
         // }
 
         if (ChatLive_Show_TimeStamp) {
-            div += Play_timeS(comments[i].contentOffsetSeconds) + ' ';
+            div += Play_timeS(playerOffsetSeconds) + ' ';
         }
 
         //Add badges
@@ -644,7 +706,7 @@ function Chat_loadChatSuccess(responseObj, id) {
 
         messageObj = {
             chat_number: 0,
-            time: comments[i].contentOffsetSeconds,
+            time: playerOffsetSeconds,
             message: div,
             atstreamer: atstreamer,
             atuser: atuser,
@@ -720,6 +782,7 @@ function Chat_Clear() {
     Chat_Id[0] = 0;
     Chat_lastMsgTime = 0;
     Chat_loadingMore = false;
+    Chat_LocalVodChatUnavailable = false;
     Main_emptyWithEle(Chat_div[0]);
     Main_emptyWithEle(Chat_div[1]);
     Chat_cursor = null;
@@ -807,6 +870,29 @@ function Chat_loadChatNext(id) {
 
 function Chat_loadChatNextRequest(id) {
     if (Chat_cursor === '') return;
+    if (!Chat_LocalVodChatUnavailable && typeof LocalVod_CanLoadChat === 'function' && LocalVod_CanLoadChat()) {
+        LocalVod_LoadChat(
+            Chat_LocalVodNextOffsetSeconds(),
+            function (response) {
+                Chat_loadChatNextResult(
+                    {
+                        status: 200,
+                        responseText: LocalVod_ChatResponseToTwitchComments(response)
+                    },
+                    id
+                );
+            },
+            function () {
+                if (PlayVod_ExternalTwitchVodId()) {
+                    Chat_LocalVodChatUnavailable = true;
+                    Chat_loadTwitchChatNextOffsetRequest(id);
+                } else {
+                    Chat_loadChatNextError(id);
+                }
+            }
+        );
+        return;
+    }
     FullxmlHttpGet(
         PlayClip_BaseUrl,
         Play_base_chat_headers_Array,
@@ -815,7 +901,7 @@ function Chat_loadChatNextRequest(id) {
         id,
         0,
         'POST', //Method, null for get
-        Chat_loadChatRequestPost_Cursor.replace('%v', Main_values.ChannelVod_vodId).replace('%c', Chat_cursor)
+        Chat_loadChatRequestPost_Cursor.replace('%v', PlayVod_ExternalTwitchVodId()).replace('%c', Chat_cursor)
     );
 }
 

@@ -1,6 +1,6 @@
 # Android -> webOS Flow Mapping
 
-This document maps the original Android player flow (`.ai_context/android_upstream/latest/apk/app/src/main/java/com/fgl27/twitch/PlayerActivity.java` after local context sync) to the hosted webOS bridge (`webos/bridge/webosCompatBridge.js`).
+This document maps the Android-compatible player flow expected by `app/specific/OSInterface.js` to the webOS bridge (`webos/bridge/webosCompatBridge.js`).
 
 ## 1) Main playback start / restore
 
@@ -10,13 +10,13 @@ Android flow:
 - On player errors, Java uses `PlayerEventListenerCheckCounter` / `PlayerEventListenerClear` callbacks.
 
 webOS mapping:
-- JS calls `Android.StartAuto(...)` -> hosted bridge `setMain(...)`.
+- JS calls `Android.StartAuto(...)` -> webOS bridge `setMain(...)`.
 - Main playback uses `video#sttv_main`.
 - Bridge keeps Android callback semantics with `Play_PannelEndStart(...)` and periodic recovery.
 - Cold-start hardening:
   - `supportQuickStart: false` in `webos/app/appinfo.json`.
   - Launch token in `webos/app/index.js` (`sttv_webos_launch`).
-  - Bridge is loaded directly in hosted `release/index.html` before upstream `main.js`.
+- Bridge is loaded directly in packaged `release/index.html` before `main.js`.
 
 ## 2) Hover preview on start screen
 
@@ -25,7 +25,7 @@ Android flow:
 - Java starts preview player (PlayerObj 4) in feed rectangle.
 
 webOS mapping:
-- JS calls `Android.StartFeedPlayer(...)` -> hosted bridge `setPrev(..., 'feed', ...)`.
+- JS calls `Android.StartFeedPlayer(...)` -> webOS bridge `setPrev(..., 'feed', ...)`.
 - Preview playback uses `video#sttv_preview` and feed rect positioning.
 - Stalls/errors are retried before reporting `Play_CheckIfIsLiveClean(...)`.
 

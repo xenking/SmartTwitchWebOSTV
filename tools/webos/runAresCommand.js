@@ -4,6 +4,7 @@ const {spawnSync} = require('child_process');
 
 const root = path.resolve(__dirname, '..', '..');
 const appInfoPath = path.join(root, 'webos', 'app', 'appinfo.json');
+const defaultDevice = process.env.STTV_WEBOS_DEVICE || process.env.WEBOS_DEVICE || 'tv-wired';
 
 function loadAppInfo() {
     if (!fs.existsSync(appInfoPath)) {
@@ -46,7 +47,7 @@ function runAres(command, args) {
 function main() {
     const action = process.argv[2];
     if (!action) {
-        throw new Error('Usage: node tools/webos/runAresCommand.js <install|launch|inspect|remove>');
+        throw new Error('Usage: node tools/webos/runAresCommand.js <install|launch|close|inspect|remove>');
     }
 
     const appInfo = loadAppInfo();
@@ -55,22 +56,27 @@ function main() {
     const ipkFile = path.join(root, 'build', id + '_' + version + '_all.ipk');
 
     if (action === 'install') {
-        runAres('ares-install', [ipkFile]);
+        runAres('ares-install', ['-d', defaultDevice, ipkFile]);
         return;
     }
 
     if (action === 'launch') {
-        runAres('ares-launch', [id]);
+        runAres('ares-launch', ['-d', defaultDevice, id]);
+        return;
+    }
+
+    if (action === 'close') {
+        runAres('ares-launch', ['-d', defaultDevice, '-c', id]);
         return;
     }
 
     if (action === 'inspect') {
-        runAres('ares-inspect', ['--device', 'webos', id]);
+        runAres('ares-inspect', ['--device', defaultDevice, id]);
         return;
     }
 
     if (action === 'remove') {
-        runAres('ares-install', ['--device', 'webos', '-r', id]);
+        runAres('ares-install', ['--device', defaultDevice, '-r', id]);
         return;
     }
 
@@ -78,4 +84,3 @@ function main() {
 }
 
 main();
-

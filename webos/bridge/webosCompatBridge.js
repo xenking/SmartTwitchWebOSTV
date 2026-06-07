@@ -1,8 +1,8 @@
 // =============================================================================
 // webosCompatBridge.js — webOS Compatibility Bridge for SmartTwitchTV
 // =============================================================================
-// Shims the window.Android interface expected by the upstream SmartTwitchTV app
-// (app/specific/OSInterface.js) so it runs on webOS TVs without upstream changes.
+// Shims the window.Android interface expected by the SmartTwitchTV app
+// (app/specific/OSInterface.js) so it runs on webOS TVs on webOS.
 // Android: The original Android app provides window.Android natively via WebView.
 // webOS:   This bridge recreates that full API surface using HTML5 <video>,
 //          XHR networking, and webOS platform APIs (webOS.js / PalmSystem).
@@ -42,7 +42,7 @@
     // =========================================================================
     // Early Android Shim Queue Configuration
     // =========================================================================
-    // When the upstream app loads, it immediately calls window.Android methods
+    // When the app loads, it immediately calls window.Android methods
     // before initAndroid() has run. The early shim queues these calls and
     // replays them once the full bridge is ready. Only safe, idempotent
     // methods are queueable — playback/network calls are NOT queued.
@@ -113,7 +113,7 @@
     var PREVIEW_VIDEO_Z_INDEX = 2147483000; // Above app UI so small previews are visible over thumbnails.
     // --- Storage & constants ---
     var STORAGE_PREFIX = 'sttv_webos_';
-    // Persist last seen hosted WebTag to avoid repeated reloads for the same build.
+    // Persist last seen WebTag to avoid repeated reloads for the same build.
     var WEBTAG_STORAGE_KEY = STORAGE_PREFIX + 'webtag';
     var LOCAL_ARCHIVE_ENDPOINT_KEY = STORAGE_PREFIX + 'local_archive_endpoint';
     var LOCAL_ARCHIVE_ENDPOINT_LEGACY_KEY = 'localArchiveEndpoint';
@@ -137,7 +137,7 @@
     })();
     function detectRepoBasePath() {
         var pathname = (w.location && w.location.pathname) || '';
-        var markers = ['/release/', '/hosted/', '/webos/app/'];
+        var markers = ['/release/', '/webos/app/'];
         var i;
         for (i = 0; i < markers.length; i++) {
             var idx = pathname.indexOf(markers[i]);
@@ -145,9 +145,9 @@
         }
         return '/SmartTwitchWebOSTV';
     }
-    var FORK_BASE_URL = (w.location && w.location.origin ? w.location.origin : 'https://xenking.github.io') + detectRepoBasePath();
-    var FORK_RELEASE_URL = FORK_BASE_URL + '/release/index.html';
-    var FORK_VERSION_URL = FORK_BASE_URL + '/release/githubio/version/version.json';
+    var WEBOS_BASE_URL = (w.location && w.location.origin ? w.location.origin : 'https://xenking.github.io') + detectRepoBasePath();
+    var WEBOS_RELEASE_URL = WEBOS_BASE_URL + '/release/index.html';
+    var WEBOS_VERSION_URL = WEBOS_BASE_URL + '/release/githubio/version/version.json';
     // --- Multi-stream warning state ---
     var multiWarnShown = false;       // Whether multi-stream rejection notice was shown.
     var secondaryWarnAt = 0;          // Timestamp of last secondary stream warning.
@@ -342,15 +342,15 @@
     // =========================================================================
     // Bootstrap Sequence (runs immediately at parse time)
     // =========================================================================
-    // 1. Install early shim so window.Android exists before upstream JS runs.
+    // 1. Install early shim so window.Android exists before app JS runs.
     // 2. Polyfill missing ES6+ globals for older webOS WebKit (globalThis, WeakRef).
     // 3. Block Twitch embed scripts that conflict with native <video> playback.
-    // 4. Seed OSInterface globals so upstream detects "native" mode.
+    // 4. Seed OSInterface globals so the app detects "native" mode.
     installEarlyAndroidShim();
     installLegacyRuntimePolyfills();
     installEmbedScriptBlocker();
     seedOsInterfaceGlobalsEarly();
-    // Returns the key code used to signal "back" to the upstream app.
+    // Returns the key code used to signal "back" to the app.
     // Android: uses KEYCODE_BACK (4). webOS: remapped to F2 (113) via keyEvent bridge.
     function getBackDispatchKey() {
         return BACK_DISPATCH_KEY;
@@ -543,11 +543,11 @@
         if (!sourceStartMs) return null;
         var durationSeconds = localVodDurationSeconds(vod.duration_seconds);
         var localEndMs = 0;
-        if (vod.growing || vod.active || vod.status === 'open' || vod.status === 'recording' || vod.status === 'closing' || vod.status === 'finalizing') {
-            localEndMs = Date.now();
-        } else {
-            localEndMs = localVodParseTimeMs(vod.last_ended_at);
-            if (!localEndMs && durationSeconds) localEndMs = sourceStartMs + durationSeconds * 1000;
+        if (durationSeconds) localEndMs = sourceStartMs + durationSeconds * 1000;
+        else localEndMs = localVodParseTimeMs(vod.last_ended_at);
+        if (!localEndMs && localVodIsGrowingMatch({vod: vod})) {
+            var boundedActiveSeconds = Math.max(meta.durationSeconds || 0, meta.playerPositionSeconds || 0, meta.positionSeconds || 0, 1);
+            localEndMs = sourceStartMs + boundedActiveSeconds * 1000;
         }
         if (!localEndMs) return null;
         var toleranceMs = meta.toleranceSeconds * 1000;
@@ -569,6 +569,7 @@
             position_within_recording: positionWithin,
             playback_url: vod.playback_url || '',
             file_url: vod.file_url || '',
+            final_url: vod.final_url || '',
             score: (positionWithin ? 0 : 1000000000) + Math.abs(deltaSeconds) - (vod.growing || vod.active ? 100 : 0)
         };
     }
@@ -594,6 +595,7 @@
         fallback.position_within_recording = data.position_within_recording !== false;
         fallback.playback_url = data.playback_url || fallback.playback_url || data.vod.playback_url || '';
         fallback.file_url = data.file_url || fallback.file_url || data.vod.file_url || '';
+        fallback.final_url = data.final_url || fallback.final_url || data.vod.final_url || '';
         return fallback;
     }
     function localVodFetchFallbackMatch(meta, callback) {
@@ -647,8 +649,9 @@
         var compatibleUrl = localVodCompatiblePlaybackUrl(match);
         if (compatibleUrl) return localArchiveUrl(compatibleUrl);
         var fileUrl = match.file_url || match.vod.file_url || '';
+        var finalUrl = match.final_url || match.vod.final_url || '';
         var playlistUrl = match.playback_url || match.vod.playback_url || '';
-        return localArchiveUrl(playlistUrl || fileUrl);
+        return localArchiveUrl(playlistUrl || fileUrl || finalUrl);
     }
     function localVodHasUsableCurrentMatch() {
         return !!(localVodOverride.match && localVodOverride.match.matched && localVodOverride.match.position_within_recording && localVodPlaybackUrl(localVodOverride.match));
@@ -685,11 +688,6 @@
         var seconds = localVodDurationSeconds(vod.duration_seconds || match.duration_seconds || 0);
         return seconds > 0 ? Math.round(seconds * 1000) : 0;
     }
-    function localVodMatchSourceStartedAtMs(match) {
-        if (!match) return 0;
-        var vod = match.vod || {};
-        return localVodParseTimeMs(match.source_started_at || vod.source_started_at || vod.started_at || '');
-    }
     function localVodIsGrowingMatch(match) {
         if (!match || !match.vod) return false;
         var vod = match.vod;
@@ -702,11 +700,6 @@
         var media = getVideoTimelineState(mv);
         if (media.durationMs > durationMs) durationMs = media.durationMs;
         if (localVodIsGrowingMatch(match)) {
-            var sourceStartedAtMs = localVodMatchSourceStartedAtMs(match);
-            if (sourceStartedAtMs > 0) {
-                var wallDurationMs = Date.now() - sourceStartedAtMs;
-                if (wallDurationMs > durationMs) durationMs = wallDurationMs;
-            }
             var currentMs = mtime();
             if (currentMs > 0 && currentMs + LOCAL_VOD_GROWING_DURATION_MARGIN_MS > durationMs) {
                 durationMs = currentMs + LOCAL_VOD_GROWING_DURATION_MARGIN_MS;
@@ -724,9 +717,7 @@
                 var twitchMetaDurationMs = localVodOverride.twitchMeta.durationSeconds * 1000;
                 if (twitchMetaDurationMs > reportedMs) reportedMs = twitchMetaDurationMs;
             }
-            if (localVodIsGrowingMatch(match) && localVodOverride.twitchMeta && localVodOverride.twitchMeta.startedAtMs) {
-                var twitchWallDurationMs = Date.now() - localVodOverride.twitchMeta.startedAtMs;
-                if (twitchWallDurationMs > reportedMs) reportedMs = twitchWallDurationMs;
+            if (localVodIsGrowingMatch(match)) {
                 var currentTwitchMs = localVodLocalToTwitchMs(mtime());
                 if (currentTwitchMs > 0 && currentTwitchMs + LOCAL_VOD_GROWING_DURATION_MARGIN_MS > reportedMs) {
                     reportedMs = currentTwitchMs + LOCAL_VOD_GROWING_DURATION_MARGIN_MS;
@@ -1315,7 +1306,7 @@
         if (typeof n === 'string') return (w.smartTwitchTV && w.smartTwitchTV[n]) || w[n] || null;
         return null;
     }
-    // Calls a named function from the upstream app with arguments.
+    // Calls a named function from the app with arguments.
     function call(n, a) {
         var f = fn(n);
         if (typeof f !== 'function') return null;
@@ -1385,7 +1376,7 @@
     // =========================================================================
     // Controls the visibility of loading spinners (dialog_loading_play, dialog_loading_feed).
     // Android: loading overlay controlled by ExoPlayer state callbacks (native View).
-    // webOS:   CSS class toggle ('hide') on upstream DOM elements.
+    // webOS:   CSS class toggle ('hide') on app DOM elements.
     //
     // Design: Show is debounced (450ms) to prevent flicker on fast loads.
     //         Hide is always immediate (on canplay/playing/loadeddata).
@@ -1612,7 +1603,7 @@
             return url;
         }
     }
-    // Notifies upstream that preview tracking should be cleared.
+    // Notifies the app that preview tracking should be cleared.
     function clearPreviewTracking() {
         call('Play_CheckIfIsLiveCleanEnd');
     }
@@ -1624,10 +1615,10 @@
         if (tag === 'input' || tag === 'textarea') return true;
         return !!ae.isContentEditable;
     }
-    // Returns a version string compatible with the upstream version check format.
+    // Returns a version string compatible with the app version check format.
     // Android: returns BuildConfig.VERSION_NAME. webOS: synthesized from app version globals.
     function getCompatibleVersion() {
-        // Keep this aligned with app/general/version.js so upstream APK-update
+        // Keep this aligned with app/general/version.js so app update
         // logic does not offer the Android APK on webOS builds.
         var fallback = '3.0.379';
         try {
@@ -1655,7 +1646,7 @@
     //          (e.g., user presses Home) and must pause playback to release decoder.
     //          After LIFECYCLE_STOP_MIN_HIDDEN_MS (12s), playback is stopped entirely.
 
-    // Returns true if the upstream app has completed initial startup.
+    // Returns true if the app has completed initial startup.
     function hasStartedApp() {
         return typeof w.Main_started !== 'undefined' && !!w.Main_started;
     }
@@ -1768,7 +1759,7 @@
                 !w.document[hiddenProp]
             ) {
                 lifecycleHiddenSinceAt = 0;
-                if (!versionRefreshIntervalId) versionRefreshIntervalId = w.setInterval(checkForkVersionAndRefresh, VERSION_REFRESH_MIN_INTERVAL_MS);
+                if (!versionRefreshIntervalId) versionRefreshIntervalId = w.setInterval(checkWebOSVersionAndRefresh, VERSION_REFRESH_MIN_INTERVAL_MS);
                 tryLifecycleResume();
             }
         };
@@ -1860,7 +1851,7 @@
     // =========================================================================
     // Parses an HLS master playlist (#EXT-X-STREAM-INF) into a quality array.
     // Android: ExoPlayer parses playlists internally. webOS: we parse to offer
-    // quality selection via the upstream UI, then set video.src to chosen variant.
+    // quality selection via the app UI, then set video.src to chosen variant.
     function parseQ(pl, rawBaseUri) {
         if (!pl || typeof pl !== 'string') return [];
         var l = pl.replace(/\r/g, '').split('\n');
@@ -1915,7 +1906,7 @@
     // Android: ExoPlayer manages media lifecycle via Java. State changes trigger
     //          callbacks to JS via evaluateJavascript().
     // webOS:   HTML5 <video> element with HLS src. Event listeners map video
-    //          events to the same upstream callback flow.
+    //          events to the same app callback flow.
 
     // Creates a <video> element with fixed positioning and z-index.
     function makeVideo(id, z) {
@@ -1946,9 +1937,9 @@
         mv = makeVideo('sttv_main', 2);
         root.appendChild(mv);
         // --- Main video event handlers ---
-        // These map HTML5 video events to the upstream app's ExoPlayer callback flow.
+        // These map HTML5 video events to the app's ExoPlayer callback flow.
         // Android: ExoPlayer.Listener.onPlaybackStateChanged() etc.
-        // webOS:   HTML5 media events → bridge → upstream JS callbacks.
+        // webOS:   HTML5 media events → bridge → app JS callbacks.
 
         // loadedmetadata: metadata (duration, dimensions) available. Resume VOD/clip position.
         mv.addEventListener('loadedmetadata', function () {
@@ -2038,12 +2029,12 @@
             requestMainLoadingShow();
             scheduleMainStallCheck();
         });
-        // ended: playback finished. Notify upstream app.
+        // ended: playback finished. Notify app.
         mv.addEventListener('ended', function () {
             if (ms.type === 1 && mainLastCurrentTime < 1 && retryMainWithCodecFallback('live_ended_before_progress')) return;
             handleMainPlaybackFinished(0, 0);
         });
-        // error: playback error. Retry up to 2x, then escalate to upstream failure handler.
+        // error: playback error. Retry up to 2x, then escalate to app failure handler.
         mv.addEventListener('error', function () {
             clearMainStallTimer();
             clearMainDecoderJamRecoveryTimer();
@@ -2060,7 +2051,7 @@
         if (pv) return;
         pv = makeVideo('sttv_preview', PREVIEW_VIDEO_Z_INDEX);
         // Preview is started by explicit UI navigation, so keep audio available
-        // and let applyAudio() scale it according to upstream settings.
+        // and let applyAudio() scale it according to app settings.
         pv.muted = false;
         pv.defaultMuted = false;
         try { pv.removeAttribute('muted'); } catch (eMuted) {}
@@ -2800,7 +2791,7 @@
         }, 120 * previewErrorCount);
         return true;
     }
-    // Notifies upstream that preview playback ended (normal end or failure).
+    // Notifies the app that preview playback ended (normal end or failure).
     function handlePreviewPlaybackFinished(failType, errorCode) {
         var mode = ps.mode || 'preview';
         if (mode === 'multi') {
@@ -2815,7 +2806,7 @@
         clear(pv);
         resetPreviewState();
     }
-    // Notifies upstream that main playback finished and releases the HTML5
+    // Notifies the app that main playback finished and releases the HTML5
     // video source first. Android's native PlayerActivity has already stopped
     // the player by the time it calls Play_PannelEndStart; webOS must do that
     // explicitly or stale waiting/stalled events can keep the loading overlay
@@ -2834,7 +2825,7 @@
         resetMainRecoveryState();
         call('Play_PannelEndStart', [type, ft, ec]);
     }
-    // Notifies upstream that main playback failed after retries exhausted.
+    // Notifies the app that main playback failed after retries exhausted.
     function handleMainPlaybackFailure(failType, errorCode) {
         var ft = parseInt(failType, 10) || 1;
         var ec = parseInt(errorCode, 10) || 0;
@@ -3142,8 +3133,8 @@
     //          RTT tracking, request deduplication, and DNS filter detection.
     //
     // IMPORTANT: Synchronous XHR (sync=true in xhrReq) is required for
-    // mMethodUrlHeaders compatibility. The upstream app calls this synchronously
-    // for token/playlist fetches. Cannot be converted to async without upstream
+    // mMethodUrlHeaders compatibility. The app calls this synchronously
+    // for token/playlist fetches. Cannot be converted to async without app
     // changes, which are forbidden by architecture rules. This blocks the main
     // thread during the HTTP round-trip — an accepted trade-off for compatibility.
 
@@ -4191,14 +4182,14 @@
         return PromiseCtor.all(tasks);
     }
     function withCacheBuster(url) {
-        if (!url || typeof url !== 'string') return FORK_RELEASE_URL;
+        if (!url || typeof url !== 'string') return WEBOS_RELEASE_URL;
         var sep = url.indexOf('?') === -1 ? '?' : '&';
         return url + sep + 'sttv_update=' + Date.now();
     }
     function normalizeReloadUrl(url) {
-        var target = typeof url === 'string' && url.length > 0 ? url : FORK_RELEASE_URL;
-        if (target.indexOf(FORK_BASE_URL) !== 0 && target.indexOf('https://fgl27.github.io/SmartTwitchTV') !== 0) {
-            return withCacheBuster(FORK_RELEASE_URL);
+        var target = typeof url === 'string' && url.length > 0 ? url : WEBOS_RELEASE_URL;
+        if (target.indexOf(WEBOS_BASE_URL) !== 0) {
+            return withCacheBuster(WEBOS_RELEASE_URL);
         }
         return withCacheBuster(target);
     }
@@ -4227,11 +4218,9 @@
                     return;
                 }
                 var href = w.location && w.location.href ? w.location.href : '';
-                var knownHost =
-                    href.indexOf('https://fgl27.github.io') !== -1 ||
-                    href.indexOf(FORK_BASE_URL) !== -1;
+                var knownHost = href.indexOf(WEBOS_BASE_URL) !== -1;
                 if (knownHost) {
-                    w.BaseXmlHttpGet(FORK_VERSION_URL, w.Main_CheckUpdateResult, w.Main_CheckUpdateFail);
+                    w.BaseXmlHttpGet(WEBOS_VERSION_URL, w.Main_CheckUpdateResult, w.Main_CheckUpdateFail);
                     return;
                 }
             }
@@ -4342,7 +4331,7 @@
         return a || b;
     }
     function patchNoBrowserFallbackFlow() {
-        // Safety net: if upstream browser-test hooks are called on webOS, redirect back to bridge playback path.
+        // Safety net: if app browser-test hooks are called on webOS, redirect back to bridge playback path.
         var patched = 0;
         var install = function (name, handler) {
             if (typeof w[name] !== 'function') return;
@@ -4912,10 +4901,10 @@
     // =========================================================================
     // Version Check & Auto-Refresh
     // =========================================================================
-    // Periodically checks if a newer hosted release is available and reloads.
+    // Periodically checks if a newer webOS release is available and reloads.
     // Android: APK update flow (Google Play / in-app update). Not applicable on webOS.
     // webOS:   fetches version.json, compares WebTag, reloads if newer build detected.
-    function checkForkVersionAndRefresh() {
+    function checkWebOSVersionAndRefresh() {
         if (!isBridgePolyfillActive()) return;
         if (versionRefreshInFlight) return;
         var now = Date.now();
@@ -4926,7 +4915,7 @@
         var finish = function () {
             versionRefreshInFlight = false;
         };
-        var url = FORK_VERSION_URL + (FORK_VERSION_URL.indexOf('?') === -1 ? '?' : '&') + 'sttv_bridge_vercheck=' + now;
+        var url = WEBOS_VERSION_URL + (WEBOS_VERSION_URL.indexOf('?') === -1 ? '?' : '&') + 'sttv_bridge_vercheck=' + now;
         w.fetch(url, {cache: 'no-store'})
             .then(function (response) {
                 if (!response || !response.ok) return null;
@@ -4947,7 +4936,7 @@
                     w.Android.CleanAndLoadUrl(w.Android.mPageUrl());
                     return;
                 }
-                w.location.replace(normalizeReloadUrl((w.location && w.location.href) || FORK_RELEASE_URL));
+                w.location.replace(normalizeReloadUrl((w.location && w.location.href) || WEBOS_RELEASE_URL));
             })
             .catch(function () {})
             .then(finish, finish);
@@ -4956,7 +4945,7 @@
         try {
             if (!w.localStorage) return false;
             // Older webOS bridge builds forced all preview settings off because
-            // small-window playback was not implemented yet. Restore the upstream
+            // small-window playback was not implemented yet. Restore the app
             // defaults once so existing installs can show live feed, side-panel,
             // and grid/card previews again. Users can still turn these settings
             // off afterward from the normal UI.
@@ -4995,7 +4984,7 @@
         // --- HTTP / Network Methods ---
 
         // IMPLEMENTED: Synchronous HTTP request. Android: OkHttp sync call in WebView thread.
-        // webOS: Sync XHR (blocks main thread). Required for upstream token fetch compatibility.
+        // webOS: Sync XHR (blocks main thread). Required for app token fetch compatibility.
         A.mMethodUrlHeaders = function (u, to, pm, m, ck, h) { var r = xhrReq(u, to, pm, m, ck, h, true); return res(r.status, r.responseText, r.checkResult, r.url); };
         // IMPLEMENTED: Async HTTP request (basic). Android: OkHttp async call.
         A.BasexmlHttpGet = function (u, to, pm, m, h, cb, ck, key, ok, err) { sendAsyncRequest(u, to, pm, m, h, function (status, text) { call(cb, [res(status, text, ck), key, ok, err, ck]); }); };
@@ -5051,7 +5040,7 @@
             }
             call('Play_UpdateDuration', [localVodReportedDurationMs()]);
         };
-        // IMPLEMENTED: Restart playback from cached state or trigger upstream reload.
+        // IMPLEMENTED: Restart playback from cached state or trigger app reload.
         A.RestartPlayer = function (t, rs, player) {
             if (player && player > 0) {
                 var prevSrc = ps.rawUri || ps.uri;
@@ -5276,7 +5265,7 @@
         };
         // ALIAS: Maps to SetLanguage.
         A.upDateLang = A.SetLanguage;
-        // NO-OP: Android stores Twitch API credentials in SharedPreferences. webOS uses upstream JS-side storage.
+        // NO-OP: Android stores Twitch API credentials in SharedPreferences. webOS uses app JS-side storage.
         A.setAppIds = function (clientId, clientSecret, redirectUri) {
             void clientId;
             void clientSecret;
@@ -5420,7 +5409,7 @@
                 else try { video.pause(); } catch (e) {}
             }
         };
-        // IMPLEMENTED: Toggles playback state based on main player pause flag and notifies upstream callback.
+        // IMPLEMENTED: Toggles playback state based on main player pause flag and notifies app callback.
         A.PlayPauseChange = function () {
             if (!mv) return;
             var nextPlaying = mv.paused;
@@ -5441,7 +5430,7 @@
             var d = localVodReportedDurationMs();
             call(cb, [d]);
         };
-        // IMPLEMENTED: Emits screen-duration update payload used by upstream progress UI.
+        // IMPLEMENTED: Emits screen-duration update payload used by app progress UI.
         A.updateScreenDuration = function (cb, key, objId) {
             var d = localVodReportedDurationMs();
             call(cb, [objId, key, d]);
@@ -5522,9 +5511,9 @@
             }
             if (c) try { w.close(); } catch (e) {}
         };
-        // IMPLEMENTED: Explicit upstream API to force main loading spinner visibility.
+        // IMPLEMENTED: Explicit app API to force main loading spinner visibility.
         A.mshowLoading = function (s) { if (Boolean(s)) requestMainLoadingShow(); else setMainLoading(false); };
-        // IMPLEMENTED: Explicit upstream API to force feed loading spinner visibility.
+        // IMPLEMENTED: Explicit app API to force feed loading spinner visibility.
         A.mshowLoadingBottom = function (s) { setFeedLoading(Boolean(s)); };
         // IMPLEMENTED: Adds/removes click-avoidance CSS class for key overlay.
         A.AvoidClicks = function (a) { var e = w.document.getElementById('scene_keys'); if (e) e.classList[a ? 'add' : 'remove']('avoidclicks'); };
@@ -5542,15 +5531,15 @@
         A.deviceIsTV = function () { return true; };
         // IMPLEMENTED: Returns User-Agent string as webview version surrogate.
         A.getWebviewVersion = function () { return ua || ''; };
-        // IMPLEMENTED: Returns codec capability payload for upstream codec/settings UI based on HTML5 media probing.
+        // IMPLEMENTED: Returns codec capability payload for app codec/settings UI based on HTML5 media probing.
         A.getcodecCapabilities = function (ct) { return buildCodecCapabilityPayload(ct); };
         // NO-OP: Android reads accessibility service state; webOS bridge does not expose that signal.
         A.isAccessibilitySettingsOn = function () { return false; };
-        // IMPLEMENTED (compat): Notification permission considered granted to avoid upstream gating.
+        // IMPLEMENTED (compat): Notification permission considered granted to avoid app gating.
         A.hasNotificationPermission = function () { return true; };
         // IMPLEMENTED (compat): Install source check returns true to satisfy Android guard paths.
         A.getInstallFromPLay = function () { return true; };
-        // NO-OP: Android shows native Toast message; webOS bridge leaves UI messaging to upstream JS.
+        // NO-OP: Android shows native Toast message; webOS bridge leaves UI messaging to app JS.
         A.showToast = function (toast) {
             void toast;
         };
@@ -5564,7 +5553,7 @@
         A.setAppToken = function (t) { appToken = t || null; try { if (appToken) w.localStorage.setItem(STORAGE_PREFIX + 'app_token', appToken); else w.localStorage.removeItem(STORAGE_PREFIX + 'app_token'); } catch (e) {} };
         // NO-OP: Android can return last launch intent extras; webOS does not provide an equivalent object here.
         A.GetLastIntentObj = function () { return null; };
-        // IMPLEMENTED: Triggers upstream channel-refresh event callback.
+        // IMPLEMENTED: Triggers app channel-refresh event callback.
         A.mCheckRefresh = function (t) { call('Main_EventChannelRefresh', [t]); };
         // NO-OP: Android may show refresh toast UI; not needed in webOS bridge layer.
         A.mCheckRefreshToast = function (type) {
@@ -5712,19 +5701,19 @@
     applyWebOSDefaultSettings();
     // 4) Keep legacy KEY_RETURN/back aliases consistent.
     enforceBackKeyConstant();
-    // 5) Patch upstream back-key bridge callsites.
+    // 5) Patch app back-key bridge callsites.
     installBackAliasBridge();
     w.__sttvWebOSBridgeReady = true;
     // 6) Restore OSInterface globals once bridge is available.
     recoverOSInterfaceState();
     // 7) Resume any playback/lifecycle work deferred during hidden state.
     tryLifecycleResume();
-    // 8) Patch selected upstream update flows with webOS-safe variants.
+    // 8) Patch selected app update flows with webOS-safe variants.
     patchMainUpdateFlow();
     patchUpdateResultFlow();
     ensureVodSafetyPatches();
     ensureLiveProxyAsyncLoadFlow();
-    // Keep upstream proxy selection behavior. Bridge does not force provider defaults.
+    // Keep app proxy selection behavior. Bridge does not force provider defaults.
     // 9) Install launch/relaunch event bridge.
     initLaunch();
     // 10) Harden scene transitions and start player-scene optimizer.
@@ -5733,8 +5722,8 @@
     // 11) Inject bridge-owned local VOD override hooks.
     initLocalVodOverrideIntegration();
     // 12) Start periodic version checks.
-    checkForkVersionAndRefresh();
-    versionRefreshIntervalId = w.setInterval(checkForkVersionAndRefresh, VERSION_REFRESH_MIN_INTERVAL_MS);
+    checkWebOSVersionAndRefresh();
+    versionRefreshIntervalId = w.setInterval(checkWebOSVersionAndRefresh, VERSION_REFRESH_MIN_INTERVAL_MS);
     // 13) Restore app token from persisted storage (legacy key fallback included).
     try { appToken = w.localStorage ? (w.localStorage.getItem(STORAGE_PREFIX + 'app_token') || w.localStorage.getItem('sttv_webos_app_token')) : null; } catch (e) { appToken = null; }
 })(window);

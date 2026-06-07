@@ -68,7 +68,7 @@ Filter Network by these hosts/paths and export a HAR or copy request/response de
 - `gql.twitch.tv/gql`
 - `usher.ttvnw.net/api/channel/hls/`
 - `video-weaver` / `playlist.ttvnw.net` media playlist `.m3u8`
-- `api.ttv.lol/playlist/` only if the old upstream proxy path appears unexpectedly
+- `api.ttv.lol/playlist/` only if the old app proxy path appears unexpectedly
 
 For the media playlist active during the adroll, save the response body around any lines containing:
 

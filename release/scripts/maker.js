@@ -82,7 +82,7 @@ function make_CSS() {
     tools.writeFileASync('release/githubio/css/icons.min.css', parsed.toString());
 }
 
-function make_JS(jshOnly) {
+async function make_JS(jshOnly) {
     console.log(jshOnly ? '\nVerifying js files...' : '\nCreating js files...');
 
     const options = {
@@ -128,7 +128,7 @@ function make_JS(jshOnly) {
 
     tools.writeFileASync(temp_maker_folder + 'Extrapage.js', extraJSContent);
 
-    makeMainJS(mainJSContentCompressed, mainJSContent, extraJSContent);
+    await makeMainJS(mainJSContentCompressed, mainJSContent, extraJSContent);
 
     return true;
 }
@@ -200,7 +200,7 @@ function js_jshint(source) {
     return Boolean(errors && errors.length);
 }
 
-function run_all() {
+async function run_all() {
     const args = process.argv.slice(2);
     const jshOnly = args[0] === 'jsh';
 
@@ -210,7 +210,7 @@ function run_all() {
 
     //make main js file if doesn't pass jshint validation exit.
     //Or if on jshint only mode also exit
-    if (!make_JS(jshOnly)) return;
+    if (!(await make_JS(jshOnly))) return;
 
     make_HTML();
     make_CSS();
@@ -219,4 +219,7 @@ function run_all() {
     console.log('\nFinishing release maker...');
 }
 
-run_all();
+run_all().catch(error => {
+    console.error(error);
+    process.exit(1);
+});

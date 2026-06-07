@@ -30,7 +30,7 @@ var version = {
             title: 'April 28 2026',
             changes: [
                 'Add configurable webOS TTV LOL playlist proxy for live streams',
-                'Route webOS update checks through the xenking fork without offering Android APK updates',
+                'Route webOS update checks through the xenking webOS release without offering Android APK updates',
                 'Keep HEVC playback enabled on webOS devices that reject the original codec hint'
             ]
         },
