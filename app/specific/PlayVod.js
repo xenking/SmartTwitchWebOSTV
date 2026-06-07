@@ -371,7 +371,6 @@ function PlayVod_loadDataSuccessFake() {
 }
 
 function PlayVod_WebOSLocalBridge() {
-    if (WTV_IsData(Main_values_Play_data) || WTV_IsData(Play_data.data)) return null;
     return window.STTVWebOSLocalVod && Main_IsOn_OSInterface ? window.STTVWebOSLocalVod : null;
 }
 
@@ -488,10 +487,6 @@ function PlayVod_WebOSLocalLoadData() {
 
 function PlayVod_WebOSLocalSwitchSource() {
     var bridge = PlayVod_WebOSLocalBridge();
-    if (WTV_IsData(Main_values_Play_data) || WTV_IsData(Play_data.data)) {
-        PlayVod_WebOSLocalNotify('Already using W.TV archive');
-        return;
-    }
     if (!bridge || !PlayVod_isOn) {
         PlayVod_WebOSLocalNotify('Local archive integration is not available');
         return;
@@ -519,6 +514,7 @@ function PlayVod_loadDataTwitch() {
 var PlayVod_autoUrl;
 var PlayVod_loadDataId = 0;
 function PlayVod_loadData() {
+    if (LocalVod_IsData(Main_values_Play_data) && LocalVod_PlayVodLoadData()) return;
     if (WTV_IsData(Main_values_Play_data) && WTV_PlayVodLoadData()) return;
     if (PlayVod_WebOSLocalLoadData()) return;
 
@@ -531,6 +527,10 @@ function PlayVod_loadDataResult(response) {
 
         if (responseObj.checkResult > 0 && responseObj.checkResult === PlayVod_loadDataId) {
             if (responseObj.status === 200) {
+                if (LocalVod_IsData(Main_values_Play_data)) {
+                    LocalVod_PlayVodLoadDataSuccess(responseObj);
+                    return;
+                }
                 if (WTV_IsData(Main_values_Play_data)) {
                     WTV_PlayVodLoadDataSuccess(responseObj);
                     return;
@@ -1598,6 +1598,11 @@ var fullVodInfoQuery =
     '{"query":"{video(id:\\"%x\\"){seekPreviewsURL,creator{roles{isPartner},id,login,displayName,language,profileImageURL(width:300)},muteInfo{mutedSegmentConnection{nodes{duration,offset}}},game{displayName,id},duration,viewCount,language,title,animatedPreviewURL,createdAt,id,thumbnailURLs(width:640,height:360),creator{id,displayName,login},moments(momentRequestType:VIDEO_CHAPTER_MARKERS types:[GAME_CHANGE]) {edges{...VideoPlayerVideoMomentEdge}}}}fragment VideoPlayerVideoMomentEdge on VideoMomentEdge{node {...VideoPlayerVideoMoment}}fragment VideoPlayerVideoMoment on VideoMoment{durationMilliseconds positionMilliseconds type description details{...VideoPlayerGameChangeDetails}}fragment VideoPlayerGameChangeDetails on GameChangeMomentDetails{game{id displayName}}"}';
 
 function PlayVod_get_vod_info() {
+    if (LocalVod_IsData(Main_values_Play_data)) {
+        LocalVod_ApplyVodInfo();
+        return;
+    }
+
     if (WTV_IsData(Main_values_Play_data)) {
         WTV_PlayVodApplyInfo();
         return;

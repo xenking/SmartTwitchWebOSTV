@@ -12,7 +12,7 @@
     "webos:launch": "node tools/webos/runAresCommand.js launch",
     "webos:inspect": "node tools/webos/runAresCommand.js inspect",
     "webos:remove": "node tools/webos/runAresCommand.js remove",
-    "test:webos": "node --no-deprecation tools/webos/hlsPlaylistClient.test.mjs && node --no-deprecation tools/webos/playerKeyBindings.test.mjs",
+    "test:webos": "node --no-deprecation tools/webos/hlsPlaylistClient.test.mjs && node --no-deprecation tools/webos/playerKeyBindings.test.mjs && node --no-deprecation tools/webos/localVod.test.mjs",
     "test": "npm run test:webos",
     "webos:prepare-app": "node tools/webos/preparePackagedApp.js"
   },

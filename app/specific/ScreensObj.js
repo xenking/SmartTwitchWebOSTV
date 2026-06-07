@@ -507,26 +507,28 @@ function ScreensObj_StartAllVars() {
         Vod_newImg: new Image(),
         AnimateThumb: ScreensObj_AnimateThumbId,
         addCell: function (cell) {
-            var channelId = this.isQuery && cell.creator ? cell.creator.id : cell.user_id;
+            var isLocalVod = typeof LocalVod_IsData === 'function' && LocalVod_IsData(cell);
+            var valuesArray = isLocalVod ? cell : ScreensObj_VodCellArray(cell, this.isQuery, this.gameSelected_Id, this.gameSelected_name);
+            var channelId = isLocalVod ? valuesArray[14] : this.isQuery && cell.creator ? cell.creator.id : cell.user_id;
 
             //skip check if game is blocked as we are on the blocked game section
             var skipBlockedCheck = this.screen === Main_AGameVod && AddUser_IsUserSet() && Screens_getGameIsBlocked(this.gameSelected_Id);
 
             var isNotBlocked = Screens_isNotBlocked(
                 skipBlockedCheck ? null : channelId,
-                this.screen !== Main_AGameVod ? cell.game_id : null, //skip game check if on game screen
+                this.screen !== Main_AGameVod ? valuesArray[16] : null, //skip game check if on game screen
                 this.screen === Main_ChannelVod //skip all check if on channel screen
             );
 
-            if (!this.idObject[cell.id] && isNotBlocked) {
+            if (!this.idObject[valuesArray[7]] && isNotBlocked) {
                 this.itemsCount++;
-                this.idObject[cell.id] = 1;
+                this.idObject[valuesArray[7]] = 1;
 
                 this.tempHtml.push(
                     Screens_createCellVod(
                         this.row_id + '_' + this.column_id,
                         this.ids,
-                        ScreensObj_VodCellArray(cell, this.isQuery, this.gameSelected_Id, this.gameSelected_name),
+                        valuesArray,
                         this.screen
                     )
                 );
@@ -1298,7 +1300,11 @@ function ScreensObj_InitChannelVod() {
             this.cursor = null;
         }
 
-        this.concatenateAfter(responseObj);
+        if (typeof LocalVod_MergeChannelVodResponse === 'function') {
+            LocalVod_MergeChannelVodResponse(this, responseObj, this.concatenateAfter.bind(this));
+        } else {
+            this.concatenateAfter(responseObj);
+        }
     };
 }
 

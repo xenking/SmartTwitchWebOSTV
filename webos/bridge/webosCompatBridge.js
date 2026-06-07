@@ -543,12 +543,8 @@
         if (!sourceStartMs) return null;
         var durationSeconds = localVodDurationSeconds(vod.duration_seconds);
         var localEndMs = 0;
-        if (vod.growing || vod.active || vod.status === 'open' || vod.status === 'recording' || vod.status === 'closing' || vod.status === 'finalizing') {
-            localEndMs = Date.now();
-        } else {
-            localEndMs = localVodParseTimeMs(vod.last_ended_at);
-            if (!localEndMs && durationSeconds) localEndMs = sourceStartMs + durationSeconds * 1000;
-        }
+        if (durationSeconds) localEndMs = sourceStartMs + durationSeconds * 1000;
+        else localEndMs = localVodParseTimeMs(vod.last_ended_at);
         if (!localEndMs) return null;
         var toleranceMs = meta.toleranceSeconds * 1000;
         var twitchStartMs = meta.startedAtMs;
@@ -685,11 +681,6 @@
         var seconds = localVodDurationSeconds(vod.duration_seconds || match.duration_seconds || 0);
         return seconds > 0 ? Math.round(seconds * 1000) : 0;
     }
-    function localVodMatchSourceStartedAtMs(match) {
-        if (!match) return 0;
-        var vod = match.vod || {};
-        return localVodParseTimeMs(match.source_started_at || vod.source_started_at || vod.started_at || '');
-    }
     function localVodIsGrowingMatch(match) {
         if (!match || !match.vod) return false;
         var vod = match.vod;
@@ -702,11 +693,6 @@
         var media = getVideoTimelineState(mv);
         if (media.durationMs > durationMs) durationMs = media.durationMs;
         if (localVodIsGrowingMatch(match)) {
-            var sourceStartedAtMs = localVodMatchSourceStartedAtMs(match);
-            if (sourceStartedAtMs > 0) {
-                var wallDurationMs = Date.now() - sourceStartedAtMs;
-                if (wallDurationMs > durationMs) durationMs = wallDurationMs;
-            }
             var currentMs = mtime();
             if (currentMs > 0 && currentMs + LOCAL_VOD_GROWING_DURATION_MARGIN_MS > durationMs) {
                 durationMs = currentMs + LOCAL_VOD_GROWING_DURATION_MARGIN_MS;
@@ -724,9 +710,7 @@
                 var twitchMetaDurationMs = localVodOverride.twitchMeta.durationSeconds * 1000;
                 if (twitchMetaDurationMs > reportedMs) reportedMs = twitchMetaDurationMs;
             }
-            if (localVodIsGrowingMatch(match) && localVodOverride.twitchMeta && localVodOverride.twitchMeta.startedAtMs) {
-                var twitchWallDurationMs = Date.now() - localVodOverride.twitchMeta.startedAtMs;
-                if (twitchWallDurationMs > reportedMs) reportedMs = twitchWallDurationMs;
+            if (localVodIsGrowingMatch(match)) {
                 var currentTwitchMs = localVodLocalToTwitchMs(mtime());
                 if (currentTwitchMs > 0 && currentTwitchMs + LOCAL_VOD_GROWING_DURATION_MARGIN_MS > reportedMs) {
                     reportedMs = currentTwitchMs + LOCAL_VOD_GROWING_DURATION_MARGIN_MS;

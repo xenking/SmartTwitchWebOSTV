@@ -793,7 +793,7 @@ function Screens_createCellClip(id, idArray, valuesArray, key, Extra_when, Extra
 function Screens_createCellVod(id, idArray, valuesArray, key, Extra_when, Extra_until) {
     ScreenObj[key].DataObj[id] = valuesArray;
 
-    var sourceLabel = WTV_IsData(valuesArray) ? '<span style="color:#b26cff;">W.TV</span>' : valuesArray[5];
+    var sourceLabel = LocalVod_IsData(valuesArray) ? '<span style="color:#00c17a;">LOCAL</span>' : WTV_IsData(valuesArray) ? '<span style="color:#b26cff;">W.TV</span>' : valuesArray[5];
 
     return (
         '<div id="' +
