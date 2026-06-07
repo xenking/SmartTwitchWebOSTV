@@ -4,9 +4,9 @@
 
 **Goal:** Match the working `../twitch-archiver` selective live proxy behavior closely enough to avoid 90s Twitch adrolls on webOS, and capture evidence when Twitch still serves stitched ads.
 
-**Architecture:** Keep upstream `app/` changes minimal; webOS-specific behavior stays in `webos/bridge/webosCompatBridge.js`, `webos/service/hls_playlist_client.js`, and generated hosted artifacts. Proxy only live GQL token and live Usher master playlist requests through TTVLOL-style HTTP CONNECT proxies, keep media segments direct, and add detection/logging for stitched ad markers in media playlists.
+**Architecture:** Keep player/network compatibility behavior in `webos/bridge/webosCompatBridge.js`, `webos/service/hls_playlist_client.js`, and generated webOS release artifacts. App-level behavior may live in `app/specific/**` when it owns screen/player state. Proxy only live GQL token and live Usher master playlist requests through TTVLOL-style HTTP CONNECT proxies, keep media segments direct, and add detection/logging for stitched ad markers in media playlists.
 
-**Tech Stack:** JavaScript webOS bridge/service, SmartTwitchTV upstream JS, Luna `PalmServiceBridge`, Node test script `tools/webos/hlsPlaylistClient.test.mjs`, existing `npm run lint` and `npm run webos:package` gates.
+**Tech Stack:** JavaScript webOS bridge/service, SmartTwitchWebOSTV app JS, Luna `PalmServiceBridge`, Node test script `tools/webos/hlsPlaylistClient.test.mjs`, existing `npm run lint` and `npm run webos:package` gates.
 
 ---
 

@@ -2,4 +2,4 @@
 
 ## Reporting a Vulnerability
 
-send a email to fglfgl27@gmail.com explaing.
+Open a private security report or contact the repository owner through `https://github.com/xenking/SmartTwitchWebOSTV`.

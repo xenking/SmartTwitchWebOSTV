@@ -1,8 +1,9 @@
-This branch is the github.io that the app uses to download it content
-==============
+This directory contains generated release assets used by `xenking/SmartTwitchWebOSTV`.
 
-Use the file in main branch [release_maker.sh](https://github.com/fgl27/SmartTwitchTV/blob/new/release_maker.sh) to generate the release zip, when update main files also update files here
+Regenerate it from the repository root with:
 
-TODO add a proper documentention
+```bash
+npm run release:build
+```
 
-[Check the Main brach README.md to know how the app works](https://github.com/fgl27/SmartTwitchTV/blob/tizen/README.md)
+Do not edit generated JavaScript manually. Make source changes under `app/`, then rebuild.

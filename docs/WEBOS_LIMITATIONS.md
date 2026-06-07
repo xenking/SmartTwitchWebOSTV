@@ -1,6 +1,6 @@
 # webOS Limitations and Non-1:1 Transfers (Canonical)
 
-This document is the canonical rationale for behavior that cannot match Android 1:1 in this fork.
+This document is the canonical rationale for behavior that cannot match Android 1:1 in `xenking/SmartTwitchWebOSTV`.
 
 ## 1) True Multi-Video Playback
 
@@ -42,7 +42,7 @@ Reason:
 - webOS wrapper cannot provide equivalent native preload semantics for arbitrary third-party targets.
 
 Impact:
-- Deterministic bootstrap is guaranteed for the packaged fork path by staged bridge injection before `main.js` in the local `release/index.html` artifact.
+- Deterministic bootstrap is guaranteed for the packaged app path by staged bridge injection before `main.js` in the local `release/index.html` artifact.
 
 ## 5) DNS Filtering / Sinkhole Side Effects
 
@@ -81,7 +81,7 @@ Impact:
 Status: **Intentionally retained for compatibility**
 
 Reason:
-- Upstream `OSInterface` call sites rely on synchronous return behavior.
+- Existing `OSInterface` call sites rely on synchronous return behavior.
 
 Impact:
 - Sync XHR can still block main thread under poor network conditions.
@@ -100,7 +100,7 @@ Impact:
 
 ## 10) Twitch `usher` Playlist Fetch and Quality Metadata on webOS
 
-Status: **Mitigated in fork bridge/service**
+Status: **Mitigated in webOS bridge/service**
 
 Reason:
 - Some webOS TV browser engines block cross-origin XHR to `https://usher.ttvnw.net/...m3u8` (CORS), even when direct media playback still works.
@@ -111,7 +111,6 @@ Impact:
 
 ## Related Docs
 - Current implementation/parity snapshot: `docs/WEBOS_PORTING_STATUS.md`
-- Upstream sync procedure: `docs/UPSTREAM_SYNC_PLAYBOOK.md`
 - Build/deploy operations: `docs/WEBOS_DEPLOYMENT.md`
 - Bridge deep audit: `docs/WEBOS_BRIDGE_PERFORMANCE_AUDIT.md`
 

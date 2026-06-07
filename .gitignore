@@ -49,6 +49,9 @@ build/
 .claude/settings.local.json
 tmp/apps-repo/
 webos/app/release/
+.omx/
+.codebase-memory/
+.beads/
 
 # local graphify cache
 .graphify/

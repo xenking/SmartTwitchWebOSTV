@@ -4,7 +4,7 @@ manifestUrl: https://github.com/xenking/SmartTwitchWebOSTV/releases/latest/downl
 category: internet
 pool: main
 description: |
-  SmartTwitchWebOSTV is a Twitch client for TV devices focused on a fast, remote-friendly experience. Originally developed as Android app by fgl27/SmartTwitchTV.
+  SmartTwitchWebOSTV is a Twitch client for TV devices focused on a fast, remote-friendly webOS experience.
 
   ![Screenshot](https://raw.githubusercontent.com/xenking/SmartTwitchWebOSTV/refs/heads/master/screenshot/SmartTV%20for%20Twitch_20200326_202509.png)
 
@@ -17,7 +17,7 @@ description: |
   - Watch history and resume options for Live, VOD, and Clips
   - Deep UI customization (content language, app language, text size, chat size/position/background)
 
-  Provided as is. You will still find leftovers from the Android app. I will most likely not maintain this port actively. It's enough for me and just didn't want to keep it private.
+  Provided as is from the xenking/SmartTwitchWebOSTV repository.
 
   ## YouTube walkthrough
   https://www.youtube.com/watch?v=PI2yrGb3pnY

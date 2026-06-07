@@ -5,7 +5,7 @@ Audit date: 2026-03-01
 ## Scope
 - File audited: `webos/bridge/webosCompatBridge.js`
 - Focus: loader flicker, hot-path DOM pressure, micro-allocations, Android parity status for `window.Android` bridge surface.
-- Constraints: keep webOS adaptation in bridge/wrapper only; no upstream app source rewrites.
+- Constraints: keep platform compatibility in bridge/wrapper code; app-level playback/feed/history behavior may live in `app/specific/**`.
 
 ## Findings Summary (P0-P3)
 
@@ -22,7 +22,7 @@ Audit date: 2026-03-01
 | Priority | Risk | Root Cause | Implemented Mitigation | Expected Effect |
 | --- | --- | --- | --- | --- |
 | P0 | UI freeze from blocking sync request | Sync `mMethodUrlHeaders` path in `xhrReq` did not always apply timeout in the sync branch | Timeout assignment moved directly after `x.open(...)` for both sync and async paths (runtime-supported) | Reduced worst-case main-thread stalls on degraded networks |
-| P0 | Input lock after lifecycle stop | Stop path can enable upstream key blocker (`Main_PreventClick(true, ...)`) and remain sticky on unreliable resume | `tryLifecycleResume()` now clears stop blockers before and after `Main_CheckResume` when suspended/stopped | Lower probability of "no remote input" stuck state after resume/relaunch |
+| P0 | Input lock after lifecycle stop | Stop path can enable the app key blocker (`Main_PreventClick(true, ...)`) and remain sticky on unreliable resume | `tryLifecycleResume()` now clears stop blockers before and after `Main_CheckResume` when suspended/stopped | Lower probability of "no remote input" stuck state after resume/relaunch |
 | P1 | Chat/UI pressure from global DOM patch hot path | Embed-blocking wrapper runs through `appendChild`/`insertBefore` and previously did heavier node/tag coercion | `shouldBlockEmbedScriptNode()` now uses low-cost early exits (`nodeType`, direct tag check, lazy src read) | Lower per-append overhead under high chat throughput |
 | P1 | Timer accumulation in scene safety cleanup | Repeated `stopMainIfLeavingPlayerScene()` calls queued multiple delayed timers | Added single deduped timer id (`sceneSafetyStopTimerId`) with clear/reset behavior | Less timer churn, lower delayed callback pressure |
 | P2 | Visibility/state drift after recovery | Remaining style-read and cache state could diverge after relaunch/recovery | Preview visibility checks switched to in-memory state; recovery now resyncs visibility flags and invalidates fallback cache | More deterministic active-state behavior after relaunch |

@@ -116,16 +116,8 @@ var Settings_value = {
         defaultValue: 1
     },
     app_lang: {
-        values: [
-            'English [EN]',
-            'Español - Spanish [ES]',
-            'Français - French [FR]',
-            'Português - Portuguese [PT-BR]',
-            'Русский - Russian [RU]',
-            'Türkçe - Turkish [TR]',
-            'Українська - Ukrainian [UK-UA]'
-        ],
-        apply_values: ['en_US', 'es_Us', 'fr_FR', 'pt_BR', 'ru_RU', 'tr_TR', 'uk_UA'],
+        values: ['English [EN]', 'Русский - Russian [RU]'],
+        apply_values: ['en_US', 'ru_RU'],
         defaultValue: 1
     },
     loadAll_lang: {
@@ -1214,6 +1206,8 @@ function Settings_SetLang() {
 }
 
 function Settings_RestoreAppLang() {
+    Settings_NormalizeAppLangSelection();
+
     var lang = Main_getItemString('app_lang_string', Settings_value.app_lang.apply_values[Settings_Obj_default('app_lang')]),
         i = 0,
         array = Settings_value.app_lang.apply_values,
@@ -1233,10 +1227,31 @@ function Settings_RestoreAppLang() {
 }
 
 var Settings_AppLang = '';
+function Settings_NormalizeAppLangSelection() {
+    var key = 'app_lang';
+    var index = Settings_Obj_default(key);
+    var storedLang = Main_getItemString('app_lang_string', '');
+
+    if (Main_A_includes_B(storedLang, 'ru_') || index === 4) {
+        Settings_value[key].defaultValue = 1;
+        Main_setItem(key, 2);
+        Main_setItem('app_lang_string', 'ru_RU');
+        return;
+    }
+
+    if (index < 0 || index >= Settings_value[key].apply_values.length || (storedLang && !Main_A_includes_B(Settings_value[key].apply_values, storedLang))) {
+        Settings_value[key].defaultValue = 0;
+        Main_setItem(key, 1);
+        Main_setItem('app_lang_string', 'en_US');
+    }
+}
+
 function Settings_SetAppLang() {
-    // Language is set as (LANGUAGE)_(REGION) in (ISO 639-1)_(ISO 3166-1 alpha-2) eg.; pt_BR Brazil, en_US USA
+    // Language is set as (LANGUAGE)_(REGION) in (ISO 639-1)_(ISO 3166-1 alpha-2), e.g. en_US or ru_RU.
     // https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes
     // https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2
+
+    Settings_NormalizeAppLangSelection();
 
     var app_lang = Settings_value.app_lang.apply_values[Settings_Obj_default('app_lang')];
 
@@ -1246,12 +1261,7 @@ function Settings_SetAppLang() {
 
     en_USLang();
 
-    if (Main_A_includes_B(app_lang, 'pt_')) pt_BRLang();
-    else if (Main_A_includes_B(app_lang, 'ru_')) ru_RULang();
-    else if (Main_A_includes_B(app_lang, 'es_')) es_ESLang();
-    else if (Main_A_includes_B(app_lang, 'fr_')) fr_FRLang();
-    else if (Main_A_includes_B(app_lang, 'uk_')) uk_UALang();
-    else if (Main_A_includes_B(app_lang, 'tr_')) tr_TRLang();
+    if (Main_A_includes_B(app_lang, 'ru_')) ru_RULang();
 
     OSInterface_SetLanguage(app_lang);
 

@@ -4,7 +4,7 @@ const path = require('path');
 const root = path.resolve(__dirname, '..', '..');
 const releaseSourceDir = path.join(root, 'release');
 const bridgeSource = path.join(root, 'webos', 'bridge', 'webosCompatBridge.js');
-const defaultOutputRoot = path.join(root, '.tmp', 'hosted-release-artifact');
+const defaultOutputRoot = path.join(root, '.tmp', 'webos-release-artifact');
 const defaultChannel = 'release';
 const bridgeTag = '<script src="githubio/js/webosCompatBridge.js?sttv_webos_build=__BUILD_TOKEN__"></script>';
 const mainScriptRegex = /<script\b(?=[^>]*\bsrc\s*=\s*['"][^'"]*githubio\/js\/main\.js(?:\?[^'"]*)?['"])[^>]*>\s*<\/script>/i;
@@ -20,7 +20,7 @@ function parseArgs(argv) {
     for (let index = 0; index < argv.length; index += 1) {
         const arg = argv[index];
         if (arg === '--help' || arg === '-h') {
-            console.log('Usage: node tools/upstream/prepareHostedRelease.js [--out-dir <dir>] [--channel <name>]');
+            console.log('Usage: node tools/webos/prepareReleaseArtifact.js [--out-dir <dir>] [--channel <name>]');
             process.exit(0);
         }
 
@@ -148,7 +148,7 @@ function main() {
     ensureSourceInputs();
     const staged = buildArtifact(args.outputRoot, args.channel);
     validateArtifact(staged);
-    console.log('Prepared hosted release artifact at: ' + path.join(args.outputRoot, staged.channel));
+    console.log('Prepared webOS release artifact at: ' + path.join(args.outputRoot, staged.channel));
 }
 
 main();
