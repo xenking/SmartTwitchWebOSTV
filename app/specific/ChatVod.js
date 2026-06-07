@@ -442,6 +442,11 @@ function Chat_loadChat(id) {
 }
 
 function Chat_loadChatRequest(id) {
+    if (!PlayVod_CanLoadVodChat()) {
+        Chat_NoVod();
+        return;
+    }
+
     FullxmlHttpGet(
         PlayClip_BaseUrl,
         Play_base_chat_headers_Array,
@@ -450,7 +455,10 @@ function Chat_loadChatRequest(id) {
         id,
         0,
         'POST', //Method, null for get
-        Chat_loadChatRequestPost.replace('%v', Main_values.ChannelVod_vodId).replace('%o', Chat_offset ? parseInt(Chat_offset) : 0)
+        Chat_loadChatRequestPost.replace('%v', PlayVod_ExternalTwitchVodId()).replace(
+            '%o',
+            Chat_offset ? parseInt(PlayVod_PlayerSecondsToChatSeconds(Chat_offset)) : 0
+        )
     );
 }
 
@@ -499,6 +507,7 @@ function Chat_loadChatSuccess(responseObj, id) {
         message_text,
         badges,
         fragment,
+        playerOffsetSeconds,
         i,
         len,
         j,
@@ -545,6 +554,7 @@ function Chat_loadChatSuccess(responseObj, id) {
 
         div = '';
         mmessage = comments[i].message;
+        playerOffsetSeconds = PlayVod_ChatSecondsToPlayerSeconds(comments[i].contentOffsetSeconds);
 
         //TODO check support for this feature
         // if (
@@ -557,7 +567,7 @@ function Chat_loadChatSuccess(responseObj, id) {
         // }
 
         if (ChatLive_Show_TimeStamp) {
-            div += Play_timeS(comments[i].contentOffsetSeconds) + ' ';
+            div += Play_timeS(playerOffsetSeconds) + ' ';
         }
 
         //Add badges
@@ -644,7 +654,7 @@ function Chat_loadChatSuccess(responseObj, id) {
 
         messageObj = {
             chat_number: 0,
-            time: comments[i].contentOffsetSeconds,
+            time: playerOffsetSeconds,
             message: div,
             atstreamer: atstreamer,
             atuser: atuser,
@@ -815,7 +825,7 @@ function Chat_loadChatNextRequest(id) {
         id,
         0,
         'POST', //Method, null for get
-        Chat_loadChatRequestPost_Cursor.replace('%v', Main_values.ChannelVod_vodId).replace('%c', Chat_cursor)
+        Chat_loadChatRequestPost_Cursor.replace('%v', PlayVod_ExternalTwitchVodId()).replace('%c', Chat_cursor)
     );
 }
 

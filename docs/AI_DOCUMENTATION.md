@@ -10,9 +10,7 @@ This document provides AI-oriented architecture context and a documentation map 
   - `webos/bridge/webosCompatBridge.js`
   - `tools/upstream/prepareHostedRelease.js`
 - Tracked `release/` remains an upstream mirror; bridge injection is artifact-time, not tracked in `release/`.
-- Hosted channels:
-  - Stable: `/release/index.html` (from `master`)
-  - Dev: `/dev/index.html` (from `dev/publish-pages`)
+- Local TV installs package the staged `release/` artifact into the IPK. Local installs bump `webos/app/appinfo.json` before packaging so webOS updates the app without deleting app data.
 
 ## Runtime Behavior Notes
 - `window.Android` API compatibility is required for `app/specific/OSInterface.js`.
@@ -29,15 +27,12 @@ This document provides AI-oriented architecture context and a documentation map 
 - Release tooling:
   - `tools/release/verifyReleaseTag.js`
   - `tools/release/generateHomebrewArtifacts.js`
-  - `tools/release/prepareDevAppVariant.js`
-  - `tools/release/generatePrereleaseManifest.js`
 - Device command wrapper:
   - `tools/webos/runAresCommand.js`
+  - `tools/webos/bumpLocalAppVersion.js`
 - Automation workflows:
   - `.github/workflows/sync-upstream-release.yml`
-  - `.github/workflows/deploy-pages.yml`
   - `.github/workflows/release.yml`
-  - `.github/workflows/release-dev-prerelease.yml`
 
 ## Canonical Doc Ownership
 - Upstream sync procedure: `docs/UPSTREAM_SYNC_PLAYBOOK.md`

@@ -27,11 +27,21 @@ Outputs:
 ## Device Operations
 
 ```bash
+npm run webos:bump-local-version
+npm run webos:package
 npm run webos:install
 npm run webos:launch
+npm run webos:close
+npm run webos:restart
 npm run webos:inspect
 npm run webos:remove
 ```
+
+`npm run webos:install` is the normal local TV path. It bumps `webos/app/appinfo.json`, rebuilds the IPK, and installs it to the configured webOS device without removing app data.
+
+Use `npm run webos:install:ipk` only when you intentionally want to install the already-built IPK without changing the app version.
+
+Device commands target `STTV_WEBOS_DEVICE`, then `WEBOS_DEVICE`, then `tv-wired`.
 
 ## Release Artifacts
 - Homebrew metadata template source:
@@ -53,39 +63,6 @@ Workflow: `.github/workflows/release.yml`
   4. `npm run webos:package`
   5. `npm run release:artifacts`
   6. publish release assets (`*.ipk`, `*.manifest.json`, `*.apps-repo.yml`)
-
-## GitHub Pages Deployment
-
-Workflow: `.github/workflows/deploy-pages.yml`
-- Trigger: push to `master` or `dev/publish-pages` + manual dispatch
-- Behavior:
-  1. check out `origin/master` and stage `/release` via `node tools/upstream/prepareHostedRelease.js --out-dir .pages --channel release`
-  2. if `origin/dev/publish-pages` exists, stage `/dev` from that branch; otherwise fallback to `origin/master` for `/dev`
-  3. upload `.pages` artifact
-  4. deploy via Pages Actions
-- Channel contract:
-  - Stable hosted app remains `/release/index.html` from `master`
-  - Dev hosted app is `/dev/index.html` from `dev/publish-pages`
-
-## Dev Prerelease Automation
-
-Workflow: `.github/workflows/release-dev-prerelease.yml`
-- Trigger: manual dispatch from branch `dev/publish-pages`
-- Behavior:
-  1. discover next global prerelease tag (`dev-N`) from existing tags
-  2. run `npm ci`, `npm run hosted:prepare`, and `npm run lint`
-  3. build temporary dev app variant at `.tmp/dev-app`:
-     - app id: `<stable-id>.dev`
-     - app version: `0.0.N`
-     - default hosted target: `/dev/index.html`
-  4. package dev app IPK
-  5. generate prerelease manifest (`tools/release/generatePrereleaseManifest.js`)
-  6. publish GitHub prerelease assets (`*.ipk`, `*.manifest.json`)
-
-- Stable release workflow (`.github/workflows/release.yml`) remains unchanged:
-  - tag-driven (`v*`)
-  - stable app id/version from `webos/app/appinfo.json`
-  - stable Homebrew artifacts (`*.manifest.json`, `*.apps-repo.yml`)
 
 ## Related Docs
 - Live adroll/proxy logging: `docs/WEBOS_ADROLL_REPRO.md`

@@ -37,6 +37,7 @@ release/temp_maker/
 .package/
 index_release.html
 apk/app/src/main/assets/*
+apk/Changelog_Up.md
 release/scripts/testing.sh
 .firebase/*
 firebase-debug.log

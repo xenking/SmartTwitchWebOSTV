@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 
 const playVodSource = fs.readFileSync('app/specific/PlayVod.js', 'utf8');
+const chatVodSource = fs.readFileSync('app/specific/ChatVod.js', 'utf8');
 const screensSource = fs.readFileSync('app/specific/Screens.js', 'utf8');
 const screensObjSource = fs.readFileSync('app/specific/ScreensObj.js', 'utf8');
 const localVodSource = fs.readFileSync('app/specific/LocalVod.js', 'utf8');
@@ -68,6 +69,17 @@ assert.match(localVodSource, /function LocalVod_SaveVodHistory/, 'local VOD play
 assert.match(functionBody(localVodSource, 'LocalVod_ApplyVodInfo'), /LocalVod_SaveVodHistory/, 'local VOD info path records resume history');
 assert.match(functionBody(localVodSource, 'LocalVod_PlayVodLoadData'), /LocalVod_SaveVodHistory/, 'local VOD load path records resume history even without Twitch info lookup');
 assert.match(wtvSource, /function WTV_SaveVodHistory/, 'w.tv VOD playback has independent VOD history path');
+assert.match(functionBody(playVodSource, 'PlayVod_ExternalTwitchVodId'), /meta\.twitch_vod_id/, 'local VOD chat and previews use linked Twitch VOD id when present');
+assert.match(functionBody(playVodSource, 'PlayVod_get_vod_info'), /PlayVod_ExternalTwitchVodId/, 'local VOD info fetch can still load linked Twitch preview metadata');
+assert.doesNotMatch(functionBody(playVodSource, 'PlayVod_get_vod_info'), /LocalVod_ApplyVodInfo\(\);\s*return;/, 'local VOD info path must not block linked Twitch seek preview lookup');
+assert.match(functionBody(playVodSource, 'PlayVod_get_vod_infoResult'), /LocalVod_IsData\(Main_values_Play_data\)[\s\S]*return;/, 'linked Twitch info must not overwrite local VOD playback data');
+assert.match(functionBody(playVodSource, 'PlayVod_previews_success'), /PlayVod_ExternalTwitchVodId/, 'seek preview sprite validation uses linked Twitch VOD id');
+assert.match(functionBody(playVodSource, 'PlayVod_previews_success_end'), /PlayVod_ExternalTwitchVodId/, 'seek preview sprite base URL uses linked Twitch VOD id');
+assert.match(functionBody(playVodSource, 'PlayVod_previews_move'), /PlayVod_PlayerPositionToPreviewPosition/, 'local joined VOD seek preview positions map to Twitch timeline');
+assert.match(functionBody(chatVodSource, 'Chat_loadChatRequest'), /PlayVod_ExternalTwitchVodId/, 'VOD chat request uses linked Twitch VOD id');
+assert.match(functionBody(chatVodSource, 'Chat_loadChatRequest'), /PlayVod_PlayerSecondsToChatSeconds/, 'VOD chat request offset maps local player time to Twitch time');
+assert.match(functionBody(chatVodSource, 'Chat_loadChatSuccess'), /PlayVod_ChatSecondsToPlayerSeconds/, 'VOD chat message timestamps map Twitch time to local player time');
+assert.match(functionBody(chatVodSource, 'Chat_loadChatNextRequest'), /PlayVod_ExternalTwitchVodId/, 'VOD chat cursor request uses linked Twitch VOD id');
 assert.match(functionBody(screensSource, 'Screens_LoadPreviewStart'), /Screens_LoadExternalVodPreview/, 'local and w.tv VOD previews use their external archive playlist');
 assert.match(functionBody(screensSource, 'Screens_LoadPreviewResult'), /Screens_PatchExternalVodPreviewPlaylist/, 'external archive VOD previews patch relative playlist URLs before starting preview');
 assert.doesNotMatch(functionBody(wtvSource, 'WTV_GetMeta'), /if \(data\.source_platform === WTV_Platform\) return data;\s*if \(data\[WTV_MetaIndex\]/, 'w.tv array cells must prefer meta index over array object');
@@ -145,6 +157,10 @@ assert.match(functionBody(playVodSource, 'PlayVod_WebOSLocalDurationSeconds'), /
   assert.equal(merged[1][7], 'grp-melharucos-20260606T062240.114395769Z', 'June 6 local joined VOD stays near top');
   assert.equal(merged[1][0], 'jun6-thumb.jpg', 'local joined VOD inherits overlapping Twitch thumbnail preview');
   assert.equal(merged.some(vod => vod.id === 'twitch-jun6'), false, 'overlapping Twitch VOD is replaced by local joined VOD');
+  assert.equal(context.LocalVod_GetMeta(merged[1]).twitch_vod_id, 'twitch-jun6', 'local joined VOD keeps linked Twitch VOD id for chat/previews');
+  assert.equal(context.LocalVod_GetMeta(merged[1]).twitch_started_at, '2026-06-06T06:48:00Z', 'local joined VOD keeps linked Twitch start time');
+  assert.equal(context.LocalVod_GetMeta(merged[1]).twitch_duration_seconds, 24480, 'local joined VOD keeps linked Twitch duration for preview mapping');
+  assert.equal(context.LocalVod_GetMeta(merged[1]).twitch_timeline_delta_seconds, -1520, 'local joined VOD stores local-to-Twitch timeline delta');
 
   const activeLocal = context.LocalVod_BuildData(
     {

@@ -7,6 +7,8 @@ function mWriteFile(path, text, LogMsg) {
     });
 }
 
+fs.mkdirSync('./apk', {recursive: true});
+
 //UPdate version.json file use so the app can check for updates
 mWriteFile('./release/githubio/version/version.json', JSON.stringify(version), 'Save version.json OK');
 

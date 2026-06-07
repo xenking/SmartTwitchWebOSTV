@@ -12,7 +12,7 @@ function writeFileSync(path, text) {
 }
 
 function writeFileASync(path, text) {
-    fs.writeFile(path, text, errorFun);
+    fs.writeFileSync(path, text);
 }
 
 function readFileSync(path) {
@@ -54,7 +54,7 @@ function runNodeJsSync(path) {
 }
 
 function runNodeJsASync(path) {
-    require('child_process').fork(path);
+    require('child_process').execFileSync(process.execPath, [path], {stdio: 'inherit'});
 }
 
 function deleteFileSync(path) {
