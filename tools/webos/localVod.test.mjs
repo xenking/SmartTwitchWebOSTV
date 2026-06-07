@@ -190,6 +190,54 @@ assert.match(functionBody(playVodSource, 'PlayVod_WebOSLocalDurationSeconds'), /
     'active local Twitch VOD cards use Twitch live preview when archive has no thumbnail'
   );
 
+  const prunedLocal = context.LocalVod_BuildData(
+    {
+      id: 'grp-pruned',
+      channel: 'melharucos',
+      title: 'pruned local',
+      source_started_at: '2026-06-05T10:28:34.567965595Z',
+      duration_seconds: 46362,
+      file_url: '/archive/vods/grp-pruned/file',
+    },
+    'melharucos'
+  );
+  assert.equal(
+    context.LocalVod_GetMeta(prunedLocal).playback_url,
+    'http://192.168.0.109:18080/archive/vods/grp-pruned/file',
+    'pruned local archive VODs keep their playable file URL'
+  );
+  assert.equal(context.LocalVod_GetMeta(prunedLocal).playback_kind, 'archive_file', 'file URL local VODs are direct media, not HLS playlists');
+
+  context.Main_values_Play_data = prunedLocal;
+  context.Play_data = { data: prunedLocal };
+  context.Main_IsOn_OSInterface = true;
+  context.LocalVod_SaveVodHistory = () => {};
+  let externalPlaylistRequested = false;
+  context.PlayHLS_GetExternalPlayListAsync = () => {
+    externalPlaylistRequested = true;
+  };
+  context.PlayVod_loadDataSuccessEnd = playlist => {
+    context.__localVodStartedPlaylist = playlist;
+  };
+  assert.equal(context.LocalVod_PlayVodLoadData(), true, 'direct local file VOD starts through local VOD path');
+  assert.equal(externalPlaylistRequested, false, 'direct local file VOD must not be downloaded as an HLS playlist');
+  assert.equal(context.PlayVod_autoUrl, 'http://192.168.0.109:18080/archive/vods/grp-pruned/file', 'direct local file VOD starts from its media URL');
+  assert.equal(context.__localVodStartedPlaylist, '', 'direct local file VOD has no playlist body');
+
+  context.Main_values_Play_data = localVods[0] ? context.LocalVod_BuildData(localVods[0], 'melharucos') : activeLocal;
+  context.Play_data = { data: context.Main_values_Play_data };
+  context.LocalVod_PlayVodLoadDataSuccess({
+    status: 200,
+    url: 'http://192.168.0.109:18080/archive/vods/grp-active/playlist.m3u8',
+    responseText: '#EXTM3U\n#EXTINF:2,\nsegments/000001.ts\n#EXT-X-ENDLIST',
+  });
+  assert.equal(
+    context.PlayVod_autoUrl,
+    'http://192.168.0.109:18080/archive/vods/grp-active/playlist.m3u8',
+    'local HLS VOD starts from the real HTTP playlist URL, not a blob/data URL'
+  );
+  assert.match(context.__localVodStartedPlaylist, /http:\/\/192\.168\.0\.109:18080\/archive\/vods\/grp-active\/segments\/000001\.ts/, 'local HLS playlist body still patches relative segment URLs');
+
   const localMeta = {
     source_platform: 'local_archive',
     recording_group_id: 'grp-melharucos-20260606T062240.114395769Z',

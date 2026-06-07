@@ -22,7 +22,6 @@ var LocalVod_Platform = 'local_archive';
 var LocalVod_MetaIndex = 19;
 var LocalVod_RequestId = 0;
 var LocalVod_RequestCallbacks = {};
-var LocalVod_PlayVodBlobUrl = '';
 
 function LocalVod_IsData(data) {
     var meta = LocalVod_GetMeta(data);
@@ -135,6 +134,27 @@ function LocalVod_PlaybackUrl(vod) {
           ''
         : '';
     return LocalVod_AbsoluteUrl(url);
+}
+
+function LocalVod_PlaybackKind(vod, playbackURL) {
+    var rawUrl = vod
+        ? vod.webos_playback_url ||
+          vod.compat_playback_url ||
+          vod.h264_playback_url ||
+          vod.hls_playback_url ||
+          vod.playback_url ||
+          vod.vod_url ||
+          vod.playlist_url ||
+          vod.file_url ||
+          vod.final_url ||
+          vod.url ||
+          ''
+        : '';
+    var url = String(rawUrl || playbackURL || '').split('?')[0];
+
+    if (vod && (vod.file_url || vod.final_url) && rawUrl && rawUrl === (vod.file_url || vod.final_url)) return 'archive_file';
+    if (/\.m3u8$/i.test(url) || /\/playlist\.m3u8$/i.test(url)) return 'archive_hls';
+    return 'archive_file';
 }
 
 function LocalVod_ChatPath(meta, offsetSeconds) {
@@ -407,6 +427,7 @@ function LocalVod_BuildData(vod, channel, identity, twitchVod) {
     channel = LocalVod_NormalizeTwitchLogin((vod && (vod.source_channel || vod.channel)) || channel);
 
     var playbackURL = LocalVod_PlaybackUrl(vod);
+    var playbackKind = LocalVod_PlaybackKind(vod, playbackURL);
     var startedAt = LocalVod_StartedAt(vod);
     var durationSeconds = LocalVod_DurationSeconds(vod);
     var vodId = LocalVod_Id(vod, channel);
@@ -422,7 +443,7 @@ function LocalVod_BuildData(vod, channel, identity, twitchVod) {
         source_channel: channel,
         source_kind: 'vod',
         playback_url: playbackURL,
-        playback_kind: 'archive_hls',
+        playback_kind: playbackKind,
         vod_url: playbackURL,
         recording_group_id: vodId,
         stream_id: vodId,
@@ -466,7 +487,7 @@ function LocalVod_BuildData(vod, channel, identity, twitchVod) {
     data.source_platform = LocalVod_Platform;
     data.source_channel = channel;
     data.playback_url = playbackURL;
-    data.playback_kind = meta.playback_kind;
+    data.playback_kind = playbackKind;
     data.source_kind = meta.source_kind;
     data.vod_url = playbackURL;
     data.recording_group_id = vodId;
@@ -594,6 +615,12 @@ function LocalVod_PlayVodLoadData() {
 
     LocalVod_SaveVodHistory(Main_values_Play_data);
 
+    if (meta.playback_kind === 'archive_file') {
+        PlayVod_autoUrl = meta.playback_url;
+        PlayVod_loadDataSuccessEnd('');
+        return true;
+    }
+
     if (Main_IsOn_OSInterface) {
         PlayVod_loadDataId = new Date().getTime();
         PlayHLS_GetExternalPlayListAsync(meta.playback_url, PlayVod_loadDataId, null, PlayVod_loadDataResult);
@@ -670,23 +697,10 @@ function LocalVod_PatchPlaylistTagUris(line, baseUrl) {
     });
 }
 
-function LocalVod_CreatePlaylistObjectUrl(playlist) {
-    if (LocalVod_PlayVodBlobUrl && window.URL && window.URL.revokeObjectURL) {
-        try {
-            window.URL.revokeObjectURL(LocalVod_PlayVodBlobUrl);
-        } catch (e) {}
-    }
-
-    if (window.Blob && window.URL && window.URL.createObjectURL) {
-        LocalVod_PlayVodBlobUrl = window.URL.createObjectURL(new Blob([playlist], {type: 'application/vnd.apple.mpegurl'}));
-        return LocalVod_PlayVodBlobUrl;
-    }
-
-    return 'data:application/vnd.apple.mpegurl;charset=utf-8,' + encodeURIComponent(playlist);
-}
-
 function LocalVod_PlayVodLoadDataSuccess(responseObj) {
-    var patchedPlaylist = LocalVod_PatchPlaylist(responseObj.responseText || '', responseObj.url || (LocalVod_GetMeta(Main_values_Play_data) || {}).playback_url);
-    PlayVod_autoUrl = LocalVod_CreatePlaylistObjectUrl(patchedPlaylist) || responseObj.url || (LocalVod_GetMeta(Main_values_Play_data) || {}).playback_url;
+    var meta = LocalVod_GetMeta(Main_values_Play_data) || {};
+    var playbackUrl = responseObj.url || meta.playback_url;
+    var patchedPlaylist = LocalVod_PatchPlaylist(responseObj.responseText || '', playbackUrl);
+    PlayVod_autoUrl = playbackUrl;
     PlayVod_loadDataSuccessEnd(patchedPlaylist);
 }
