@@ -30825,7 +30825,7 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
         if (historyData && Screens_RestoreVodDataHasLocalMeta(historyData) && !Screens_RestoreVodDataHasLocalMeta(savedVodData)) return historyData;
         if (Screens_RestoreVodDataIsComplete(savedVodData)) return savedVodData;
         if (historyData) return historyData;
-        return savedVodData && savedVodData.length ? savedVodData : null;
+        return null;
     }
 
     function Screens_first_init() {
@@ -30929,8 +30929,12 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
                 restoreVodData = Screens_GetRestoreVodData(restoreVodData);
                 if (!Main_PrepareVodPlaybackData(restoreVodData)) {
                     Play_data.data[3] = tempGame;
-                    Main_values.Play_WasPlaying = 0;
-                    ScreenObj[Main_values.Main_Go].init_fun();
+                    Main_vodOffset = Main_getItemInt('Main_vodOffset', 0);
+
+                    if (!Main_vodOffset) Main_vodOffset = 1;
+
+                    Play_DurationSeconds = 0;
+                    Main_openVod();
                 } else {
                     Main_vodOffset = Main_getItemInt('Main_vodOffset', 0);
 

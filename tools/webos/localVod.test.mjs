@@ -351,6 +351,8 @@ assert.equal(packageJson.scripts['hosted:prepare'], 'npm run webos:prepare-relea
 
   assert.equal(context.Screens_GetRestoreVodData(damagedSavedVodData), fullVodData, 'restore recovers local VOD item from history when saved Play_data is damaged');
   assert.equal(context.Screens_GetRestoreVodData(fullVodData), fullVodData, 'restore keeps complete local VOD data when saved Play_data is intact');
+  context.AddUser_UserIsSet = () => false;
+  assert.equal(context.Screens_GetRestoreVodData(damagedSavedVodData), null, 'restore rejects incomplete saved VOD data when history is unavailable');
 }
 
 {
