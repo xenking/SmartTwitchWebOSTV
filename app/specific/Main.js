@@ -1742,16 +1742,11 @@ function Main_OpenClip(data, id, idsArray, handleKeyDownFunction, screen) {
     }
 }
 
-function Main_OpenVodStart(data, id, idsArray, handleKeyDownFunction, screen) {
-    if (Main_ThumbOpenIsNull(id, idsArray[0])) return;
+function Main_PrepareVodPlaybackData(data) {
+    if (!data || !data.length) return false;
 
-    Main_clearAllPlayerEvents();
-    Main_removeEventListener('keydown', handleKeyDownFunction);
-    Main_RemoveClass(idsArray[1] + id, 'opacity_zero');
-    Main_values_Play_data = data;
-
-    if (typeof WTV_OpenHistoryVod === 'function' && WTV_IsData(Main_values_Play_data) && WTV_OpenHistoryVod(Main_values_Play_data)) return;
-
+    Main_values_Play_data = Main_Slice(data);
+    Play_data.data = Main_values_Play_data;
     Main_values.Main_selectedChannelDisplayname = Main_values_Play_data[1];
     ChannelVod_createdAt = Main_values_Play_data[2];
 
@@ -1773,6 +1768,19 @@ function Main_OpenVodStart(data, id, idsArray, handleKeyDownFunction, screen) {
 
     Main_values.Main_selectedChannel_id = Main_values_Play_data[14];
     Main_values.Main_selectedChannelLogo = Main_values_Play_data[15];
+
+    return true;
+}
+
+function Main_OpenVodStart(data, id, idsArray, handleKeyDownFunction, screen) {
+    if (Main_ThumbOpenIsNull(id, idsArray[0])) return;
+
+    Main_clearAllPlayerEvents();
+    Main_removeEventListener('keydown', handleKeyDownFunction);
+    Main_RemoveClass(idsArray[1] + id, 'opacity_zero');
+    if (!Main_PrepareVodPlaybackData(data)) return;
+
+    if (typeof WTV_OpenHistoryVod === 'function' && WTV_IsData(Main_values_Play_data) && WTV_OpenHistoryVod(Main_values_Play_data)) return;
 
     Main_openVod();
 

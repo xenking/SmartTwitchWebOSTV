@@ -154,13 +154,55 @@ function Screens_assign() {
 
 //Variable initialization end
 
+function Screens_RestoreVodDataHasLocalMeta(data) {
+    return typeof LocalVod_IsData === 'function' && LocalVod_IsData(data);
+}
+
+function Screens_RestoreVodDataHasPlayableLocalMeta(data) {
+    var meta = typeof LocalVod_GetMeta === 'function' ? LocalVod_GetMeta(data) : data && data[19];
+    if (!meta || meta.source_platform !== 'local_archive') return false;
+    return !!meta.playback_url;
+}
+
+function Screens_RestoreVodDataIsComplete(data) {
+    if (Screens_RestoreVodDataHasLocalMeta(data) && !Screens_RestoreVodDataHasPlayableLocalMeta(data)) return false;
+    return !!(data && data.length && data[7] && data[11] && data[12]);
+}
+
+function Screens_GetRestoreVodHistoryData(vodId) {
+    var historyPos;
+
+    if (!vodId || typeof AddUser_UserIsSet !== 'function' || !AddUser_UserIsSet()) return null;
+
+    historyPos = Main_history_GetById('vod', vodId);
+    return historyPos && historyPos.data && historyPos.data.length ? historyPos.data : null;
+}
+
+function Screens_GetRestoreVodData(savedVodData) {
+    var savedId = savedVodData && savedVodData.length > 7 ? savedVodData[7] : '';
+    var vodId = Main_values.ChannelVod_vodId || savedId;
+    var historyData = Screens_GetRestoreVodHistoryData(vodId);
+
+    if (
+        historyData &&
+        Screens_RestoreVodDataHasPlayableLocalMeta(historyData) &&
+        (!Screens_RestoreVodDataHasLocalMeta(savedVodData) || !Screens_RestoreVodDataHasPlayableLocalMeta(savedVodData))
+    ) {
+        return historyData;
+    }
+    if (Screens_RestoreVodDataIsComplete(savedVodData)) return savedVodData;
+    if (historyData) return historyData;
+    return null;
+}
+
 function Screens_first_init() {
     var Last_obj = OSInterface_GetLastIntentObj(),
         obj,
         live_channel_call,
         game_channel_call,
         screen_channel_call,
-        tempGame;
+        tempGame,
+        restoreVodData;
 
     //
     if (Last_obj) {
@@ -209,6 +251,7 @@ function Screens_first_init() {
 
     if (Main_values.Play_WasPlaying !== 1 || StartUser) {
         tempGame = Play_data.data[3];
+        if (Main_values.Play_WasPlaying && Main_values.Play_WasPlaying !== 1) restoreVodData = Main_Slice(Play_data.data);
         Play_data = JSON.parse(JSON.stringify(Play_data_base));
     }
 
@@ -250,13 +293,26 @@ function Screens_first_init() {
                 ScreenObj[Main_values.Main_Go].init_fun();
             }
         } else {
-            Play_data.data[3] = tempGame;
-            Main_vodOffset = Main_getItemInt('Main_vodOffset', 0);
+            restoreVodData = Screens_GetRestoreVodData(restoreVodData);
+            if (!Main_PrepareVodPlaybackData(restoreVodData)) {
+                Play_data.data[3] = tempGame;
+                Main_vodOffset = Main_getItemInt('Main_vodOffset', 0);
 
-            if (!Main_vodOffset) Main_vodOffset = 1;
+                if (!Main_vodOffset) Main_vodOffset = 1;
 
-            Play_DurationSeconds = 0;
-            Main_openVod();
+                Play_DurationSeconds = 0;
+                Main_openVod();
+            } else {
+                Main_vodOffset = Main_getItemInt('Main_vodOffset', 0);
+
+                if (!Main_vodOffset) Main_vodOffset = 1;
+
+                Play_DurationSeconds = 0;
+
+                if (!(typeof WTV_OpenHistoryVod === 'function' && WTV_IsData(Main_values_Play_data) && WTV_OpenHistoryVod(Main_values_Play_data))) {
+                    Main_openVod();
+                }
+            }
         }
     } else if (Main_GoBefore !== Main_Live && Main_GoBefore !== Main_addUser && Main_GoBefore !== Main_Search && Main_GoBefore !== Main_Password) {
         if (Main_newUsercode) Main_HideLoadDialog();

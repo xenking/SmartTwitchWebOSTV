@@ -12923,7 +12923,7 @@
             twitch_vod_id: twitchVodId,
             twitch_started_at: twitchStartedAt,
             twitch_duration_seconds: twitchDurationSeconds,
-            twitch_timeline_delta_seconds: localStartMs && twitchStartMs ? Math.floor((localStartMs - twitchStartMs) / 1000) : 0
+            twitch_timeline_delta_seconds: localStartMs && twitchStartMs ? (localStartMs - twitchStartMs) / 1000 : 0
         };
         var data;
 
@@ -14970,16 +14970,11 @@
         }
     }
 
-    function Main_OpenVodStart(data, id, idsArray, handleKeyDownFunction, screen) {
-        if (Main_ThumbOpenIsNull(id, idsArray[0])) return;
+    function Main_PrepareVodPlaybackData(data) {
+        if (!data || !data.length) return false;
 
-        Main_clearAllPlayerEvents();
-        Main_removeEventListener('keydown', handleKeyDownFunction);
-        Main_RemoveClass(idsArray[1] + id, 'opacity_zero');
-        Main_values_Play_data = data;
-
-        if (typeof WTV_OpenHistoryVod === 'function' && WTV_IsData(Main_values_Play_data) && WTV_OpenHistoryVod(Main_values_Play_data)) return;
-
+        Main_values_Play_data = Main_Slice(data);
+        Play_data.data = Main_values_Play_data;
         Main_values.Main_selectedChannelDisplayname = Main_values_Play_data[1];
         ChannelVod_createdAt = Main_values_Play_data[2];
 
@@ -15001,6 +14996,19 @@
 
         Main_values.Main_selectedChannel_id = Main_values_Play_data[14];
         Main_values.Main_selectedChannelLogo = Main_values_Play_data[15];
+
+        return true;
+    }
+
+    function Main_OpenVodStart(data, id, idsArray, handleKeyDownFunction, screen) {
+        if (Main_ThumbOpenIsNull(id, idsArray[0])) return;
+
+        Main_clearAllPlayerEvents();
+        Main_removeEventListener('keydown', handleKeyDownFunction);
+        Main_RemoveClass(idsArray[1] + id, 'opacity_zero');
+        if (!Main_PrepareVodPlaybackData(data)) return;
+
+        if (typeof WTV_OpenHistoryVod === 'function' && WTV_IsData(Main_values_Play_data) && WTV_OpenHistoryVod(Main_values_Play_data)) return;
 
         Main_openVod();
 
@@ -28731,10 +28739,18 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
 
     function PlayVod_ExternalTwitchVodId() {
         var meta = PlayVod_LocalVodMeta();
+        var vodId;
         if (meta && meta.twitch_vod_id) return meta.twitch_vod_id;
         if (meta) return '';
         if (WTV_IsData(Main_values_Play_data)) return '';
-        return Main_values.ChannelVod_vodId || '';
+        vodId = Main_values.ChannelVod_vodId || '';
+        if (PlayVod_IsLocalArchiveVodId(vodId)) return '';
+        return vodId;
+    }
+
+    function PlayVod_IsLocalArchiveVodId(vodId) {
+        vodId = String(vodId || '');
+        return vodId.indexOf('grp-') === 0 || vodId.indexOf('local-vod:') === 0;
     }
 
     function PlayVod_CanLoadVodChat() {
@@ -28753,12 +28769,13 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
         var twitchStartMs;
 
         if (!meta || !meta.twitch_vod_id) return 0;
+        if (typeof LocalVod_ParseTimeMs === 'function') {
+            localStartMs = LocalVod_ParseTimeMs(meta.started_at);
+            twitchStartMs = LocalVod_ParseTimeMs(meta.twitch_started_at);
+            if (localStartMs && twitchStartMs) return (localStartMs - twitchStartMs) / 1000;
+        }
         if (typeof meta.twitch_timeline_delta_seconds === 'number') return meta.twitch_timeline_delta_seconds;
-        if (typeof LocalVod_ParseTimeMs !== 'function') return 0;
-
-        localStartMs = LocalVod_ParseTimeMs(meta.started_at);
-        twitchStartMs = LocalVod_ParseTimeMs(meta.twitch_started_at);
-        return localStartMs && twitchStartMs ? Math.floor((localStartMs - twitchStartMs) / 1000) : 0;
+        return 0;
     }
 
     function PlayVod_RawPlayerSecondsToChatSeconds(seconds) {
@@ -28924,7 +28941,8 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
             },
             playLocal: function (result) {
                 if (!PlayVod_isOn || !result || !result.url) return;
-                var targetSeconds = result.twitchOffsetSeconds > 0 ? result.twitchOffsetSeconds : result.offsetSeconds || 0;
+                var twitchOffsetSeconds = parseFloat(result.twitchOffsetSeconds);
+                var targetSeconds = isFinite(twitchOffsetSeconds) ? twitchOffsetSeconds : result.offsetSeconds || 0;
                 Play_showBufferDialog();
                 PlayVod_autoUrl = result.url;
                 PlayVod_playlist = result.playlist || '';
@@ -28936,8 +28954,9 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
             },
             playTwitch: function (result) {
                 if (!PlayVod_isOn) return;
-                if (result && result.offsetSeconds > 0) {
-                    Main_vodOffset = result.offsetSeconds;
+                var offsetSeconds = result ? parseFloat(result.offsetSeconds) : NaN;
+                if (isFinite(offsetSeconds) && (offsetSeconds > 0 || (result && result.suppressLocal))) {
+                    Main_vodOffset = offsetSeconds > 0 ? offsetSeconds : 0.001;
                     PlayVod_ResumeTime = Main_vodOffset;
                     if (Main_values.ChannelVod_vodId) PlayVod_SaveVodIds(Main_vodOffset);
                 }
@@ -30781,13 +30800,55 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
 
     //Variable initialization end
 
+    function Screens_RestoreVodDataHasLocalMeta(data) {
+        return typeof LocalVod_IsData === 'function' && LocalVod_IsData(data);
+    }
+
+    function Screens_RestoreVodDataHasPlayableLocalMeta(data) {
+        var meta = typeof LocalVod_GetMeta === 'function' ? LocalVod_GetMeta(data) : data && data[19];
+        if (!meta || meta.source_platform !== 'local_archive') return false;
+        return !!meta.playback_url;
+    }
+
+    function Screens_RestoreVodDataIsComplete(data) {
+        if (Screens_RestoreVodDataHasLocalMeta(data) && !Screens_RestoreVodDataHasPlayableLocalMeta(data)) return false;
+        return !!(data && data.length && data[7] && data[11] && data[12]);
+    }
+
+    function Screens_GetRestoreVodHistoryData(vodId) {
+        var historyPos;
+
+        if (!vodId || typeof AddUser_UserIsSet !== 'function' || !AddUser_UserIsSet()) return null;
+
+        historyPos = Main_history_GetById('vod', vodId);
+        return historyPos && historyPos.data && historyPos.data.length ? historyPos.data : null;
+    }
+
+    function Screens_GetRestoreVodData(savedVodData) {
+        var savedId = savedVodData && savedVodData.length > 7 ? savedVodData[7] : '';
+        var vodId = Main_values.ChannelVod_vodId || savedId;
+        var historyData = Screens_GetRestoreVodHistoryData(vodId);
+
+        if (
+            historyData &&
+            Screens_RestoreVodDataHasPlayableLocalMeta(historyData) &&
+            (!Screens_RestoreVodDataHasLocalMeta(savedVodData) || !Screens_RestoreVodDataHasPlayableLocalMeta(savedVodData))
+        ) {
+            return historyData;
+        }
+        if (Screens_RestoreVodDataIsComplete(savedVodData)) return savedVodData;
+        if (historyData) return historyData;
+        return null;
+    }
+
     function Screens_first_init() {
         var Last_obj = OSInterface_GetLastIntentObj(),
             obj,
             live_channel_call,
             game_channel_call,
             screen_channel_call,
-            tempGame;
+            tempGame,
+            restoreVodData;
 
         //
         if (Last_obj) {
@@ -30836,6 +30897,7 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
 
         if (Main_values.Play_WasPlaying !== 1 || StartUser) {
             tempGame = Play_data.data[3];
+            if (Main_values.Play_WasPlaying && Main_values.Play_WasPlaying !== 1) restoreVodData = Main_Slice(Play_data.data);
             Play_data = JSON.parse(JSON.stringify(Play_data_base));
         }
 
@@ -30877,13 +30939,28 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
                     ScreenObj[Main_values.Main_Go].init_fun();
                 }
             } else {
-                Play_data.data[3] = tempGame;
-                Main_vodOffset = Main_getItemInt('Main_vodOffset', 0);
+                restoreVodData = Screens_GetRestoreVodData(restoreVodData);
+                if (!Main_PrepareVodPlaybackData(restoreVodData)) {
+                    Play_data.data[3] = tempGame;
+                    Main_vodOffset = Main_getItemInt('Main_vodOffset', 0);
 
-                if (!Main_vodOffset) Main_vodOffset = 1;
+                    if (!Main_vodOffset) Main_vodOffset = 1;
 
-                Play_DurationSeconds = 0;
-                Main_openVod();
+                    Play_DurationSeconds = 0;
+                    Main_openVod();
+                } else {
+                    Main_vodOffset = Main_getItemInt('Main_vodOffset', 0);
+
+                    if (!Main_vodOffset) Main_vodOffset = 1;
+
+                    Play_DurationSeconds = 0;
+
+                    if (
+                        !(typeof WTV_OpenHistoryVod === 'function' && WTV_IsData(Main_values_Play_data) && WTV_OpenHistoryVod(Main_values_Play_data))
+                    ) {
+                        Main_openVod();
+                    }
+                }
             }
         } else if (
             Main_GoBefore !== Main_Live &&
@@ -39568,6 +39645,10 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
         }
     };
 
+    var Settings_LocalArchiveDefaultEndpoint = 'http://192.168.0.109:18080';
+    var Settings_LocalArchiveEndpointKey = 'sttv_webos_local_archive_endpoint';
+    var Settings_LocalArchiveEndpointLegacyKey = 'localArchiveEndpoint';
+
     function Settings_GenerateClock() {
         var clock = [],
             time = 43200,
@@ -40501,11 +40582,29 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
     }
 
     function Settings_GetLocalArchiveEndpoint() {
+        var value = null;
+        var endpoint = '';
+
         try {
-            var value = localStorage.getItem('sttv_webos_local_archive_endpoint');
-            if (value !== null) return Settings_NormalizeEndpointUrl(value);
+            value = localStorage.getItem(Settings_LocalArchiveEndpointKey);
+            if (value !== null) {
+                endpoint = Settings_NormalizeEndpointUrl(value);
+                if (Settings_IsDeprecatedLocalArchiveEndpoint(endpoint)) return Settings_MigrateLocalArchiveEndpoint();
+                return endpoint;
+            }
         } catch (e) {}
-        return Settings_NormalizeEndpointUrl('http://192.168.0.109:18080');
+
+        try {
+            value = localStorage.getItem(Settings_LocalArchiveEndpointLegacyKey);
+            if (value !== null) {
+                endpoint = Settings_NormalizeEndpointUrl(value);
+                if (Settings_IsDeprecatedLocalArchiveEndpoint(endpoint)) return Settings_MigrateLocalArchiveEndpoint();
+                if (endpoint) Settings_StoreLocalArchiveEndpoint(endpoint);
+                return endpoint;
+            }
+        } catch (e2) {}
+
+        return Settings_LocalArchiveDefaultEndpoint;
     }
 
     function Settings_NormalizeEndpointUrl(value) {
@@ -40517,6 +40616,20 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
         return value;
     }
 
+    function Settings_IsDeprecatedLocalArchiveEndpoint(endpoint) {
+        return /^https?:\/\/192\.168\.0\.20(?::18080)?$/i.test(endpoint || '');
+    }
+
+    function Settings_StoreLocalArchiveEndpoint(endpoint) {
+        Main_setItem(Settings_LocalArchiveEndpointKey, endpoint);
+        Main_setItem(Settings_LocalArchiveEndpointLegacyKey, endpoint);
+    }
+
+    function Settings_MigrateLocalArchiveEndpoint() {
+        Settings_StoreLocalArchiveEndpoint(Settings_LocalArchiveDefaultEndpoint);
+        return Settings_LocalArchiveDefaultEndpoint;
+    }
+
     function Settings_LocalArchiveEndpointPrompt() {
         var currentValue = Settings_GetLocalArchiveEndpoint();
         Settings_TextInputShow(
@@ -40525,8 +40638,7 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
             'http://192.168.1.50:8080',
             function (nextValue) {
                 nextValue = Settings_NormalizeEndpointUrl(nextValue);
-                Main_setItem('sttv_webos_local_archive_endpoint', nextValue);
-                Main_setItem('localArchiveEndpoint', nextValue);
+                Settings_StoreLocalArchiveEndpoint(nextValue);
                 if (window.STTVWebOSLocalVod && window.STTVWebOSLocalVod.updateEndpoint) window.STTVWebOSLocalVod.updateEndpoint();
                 OSInterface_showToast(nextValue ? 'Local VOD archive endpoint saved' : 'Local VOD archive disabled');
                 Settings_DialogShowLocalArchive(false);
