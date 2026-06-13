@@ -158,7 +158,14 @@ function Screens_RestoreVodDataHasLocalMeta(data) {
     return typeof LocalVod_IsData === 'function' && LocalVod_IsData(data);
 }
 
+function Screens_RestoreVodDataHasPlayableLocalMeta(data) {
+    var meta = typeof LocalVod_GetMeta === 'function' ? LocalVod_GetMeta(data) : data && data[19];
+    if (!meta || meta.source_platform !== 'local_archive') return false;
+    return !!meta.playback_url;
+}
+
 function Screens_RestoreVodDataIsComplete(data) {
+    if (Screens_RestoreVodDataHasLocalMeta(data) && !Screens_RestoreVodDataHasPlayableLocalMeta(data)) return false;
     return !!(data && data.length && data[7] && data[11] && data[12]);
 }
 
@@ -176,7 +183,13 @@ function Screens_GetRestoreVodData(savedVodData) {
     var vodId = Main_values.ChannelVod_vodId || savedId;
     var historyData = Screens_GetRestoreVodHistoryData(vodId);
 
-    if (historyData && Screens_RestoreVodDataHasLocalMeta(historyData) && !Screens_RestoreVodDataHasLocalMeta(savedVodData)) return historyData;
+    if (
+        historyData &&
+        Screens_RestoreVodDataHasPlayableLocalMeta(historyData) &&
+        (!Screens_RestoreVodDataHasLocalMeta(savedVodData) || !Screens_RestoreVodDataHasPlayableLocalMeta(savedVodData))
+    ) {
+        return historyData;
+    }
     if (Screens_RestoreVodDataIsComplete(savedVodData)) return savedVodData;
     if (historyData) return historyData;
     return null;

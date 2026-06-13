@@ -257,6 +257,7 @@ assert.equal(packageJson.scripts['hosted:prepare'], 'npm run webos:prepare-relea
   const localMeta = {
     source_platform: 'local_archive',
     recording_group_id: 'grp-elwycco-20260611T201308.651145575Z',
+    playback_url: 'http://192.168.0.109:18080/archive/vods/grp-elwycco-20260611T201308.651145575Z/file',
   };
   const fullVodData = [
     'thumb.jpg',
@@ -324,10 +325,16 @@ assert.equal(packageJson.scripts['hosted:prepare'], 'npm run webos:prepare-relea
     {
       source_platform: 'local_archive',
       twitch_vod_id: '2794330615',
+      playback_url: 'http://192.168.0.109:18080/archive/vods/grp-elwycco-20260611T201308.651145575Z/file',
     },
   ];
   const damagedSavedVodData = [];
   damagedSavedVodData[3] = 'Just Chatting';
+  const damagedLocalSavedVodData = fullVodData.slice();
+  damagedLocalSavedVodData[19] = {
+    source_platform: 'local_archive',
+    twitch_vod_id: '2794330615',
+  };
   const context = {
     Main_values: { ChannelVod_vodId: 'grp-elwycco-20260611T201308.651145575Z' },
     AddUser_UserIsSet: () => true,
@@ -337,10 +344,12 @@ assert.equal(packageJson.scripts['hosted:prepare'], 'npm run webos:prepare-relea
       return { data: fullVodData };
     },
     LocalVod_IsData: data => !!(data && data[19] && data[19].source_platform === 'local_archive'),
+    LocalVod_GetMeta: data => data && data[19],
   };
   vm.createContext(context);
   const screensRestoreParams = {
     Screens_RestoreVodDataHasLocalMeta: 'data',
+    Screens_RestoreVodDataHasPlayableLocalMeta: 'data',
     Screens_RestoreVodDataIsComplete: 'data',
     Screens_GetRestoreVodHistoryData: 'vodId',
     Screens_GetRestoreVodData: 'savedVodData',
@@ -350,6 +359,7 @@ assert.equal(packageJson.scripts['hosted:prepare'], 'npm run webos:prepare-relea
   }
 
   assert.equal(context.Screens_GetRestoreVodData(damagedSavedVodData), fullVodData, 'restore recovers local VOD item from history when saved Play_data is damaged');
+  assert.equal(context.Screens_GetRestoreVodData(damagedLocalSavedVodData), fullVodData, 'restore prefers history when saved local metadata is incomplete');
   assert.equal(context.Screens_GetRestoreVodData(fullVodData), fullVodData, 'restore keeps complete local VOD data when saved Play_data is intact');
   context.AddUser_UserIsSet = () => false;
   assert.equal(context.Screens_GetRestoreVodData(damagedSavedVodData), null, 'restore rejects incomplete saved VOD data when history is unavailable');
@@ -735,6 +745,40 @@ assert.equal(packageJson.scripts['hosted:prepare'], 'npm run webos:prepare-relea
 }
 
 {
+  const storage = new Map();
+  const context = {
+    localStorage: {
+      getItem: key => (storage.has(key) ? storage.get(key) : null),
+      setItem: (key, value) => storage.set(key, String(value)),
+    },
+    Main_setItem: (key, value) => storage.set(key, String(value)),
+  };
+  vm.createContext(context);
+  vm.runInContext(
+    `
+    var Settings_LocalArchiveDefaultEndpoint = 'http://192.168.0.109:18080';
+    var Settings_LocalArchiveEndpointKey = 'sttv_webos_local_archive_endpoint';
+    var Settings_LocalArchiveEndpointLegacyKey = 'localArchiveEndpoint';
+    function Settings_GetLocalArchiveEndpoint() {${functionBody(settingsSource, 'Settings_GetLocalArchiveEndpoint')}}
+    function Settings_NormalizeEndpointUrl(value) {${functionBody(settingsSource, 'Settings_NormalizeEndpointUrl')}}
+    function Settings_IsDeprecatedLocalArchiveEndpoint(endpoint) {${functionBody(settingsSource, 'Settings_IsDeprecatedLocalArchiveEndpoint')}}
+    function Settings_StoreLocalArchiveEndpoint(endpoint) {${functionBody(settingsSource, 'Settings_StoreLocalArchiveEndpoint')}}
+    function Settings_MigrateLocalArchiveEndpoint() {${functionBody(settingsSource, 'Settings_MigrateLocalArchiveEndpoint')}}
+  `,
+    context
+  );
+
+  assert.equal(context.Settings_GetLocalArchiveEndpoint(), 'http://192.168.0.109:18080', 'missing local archive endpoint still reads the HTPC default');
+  assert.equal(storage.has('sttv_webos_local_archive_endpoint'), false, 'missing local archive endpoint does not mark archive as configured');
+  assert.equal(storage.has('localArchiveEndpoint'), false, 'missing local archive endpoint does not persist legacy key');
+
+  storage.set('localArchiveEndpoint', 'http://192.168.0.20:18080');
+  assert.equal(context.Settings_GetLocalArchiveEndpoint(), 'http://192.168.0.109:18080', 'deprecated local archive endpoint migrates to HTPC default');
+  assert.equal(storage.get('sttv_webos_local_archive_endpoint'), 'http://192.168.0.109:18080', 'deprecated migration stores primary endpoint key');
+  assert.equal(storage.get('localArchiveEndpoint'), 'http://192.168.0.109:18080', 'deprecated migration stores legacy endpoint key');
+}
+
+{
   const { context, storage } = createBridgeContext({ matched: false, reason: 'unused' }, [
     ['sttv_webos_local_archive_endpoint', 'http://192.168.0.20:18080'],
   ]);
@@ -745,10 +789,11 @@ assert.equal(packageJson.scripts['hosted:prepare'], 'npm run webos:prepare-relea
 }
 
 {
-  const { storage } = createBridgeContext({ matched: false, reason: 'unused' }, []);
+  const { context, storage } = createBridgeContext({ matched: false, reason: 'unused' }, []);
 
-  assert.equal(storage.get('sttv_webos_local_archive_endpoint'), 'http://192.168.0.109:18080', 'missing endpoint persists HTPC default');
-  assert.equal(storage.get('localArchiveEndpoint'), 'http://192.168.0.109:18080', 'missing endpoint persists legacy key default');
+  assert.equal(context.STTVWebOSLocalVod.debugSnapshot().endpoint, 'http://192.168.0.109:18080', 'missing endpoint reads the HTPC default');
+  assert.equal(storage.has('sttv_webos_local_archive_endpoint'), false, 'missing endpoint does not mark local archive as configured');
+  assert.equal(storage.has('localArchiveEndpoint'), false, 'missing endpoint does not persist legacy key default');
 }
 
 {
@@ -771,6 +816,9 @@ assert.equal(packageJson.scripts['hosted:prepare'], 'npm run webos:prepare-relea
     PlayVod_loadDataSuccessEnd(playlist) {
       context.__startedPlaylist = playlist;
     },
+    PlayVod_loadDataTwitch() {
+      context.__loadedTwitch = true;
+    },
   };
   installPlayVodLocalActions(context);
 
@@ -785,6 +833,19 @@ assert.equal(packageJson.scripts['hosted:prepare'], 'npm run webos:prepare-relea
   assert.equal(context.Main_vodOffset, 0.001, 'zero Twitch offset remains near start instead of falling back to local offset');
   assert.equal(context.PlayVod_ResumeTime, 0.001, 'zero Twitch offset resume remains near start');
   assert.equal(context.__savedVodOffset, 0.001, 'zero Twitch offset history save remains near start');
+
+  context.Main_vodOffset = 777;
+  context.PlayVod_ResumeTime = 777;
+  delete context.__savedVodOffset;
+  context.__loadedTwitch = false;
+  context.PlayVod_WebOSLocalActions().playTwitch({ offsetSeconds: 0, suppressLocal: false });
+  assert.equal(context.Main_vodOffset, 777, 'local archive miss at zero keeps existing Twitch resume offset');
+  assert.equal(context.PlayVod_ResumeTime, 777, 'local archive miss at zero keeps existing resume time');
+  assert.equal(context.__savedVodOffset, undefined, 'local archive miss at zero does not save a near-start offset');
+  assert.equal(context.__loadedTwitch, true, 'local archive miss still loads the Twitch VOD');
+
+  context.PlayVod_WebOSLocalActions().playTwitch({ offsetSeconds: 0, suppressLocal: true });
+  assert.equal(context.Main_vodOffset, 0.001, 'explicit local-to-Twitch zero switch still seeks near start');
 }
 
 {

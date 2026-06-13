@@ -1777,7 +1777,7 @@ function Settings_GetLocalArchiveEndpoint() {
         }
     } catch (e2) {}
 
-    return Settings_MigrateLocalArchiveEndpoint();
+    return Settings_LocalArchiveDefaultEndpoint;
 }
 
 function Settings_NormalizeEndpointUrl(value) {

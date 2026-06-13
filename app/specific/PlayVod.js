@@ -551,7 +551,7 @@ function PlayVod_WebOSLocalActions() {
         playTwitch: function (result) {
             if (!PlayVod_isOn) return;
             var offsetSeconds = result ? parseFloat(result.offsetSeconds) : NaN;
-            if (isFinite(offsetSeconds)) {
+            if (isFinite(offsetSeconds) && (offsetSeconds > 0 || (result && result.suppressLocal))) {
                 Main_vodOffset = offsetSeconds > 0 ? offsetSeconds : 0.001;
                 PlayVod_ResumeTime = Main_vodOffset;
                 if (Main_values.ChannelVod_vodId) PlayVod_SaveVodIds(Main_vodOffset);

@@ -498,7 +498,7 @@
             if (endpoint) setStoredLocalArchiveEndpoint(endpoint);
             return endpoint;
         }
-        return migrateLocalArchiveEndpoint('missing');
+        return normalizeLocalArchiveEndpoint(LOCAL_ARCHIVE_ENDPOINT_DEFAULT);
     }
     function localArchiveEndpoint() {
         localVodOverride.endpoint = getLocalArchiveEndpoint();

@@ -28955,7 +28955,7 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
             playTwitch: function (result) {
                 if (!PlayVod_isOn) return;
                 var offsetSeconds = result ? parseFloat(result.offsetSeconds) : NaN;
-                if (isFinite(offsetSeconds)) {
+                if (isFinite(offsetSeconds) && (offsetSeconds > 0 || (result && result.suppressLocal))) {
                     Main_vodOffset = offsetSeconds > 0 ? offsetSeconds : 0.001;
                     PlayVod_ResumeTime = Main_vodOffset;
                     if (Main_values.ChannelVod_vodId) PlayVod_SaveVodIds(Main_vodOffset);
@@ -30804,7 +30804,14 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
         return typeof LocalVod_IsData === 'function' && LocalVod_IsData(data);
     }
 
+    function Screens_RestoreVodDataHasPlayableLocalMeta(data) {
+        var meta = typeof LocalVod_GetMeta === 'function' ? LocalVod_GetMeta(data) : data && data[19];
+        if (!meta || meta.source_platform !== 'local_archive') return false;
+        return !!meta.playback_url;
+    }
+
     function Screens_RestoreVodDataIsComplete(data) {
+        if (Screens_RestoreVodDataHasLocalMeta(data) && !Screens_RestoreVodDataHasPlayableLocalMeta(data)) return false;
         return !!(data && data.length && data[7] && data[11] && data[12]);
     }
 
@@ -30822,7 +30829,13 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
         var vodId = Main_values.ChannelVod_vodId || savedId;
         var historyData = Screens_GetRestoreVodHistoryData(vodId);
 
-        if (historyData && Screens_RestoreVodDataHasLocalMeta(historyData) && !Screens_RestoreVodDataHasLocalMeta(savedVodData)) return historyData;
+        if (
+            historyData &&
+            Screens_RestoreVodDataHasPlayableLocalMeta(historyData) &&
+            (!Screens_RestoreVodDataHasLocalMeta(savedVodData) || !Screens_RestoreVodDataHasPlayableLocalMeta(savedVodData))
+        ) {
+            return historyData;
+        }
         if (Screens_RestoreVodDataIsComplete(savedVodData)) return savedVodData;
         if (historyData) return historyData;
         return null;
@@ -40591,7 +40604,7 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
             }
         } catch (e2) {}
 
-        return Settings_MigrateLocalArchiveEndpoint();
+        return Settings_LocalArchiveDefaultEndpoint;
     }
 
     function Settings_NormalizeEndpointUrl(value) {
