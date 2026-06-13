@@ -336,10 +336,18 @@ function PlayVod_LocalVodMeta() {
 
 function PlayVod_ExternalTwitchVodId() {
     var meta = PlayVod_LocalVodMeta();
+    var vodId;
     if (meta && meta.twitch_vod_id) return meta.twitch_vod_id;
     if (meta) return '';
     if (WTV_IsData(Main_values_Play_data)) return '';
-    return Main_values.ChannelVod_vodId || '';
+    vodId = Main_values.ChannelVod_vodId || '';
+    if (PlayVod_IsLocalArchiveVodId(vodId)) return '';
+    return vodId;
+}
+
+function PlayVod_IsLocalArchiveVodId(vodId) {
+    vodId = String(vodId || '');
+    return vodId.indexOf('grp-') === 0 || vodId.indexOf('local-vod:') === 0;
 }
 
 function PlayVod_CanLoadVodChat() {
@@ -358,12 +366,13 @@ function PlayVod_LocalVodTimelineDeltaSeconds() {
     var twitchStartMs;
 
     if (!meta || !meta.twitch_vod_id) return 0;
+    if (typeof LocalVod_ParseTimeMs === 'function') {
+        localStartMs = LocalVod_ParseTimeMs(meta.started_at);
+        twitchStartMs = LocalVod_ParseTimeMs(meta.twitch_started_at);
+        if (localStartMs && twitchStartMs) return (localStartMs - twitchStartMs) / 1000;
+    }
     if (typeof meta.twitch_timeline_delta_seconds === 'number') return meta.twitch_timeline_delta_seconds;
-    if (typeof LocalVod_ParseTimeMs !== 'function') return 0;
-
-    localStartMs = LocalVod_ParseTimeMs(meta.started_at);
-    twitchStartMs = LocalVod_ParseTimeMs(meta.twitch_started_at);
-    return localStartMs && twitchStartMs ? Math.floor((localStartMs - twitchStartMs) / 1000) : 0;
+    return 0;
 }
 
 function PlayVod_RawPlayerSecondsToChatSeconds(seconds) {
@@ -528,7 +537,8 @@ function PlayVod_WebOSLocalActions() {
         },
         playLocal: function (result) {
             if (!PlayVod_isOn || !result || !result.url) return;
-            var targetSeconds = result.twitchOffsetSeconds > 0 ? result.twitchOffsetSeconds : result.offsetSeconds || 0;
+            var twitchOffsetSeconds = parseFloat(result.twitchOffsetSeconds);
+            var targetSeconds = isFinite(twitchOffsetSeconds) ? twitchOffsetSeconds : result.offsetSeconds || 0;
             Play_showBufferDialog();
             PlayVod_autoUrl = result.url;
             PlayVod_playlist = result.playlist || '';
@@ -540,8 +550,9 @@ function PlayVod_WebOSLocalActions() {
         },
         playTwitch: function (result) {
             if (!PlayVod_isOn) return;
-            if (result && result.offsetSeconds > 0) {
-                Main_vodOffset = result.offsetSeconds;
+            var offsetSeconds = result ? parseFloat(result.offsetSeconds) : NaN;
+            if (isFinite(offsetSeconds)) {
+                Main_vodOffset = offsetSeconds > 0 ? offsetSeconds : 0.001;
                 PlayVod_ResumeTime = Main_vodOffset;
                 if (Main_values.ChannelVod_vodId) PlayVod_SaveVodIds(Main_vodOffset);
             }

@@ -488,7 +488,7 @@ function LocalVod_BuildData(vod, channel, identity, twitchVod) {
         twitch_vod_id: twitchVodId,
         twitch_started_at: twitchStartedAt,
         twitch_duration_seconds: twitchDurationSeconds,
-        twitch_timeline_delta_seconds: localStartMs && twitchStartMs ? Math.floor((localStartMs - twitchStartMs) / 1000) : 0
+        twitch_timeline_delta_seconds: localStartMs && twitchStartMs ? (localStartMs - twitchStartMs) / 1000 : 0
     };
     var data;
 

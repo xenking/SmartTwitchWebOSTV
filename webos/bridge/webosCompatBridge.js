@@ -118,6 +118,7 @@
     var LOCAL_ARCHIVE_ENDPOINT_KEY = STORAGE_PREFIX + 'local_archive_endpoint';
     var LOCAL_ARCHIVE_ENDPOINT_LEGACY_KEY = 'localArchiveEndpoint';
     var LOCAL_ARCHIVE_ENDPOINT_DEFAULT = 'http://192.168.0.109:18080';
+    var LOCAL_ARCHIVE_ENDPOINT_DEPRECATED_RE = /^https?:\/\/192\.168\.0\.20(?::18080)?$/i;
     var LOCAL_VOD_MATCH_TOLERANCE_SECONDS = 600;
     var LOCAL_VOD_REQUEST_TIMEOUT_MS = 5500;
     var LOCAL_VOD_GROWING_DURATION_MARGIN_MS = 2000;
@@ -463,12 +464,41 @@
         if (!/^https?:\/\//i.test(endpoint)) endpoint = 'http://' + endpoint;
         return endpoint;
     }
+    function isDeprecatedLocalArchiveEndpoint(endpoint) {
+        return LOCAL_ARCHIVE_ENDPOINT_DEPRECATED_RE.test(endpoint || '');
+    }
+    function setStoredLocalArchiveEndpoint(endpoint) {
+        try {
+            if (!w.localStorage) return;
+            w.localStorage.setItem(LOCAL_ARCHIVE_ENDPOINT_KEY, endpoint || '');
+            w.localStorage.setItem(LOCAL_ARCHIVE_ENDPOINT_LEGACY_KEY, endpoint || '');
+        } catch (e) {}
+    }
+    function migrateLocalArchiveEndpoint(reason) {
+        var endpoint = normalizeLocalArchiveEndpoint(LOCAL_ARCHIVE_ENDPOINT_DEFAULT);
+        setStoredLocalArchiveEndpoint(endpoint);
+        bridgeDebugLog('local_archive_endpoint_migrated', {
+            reason: reason || 'default',
+            endpoint: endpoint
+        });
+        return endpoint;
+    }
     function getLocalArchiveEndpoint() {
         var value = getLocalStorageValueRaw(LOCAL_ARCHIVE_ENDPOINT_KEY);
-        if (value !== null) return normalizeLocalArchiveEndpoint(value);
+        var endpoint = '';
+        if (value !== null) {
+            endpoint = normalizeLocalArchiveEndpoint(value);
+            if (isDeprecatedLocalArchiveEndpoint(endpoint)) return migrateLocalArchiveEndpoint('deprecated_primary');
+            return endpoint;
+        }
         value = getLocalStorageValueRaw(LOCAL_ARCHIVE_ENDPOINT_LEGACY_KEY);
-        if (value !== null) return normalizeLocalArchiveEndpoint(value);
-        return normalizeLocalArchiveEndpoint(LOCAL_ARCHIVE_ENDPOINT_DEFAULT);
+        if (value !== null) {
+            endpoint = normalizeLocalArchiveEndpoint(value);
+            if (isDeprecatedLocalArchiveEndpoint(endpoint)) return migrateLocalArchiveEndpoint('deprecated_legacy');
+            if (endpoint) setStoredLocalArchiveEndpoint(endpoint);
+            return endpoint;
+        }
+        return migrateLocalArchiveEndpoint('missing');
     }
     function localArchiveEndpoint() {
         localVodOverride.endpoint = getLocalArchiveEndpoint();
@@ -934,6 +964,54 @@
         localVodOverride.suppressMatch = false;
         localVodEmitState(null);
     }
+    function timeRangesToArray(ranges) {
+        var out = [];
+        var i;
+        if (!ranges || typeof ranges.length !== 'number') return out;
+        for (i = 0; i < ranges.length; i++) {
+            try {
+                out.push([ranges.start(i), ranges.end(i)]);
+            } catch (e) {}
+        }
+        return out;
+    }
+    function videoDebugSnapshot(video) {
+        if (!video) return null;
+        return {
+            src: video.currentSrc || video.src || '',
+            currentTime: video.currentTime || 0,
+            duration: isFinite(video.duration) ? video.duration : 0,
+            readyState: video.readyState || 0,
+            networkState: video.networkState || 0,
+            paused: !!video.paused,
+            seeking: !!video.seeking,
+            buffered: timeRangesToArray(video.buffered),
+            seekable: timeRangesToArray(video.seekable)
+        };
+    }
+    function localVodDebugSnapshot() {
+        return {
+            endpoint: localArchiveEndpoint(),
+            storage: {
+                primary: getLocalStorageValueRaw(LOCAL_ARCHIVE_ENDPOINT_KEY),
+                legacy: getLocalStorageValueRaw(LOCAL_ARCHIVE_ENDPOINT_LEGACY_KEY)
+            },
+            state: localVodControlState(),
+            main: videoDebugSnapshot(mv),
+            source: {
+                type: ms.type,
+                uri: ms.uri || '',
+                rawUri: ms.rawUri || '',
+                hasPlaylist: !!ms.playlist,
+                hasPlaylistObjectUrl: !!ms.playlistObjectUrl,
+                qualities: ms.q ? ms.q.length : 0,
+                resume: ms.resume || 0
+            },
+            match: localVodOverride.match || null,
+            twitchMeta: localVodOverride.twitchMeta || null,
+            lastError: localVodOverride.lastError || ''
+        };
+    }
     function initLocalVodOverrideIntegration() {
         localArchiveEndpoint();
         w.STTVWebOSLocalVod = {
@@ -941,6 +1019,7 @@
             switchSource: localVodSwitchWithActions,
             shutdown: localVodShutdown,
             getState: localVodControlState,
+            debugSnapshot: localVodDebugSnapshot,
             updateEndpoint: function () {
                 localArchiveEndpoint();
                 localVodEmitState(localVodOverride.actions);
@@ -1900,6 +1979,27 @@
         }
         return out;
     }
+    function isMediaPlaylistBody(playlist) {
+        if (!playlist || typeof playlist !== 'string') return false;
+        var body = playlist.toUpperCase();
+        return body.indexOf('#EXTM3U') !== -1 && body.indexOf('#EXTINF:') !== -1 && body.indexOf('#EXT-X-STREAM-INF:') === -1;
+    }
+    function createMediaPlaylistObjectUrl(playlist) {
+        if (!isMediaPlaylistBody(playlist)) return '';
+        if (!w.Blob || !w.URL || typeof w.URL.createObjectURL !== 'function') return '';
+        try {
+            return w.URL.createObjectURL(new w.Blob([playlist], {type: 'application/vnd.apple.mpegurl'}));
+        } catch (e) {
+            return '';
+        }
+    }
+    function revokeMainPlaylistObjectUrl() {
+        if (!ms.playlistObjectUrl || !w.URL || typeof w.URL.revokeObjectURL !== 'function') return;
+        try {
+            w.URL.revokeObjectURL(ms.playlistObjectUrl);
+        } catch (e) {}
+        ms.playlistObjectUrl = '';
+    }
     // =========================================================================
     // Video Element Creation + Event Handlers (Core Media Pipeline)
     // =========================================================================
@@ -2573,6 +2673,7 @@
     // Android: ExoPlayer TrackSelector handles quality. webOS: manual URL selection.
     function sourceFromQuality(state, maxRes) {
         if (!state) return '';
+        if (state.playlistObjectUrl) return state.playlistObjectUrl;
         var selected = null;
         if (state.qp >= 0 && state.q[state.qp] && isCodecSetSupported(state.q[state.qp].codecs)) {
             selected = state.q[state.qp];
@@ -2988,10 +3089,12 @@
         else applyPreviewPiPLayout();
     }
     function resetMainState() {
+        revokeMainPlaylistObjectUrl();
         ms.type = 1;
         ms.uri = '';
         ms.rawUri = '';
         ms.playlist = '';
+        ms.playlistObjectUrl = '';
         ms.q = [];
         ms.qp = -1;
         ms.activeCodecs = '';
@@ -3026,6 +3129,7 @@
         clear(pv);
         resetPreviewState();
         resetVideoStatusCounters();
+        revokeMainPlaylistObjectUrl();
         clearMainStallTimer();
         mainErrorCount = 0;
         mainPauseRequested = false;
@@ -3034,6 +3138,7 @@
         ms.type = t || 1;
         ms.rawUri = u || '';
         ms.playlist = pl || '';
+        ms.playlistObjectUrl = createMediaPlaylistObjectUrl(ms.playlist);
         ms.q = parseQ(ms.playlist, ms.rawUri);
         ms.qp = -1;
         ms.activeCodecs = '';
@@ -3044,7 +3149,7 @@
             hasRawUri: !!ms.rawUri,
             firstQuality: ms.q[0] && ms.q[0].id ? ms.q[0].id : ''
         });
-        ms.uri = sourceFromQuality(ms, mainMaxRes);
+        ms.uri = ms.playlistObjectUrl || sourceFromQuality(ms, mainMaxRes);
         if (mv) {
             mv.src = ms.uri;
             applyMainLayout();
