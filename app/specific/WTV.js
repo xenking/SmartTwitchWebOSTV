@@ -586,9 +586,19 @@ function WTV_IsArchiveVodUrl(url) {
     return !!(url && String(url).indexOf('/archive/vods/') !== -1);
 }
 
+function WTV_IsFinalizedVod(vod) {
+    var status = vod && vod.status ? String(vod.status).toLowerCase() : '';
+
+    if (!vod) return false;
+    if (status === 'finalized' || status === 'finished' || status === 'complete' || status === 'completed') return true;
+    return !!((vod.file_url || vod.final_url) && !vod.active && !vod.growing && status !== 'open' && status !== 'recording');
+}
+
 function WTV_ArchiveVodPlaybackUrl(vod) {
     var url = WTV_VodPlaybackUrl(vod);
-    return WTV_IsArchiveVodUrl(url) ? url : '';
+    if (!url) return '';
+    if (WTV_IsArchiveVodUrl(url)) return url;
+    return WTV_IsFinalizedVod(vod) ? url : '';
 }
 
 function WTV_BuildLiveStatusFromArchiveVod(vod, channel) {

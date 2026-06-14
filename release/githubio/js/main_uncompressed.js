@@ -7663,11 +7663,15 @@
                 ChannelContent_addFocus();
             }
             WTV_AddMappedLiveToUserFeed(status, mapping);
-        } else if (ChannelContent_isoffline) {
+        } else if (ChannelContent_isoffline || ChannelContent_IsMappedWTVLiveCell()) {
             ChannelContent_createCellOffline(ChannelContent_allowMature);
         }
 
         ChannelContent_ScheduleWTVCheck();
+    }
+
+    function ChannelContent_IsMappedWTVLiveCell() {
+        return typeof WTV_IsData === 'function' && ChannelContent_DataObj && WTV_IsData(ChannelContent_DataObj);
     }
 
     function ChannelContent_ScheduleWTVCheck() {
@@ -7686,6 +7690,7 @@
     function ChannelContent_createCellOffline(allowMature) {
         ChannelContent_isoffline = true;
         ChannelContent_allowMature = allowMature;
+        ChannelContent_DataObj = null;
         var offlineString =
             '<div class="stream_info_live">' + STR_CH_IS_OFFLINE + '</div><div class="stream_info_live_title">' + STR_OPEN_CHAT + '</div>';
 
@@ -49353,9 +49358,19 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
         return !!(url && String(url).indexOf('/archive/vods/') !== -1);
     }
 
+    function WTV_IsFinalizedVod(vod) {
+        var status = vod && vod.status ? String(vod.status).toLowerCase() : '';
+
+        if (!vod) return false;
+        if (status === 'finalized' || status === 'finished' || status === 'complete' || status === 'completed') return true;
+        return !!((vod.file_url || vod.final_url) && !vod.active && !vod.growing && status !== 'open' && status !== 'recording');
+    }
+
     function WTV_ArchiveVodPlaybackUrl(vod) {
         var url = WTV_VodPlaybackUrl(vod);
-        return WTV_IsArchiveVodUrl(url) ? url : '';
+        if (!url) return '';
+        if (WTV_IsArchiveVodUrl(url)) return url;
+        return WTV_IsFinalizedVod(vod) ? url : '';
     }
 
     function WTV_BuildLiveStatusFromArchiveVod(vod, channel) {

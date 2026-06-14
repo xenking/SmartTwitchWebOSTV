@@ -242,6 +242,39 @@ segments/sess-wtv-kuboeb/000000002.ts
 
 {
   const context = createContext();
+  const playbackUrl = 'http://archive.local:18080/recordings/grp-wtv-kuboeb/download';
+  const vodData = context.WTV_BuildVodData(
+    {
+      id: 'grp-wtv-kuboeb',
+      channel: 'wtv/kuboeb',
+      final_url: '/recordings/grp-wtv-kuboeb/download',
+      status: 'finalized',
+      active: false,
+      growing: false,
+      started_at: '2026-06-13T17:53:06Z',
+      duration_seconds: 6110,
+    },
+    'kuboeb',
+    {
+      display_name: 'melharucos',
+      login: 'melharucos',
+      id: '26819117',
+      logo: 'logo.jpg',
+      partner: false,
+    }
+  );
+
+  assert.equal(vodData[19].playback_url, playbackUrl, 'finalized W.TV VOD accepts final_url outside /archive/vods/');
+  assert.equal(vodData[19].playback_kind, 'archive_file', 'final_url-only W.TV VOD opens as direct file playback');
+
+  context.Main_values_Play_data = vodData;
+  assert.equal(context.WTV_PlayVodLoadData(), true, 'final_url-only W.TV VOD load is handled by W.TV direct file path');
+  assert.equal(context.PlayVod_autoUrl, playbackUrl, 'final_url-only W.TV VOD opens direct final URL');
+  assert.equal(context.captured.vodPlaylist, '', 'final_url-only W.TV VOD passes empty playlist string');
+}
+
+{
+  const context = createContext();
   const staleVodData = context.WTV_BuildVodData(
     {
       id: 'grp-wtv-kuboeb',
@@ -444,6 +477,16 @@ segments/sess-wtv-kuboeb/000000002.ts
     functionBody(channelContentSource, 'ChannelContent_loadDataSuccess'),
     /ChannelContent_CheckMappedWTVLive\(false\);/,
     'channel content refreshes mapped W.TV state after rendering Twitch or offline state'
+  );
+  assert.match(
+    functionBody(channelContentSource, 'ChannelContent_IsMappedWTVLiveCell'),
+    /WTV_IsData\(ChannelContent_DataObj\)/,
+    'channel content can detect a stale mapped W.TV live cell'
+  );
+  assert.match(
+    functionBody(channelContentSource, 'ChannelContent_MappedWTVLiveResult'),
+    /ChannelContent_isoffline \|\| ChannelContent_IsMappedWTVLiveCell\(\)/,
+    'offline W.TV poll clears a stale mapped W.TV live cell'
   );
   assert.doesNotMatch(
     functionBody(channelContentSource, 'ChannelContent_MappedWTVLiveResult'),
