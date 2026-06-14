@@ -1422,6 +1422,16 @@ function Screens_LoadPreviewStart(key, obj) {
     } else {
         //live
 
+        if (typeof WTV_IsData === 'function' && WTV_IsData(obj)) {
+            PlayHLS_GetExternalPlayListAsync(
+                WTV_GetPlaybackUrl(obj),
+                (ScreenObj[key].posY * ScreenObj[key].ColumnsCount + ScreenObj[key].posX) % 100,
+                key,
+                Screens_LoadPreviewResult
+            );
+            return;
+        }
+
         if (ScreenObj[key].screen === Main_HistoryLive) {
             var index = AddUser_UserIsSet() ? Main_history_Exist('live', obj[7]) : -1;
 
@@ -1483,7 +1493,10 @@ function Screens_PatchExternalVodPreviewPlaylist(streamInfo, playlist, responseU
     }
 
     if (typeof WTV_IsData === 'function' && WTV_IsData(streamInfo)) {
-        return WTV_PatchVodPlaylist(playlist, responseUrl || (WTV_GetMeta(streamInfo) || {}).playback_url);
+        if (typeof WTV_PlaylistForPlayback === 'function') {
+            return WTV_PlaylistForPlayback(streamInfo, playlist, responseUrl || (WTV_GetMeta(streamInfo) || {}).playback_url);
+        }
+        return WTV_PatchPlaylistForData(streamInfo, playlist, responseUrl || (WTV_GetMeta(streamInfo) || {}).playback_url);
     }
 
     return playlist;
@@ -1561,6 +1574,12 @@ function Screens_LoadPreviewResult(StreamData, x, y) {
                     who_called = 2;
                 } else {
                     //live
+                    if (typeof WTV_IsData === 'function' && WTV_IsData(StreamInfo)) {
+                        PreviewResponseText =
+                            typeof WTV_PlaylistForPlayback === 'function'
+                                ? WTV_PlaylistForPlayback(StreamInfo, PreviewResponseText, Play_PreviewURL)
+                                : WTV_PatchPlaylistForData(StreamInfo, PreviewResponseText, Play_PreviewURL);
+                    }
                     who_called = 1;
 
                     if (ScreenObj[x].screen === Main_HistoryLive) {

@@ -303,9 +303,9 @@ function ChannelContent_loadDataSuccess() {
         ChannelContent_cursorX = 1;
     } else {
         ChannelContent_createCellOffline(allowMature);
-        ChannelContent_CheckMappedWTVLive(false);
     }
 
+    ChannelContent_CheckMappedWTVLive(false);
     ChannelContent_loadDataSuccessFinish();
 }
 
@@ -369,7 +369,7 @@ function ChannelContent_CheckMappedWTVLive(isPoll) {
     if (typeof WTV_GetCurrentChannelMapping !== 'function') return;
 
     var mapping = WTV_GetCurrentChannelMapping();
-    if (!mapping || !mapping.wtv_channel || ChannelContent_responseText) {
+    if (!mapping || !mapping.wtv_channel) {
         ChannelContent_ClearWTVCheck();
         return;
     }
@@ -400,7 +400,7 @@ function ChannelContent_MappedWTVLiveResult(status, mapping, requestKey) {
             ChannelContent_addFocus();
         }
         WTV_AddMappedLiveToUserFeed(status, mapping);
-    } else if (!ChannelContent_isoffline) {
+    } else if (ChannelContent_isoffline) {
         ChannelContent_createCellOffline(ChannelContent_allowMature);
     }
 

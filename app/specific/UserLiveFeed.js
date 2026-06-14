@@ -1341,10 +1341,10 @@ function UserLiveFeed_refreshThumb(pos) {
         var data = UserLiveFeed_GetObj(pos);
 
         var url = data[0].replace('{width}x{height}', Main_VideoSize) + Main_randomImg;
-        var div = Main_getElementById(UserLiveFeed_ids[1] + id);
 
         Play_seek_previews_img.onload = function () {
-            div.src = url;
+            var currentDiv = Main_getElementById(UserLiveFeed_ids[1] + id);
+            if (currentDiv) currentDiv.src = url;
         };
 
         Play_seek_previews_img.src = url;

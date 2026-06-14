@@ -903,13 +903,21 @@ assert.equal(packageJson.scripts['hosted:prepare'], 'npm run webos:prepare-relea
 {
   const { context, createdVideos } = createBridgeContext({ matched: false, reason: 'unused' });
   const playlist = '#EXTM3U\n#EXT-X-PLAYLIST-TYPE:VOD\n#EXTINF:2,\nhttp://192.168.0.109:18080/archive/vods/grp/segments/000001.ts\n#EXT-X-ENDLIST';
+  let durationUpdate = 0;
+  context.Play_UpdateDurationDiv = value => {
+    durationUpdate = value;
+  };
 
   context.Android.StartAuto('http://192.168.0.109:18080/archive/vods/grp/playlist.m3u8', playlist, 2, 120000, 0);
 
-  assert.equal(createdVideos[0].src, 'blob:playlist-1', 'webOS bridge plays patched media playlist body so local VOD seekability is preserved');
-  assert.equal(context.__lastBlob.parts.length, 1, 'patched media playlist Blob has one body part');
-  assert.equal(context.__lastBlob.parts[0], playlist, 'patched media playlist body is used for the playback Blob');
-  assert.equal(createdVideos[0].currentTime, 120, 'media playlist Blob playback still applies VOD resume position');
+  assert.equal(
+    createdVideos[0].src,
+    'http://192.168.0.109:18080/archive/vods/grp/playlist.m3u8',
+    'HTTP local archive playlists play by direct URL instead of a blob URL'
+  );
+  assert.equal(context.__lastBlob, undefined, 'HTTP local archive playlists do not create a media playlist Blob');
+  assert.equal(createdVideos[0].currentTime, 120, 'direct HTTP local archive playback still applies VOD resume position');
+  assert.equal(durationUpdate, 53246000, 'bridge reports metadata duration through the exported duration callback');
 }
 
 console.log('local VOD tests passed');

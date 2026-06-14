@@ -1984,8 +1984,9 @@
         var body = playlist.toUpperCase();
         return body.indexOf('#EXTM3U') !== -1 && body.indexOf('#EXTINF:') !== -1 && body.indexOf('#EXT-X-STREAM-INF:') === -1;
     }
-    function createMediaPlaylistObjectUrl(playlist) {
+    function createMediaPlaylistObjectUrl(playlist, rawUri) {
         if (!isMediaPlaylistBody(playlist)) return '';
+        if (rawUri && /^https?:\/\//i.test(rawUri)) return '';
         if (!w.Blob || !w.URL || typeof w.URL.createObjectURL !== 'function') return '';
         try {
             return w.URL.createObjectURL(new w.Blob([playlist], {type: 'application/vnd.apple.mpegurl'}));
@@ -2044,7 +2045,7 @@
         // loadedmetadata: metadata (duration, dimensions) available. Resume VOD/clip position.
         mv.addEventListener('loadedmetadata', function () {
             if (ms.resume > 0 && (ms.type === 2 || ms.type === 3)) try { mv.currentTime = Math.max(0, ms.resume / 1000); } catch (e) {}
-            call('Play_UpdateDuration', [localVodReportedDurationMs()]);
+            call('Play_UpdateDurationDiv', [localVodReportedDurationMs()]);
             mainErrorCount = 0;
             clearMainStallTimer();
             markMainProgressBaseline();
@@ -3138,7 +3139,7 @@
         ms.type = t || 1;
         ms.rawUri = u || '';
         ms.playlist = pl || '';
-        ms.playlistObjectUrl = createMediaPlaylistObjectUrl(ms.playlist);
+        ms.playlistObjectUrl = createMediaPlaylistObjectUrl(ms.playlist, ms.rawUri);
         ms.q = parseQ(ms.playlist, ms.rawUri);
         ms.qp = -1;
         ms.activeCodecs = '';
@@ -5143,7 +5144,7 @@
                 show(mv);
                 if (mv) tryPlay(mv);
             }
-            call('Play_UpdateDuration', [localVodReportedDurationMs()]);
+            call('Play_UpdateDurationDiv', [localVodReportedDurationMs()]);
         };
         // IMPLEMENTED: Restart playback from cached state or trigger app reload.
         A.RestartPlayer = function (t, rs, player) {
