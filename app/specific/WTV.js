@@ -407,8 +407,24 @@ function WTV_AddMappedLiveToUserFeed(status, mapping) {
     if (existingPos === null) {
         Sidepannel_Html += sideHtml;
         if (Sidepannel_ScroolDoc) Sidepannel_ScroolDoc.insertAdjacentHTML('beforeend', sideHtml);
+    } else {
+        WTV_RefreshMappedLiveSideFeed(pos);
     }
     Sidepannel_Positions = JSON.parse(JSON.stringify(UserLiveFeed_idObject[pos]));
+}
+
+function WTV_RefreshMappedLiveSideFeed(pos) {
+    var i = 0,
+        html = '';
+
+    if (!UserLiveFeed_DataObj || !UserLiveFeed_DataObj[pos]) return;
+
+    for (i; i < UserLiveFeed_itemsCount[pos]; i++) {
+        if (UserLiveFeed_DataObj[pos][i]) html += UserLiveFeedobj_CreateSideFeed(i, UserLiveFeed_DataObj[pos][i]);
+    }
+
+    Sidepannel_Html = html;
+    if (Sidepannel_ScroolDoc) Main_innerHTMLWithEle(Sidepannel_ScroolDoc, Sidepannel_Html);
 }
 
 function WTV_CheckMappedUserFeedItem(mapping) {

@@ -413,7 +413,7 @@ function ChannelContent_IsMappedWTVLiveCell() {
 
 function ChannelContent_ScheduleWTVCheck() {
     ChannelContent_ClearWTVCheck();
-    if (Main_values.Main_Go !== Main_ChannelContent || ChannelContent_responseText) return;
+    if (Main_values.Main_Go !== Main_ChannelContent) return;
 
     ChannelContent_WTVCheckId = Main_setTimeout(
         function () {

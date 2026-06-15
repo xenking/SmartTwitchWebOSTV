@@ -484,6 +484,11 @@ segments/sess-wtv-kuboeb/000000002.ts
     /ChannelContent_CheckMappedWTVLive\(false\);/,
     'channel content refreshes mapped W.TV state after rendering Twitch or offline state'
   );
+  assert.doesNotMatch(
+    functionBody(channelContentSource, 'ChannelContent_ScheduleWTVCheck'),
+    /ChannelContent_responseText/,
+    'mapped W.TV channel pages keep polling after a W.TV cell replaces an online Twitch cell'
+  );
   assert.match(
     functionBody(channelContentSource, 'ChannelContent_IsMappedWTVLiveCell'),
     /WTV_IsData\(ChannelContent_DataObj\)/,
@@ -503,6 +508,16 @@ segments/sess-wtv-kuboeb/000000002.ts
     functionBody(wtvSource, 'WTV_AddMappedLiveToUserFeed'),
     /existingPos !== null && !WTV_MappedFeedSlotIsWTV[\s\S]*?return;/,
     'mapped W.TV feed entry may replace an existing Twitch live item for the same channel'
+  );
+  assert.match(
+    functionBody(wtvSource, 'WTV_AddMappedLiveToUserFeed'),
+    /existingPos === null[\s\S]*Sidepannel_Html \+= sideHtml[\s\S]*else[\s\S]*WTV_RefreshMappedLiveSideFeed\(pos\)/,
+    'mapped W.TV feed replacement refreshes the existing side-panel row'
+  );
+  assert.match(
+    functionBody(wtvSource, 'WTV_RefreshMappedLiveSideFeed'),
+    /Sidepannel_Html = html;[\s\S]*Main_innerHTMLWithEle\(Sidepannel_ScroolDoc, Sidepannel_Html\)/,
+    'mapped W.TV side-panel refresh keeps cached HTML and rendered DOM in sync'
   );
   assert.match(
     functionBody(screensSource, 'Screens_LoadPreviewStart'),
