@@ -1984,9 +1984,8 @@
         var body = playlist.toUpperCase();
         return body.indexOf('#EXTM3U') !== -1 && body.indexOf('#EXTINF:') !== -1 && body.indexOf('#EXT-X-STREAM-INF:') === -1;
     }
-    function createMediaPlaylistObjectUrl(playlist, rawUri) {
+    function createMediaPlaylistObjectUrl(playlist) {
         if (!isMediaPlaylistBody(playlist)) return '';
-        if (rawUri && /^https?:\/\//i.test(rawUri)) return '';
         if (!w.Blob || !w.URL || typeof w.URL.createObjectURL !== 'function') return '';
         try {
             return w.URL.createObjectURL(new w.Blob([playlist], {type: 'application/vnd.apple.mpegurl'}));
@@ -3139,7 +3138,7 @@
         ms.type = t || 1;
         ms.rawUri = u || '';
         ms.playlist = pl || '';
-        ms.playlistObjectUrl = createMediaPlaylistObjectUrl(ms.playlist, ms.rawUri);
+        ms.playlistObjectUrl = createMediaPlaylistObjectUrl(ms.playlist);
         ms.q = parseQ(ms.playlist, ms.rawUri);
         ms.qp = -1;
         ms.activeCodecs = '';

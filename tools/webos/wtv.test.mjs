@@ -271,6 +271,12 @@ segments/sess-wtv-kuboeb/000000002.ts
   assert.equal(context.WTV_PlayVodLoadData(), true, 'final_url-only W.TV VOD load is handled by W.TV direct file path');
   assert.equal(context.PlayVod_autoUrl, playbackUrl, 'final_url-only W.TV VOD opens direct final URL');
   assert.equal(context.captured.vodPlaylist, '', 'final_url-only W.TV VOD passes empty playlist string');
+
+  context.Main_vodOffset = 321;
+  context.PlayVod_ResumeTime = 321;
+  assert.equal(context.WTV_OpenVodData(vodData), true, 'finalized W.TV VOD history data opens through WTV helper');
+  assert.equal(context.captured.openVodOffset, 321, 'finalized W.TV VOD preserves saved watched offset');
+  assert.equal(context.captured.openVodResume, 321, 'finalized W.TV VOD preserves saved resume offset');
 }
 
 {
@@ -550,8 +556,8 @@ segments/sess-wtv-kuboeb/000000002.ts
   );
   assert.match(
     functionBody(wtvSource, 'WTV_OpenVodData'),
-    /Main_vodOffset = 0\.001;[\s\S]*PlayVod_ResumeTime = 0\.001;/,
-    'W.TV VOD history open resets stale resume offset'
+    /if \(WTV_IsActiveArchiveData\(data\)\) \{[\s\S]*Main_vodOffset = 0\.001;[\s\S]*PlayVod_ResumeTime = 0\.001;[\s\S]*\}/,
+    'W.TV VOD history open resets stale live resume offsets only for active archives'
   );
   assert.match(
     functionBody(screensObjSource, 'ScreensObj_HistoryLive'),

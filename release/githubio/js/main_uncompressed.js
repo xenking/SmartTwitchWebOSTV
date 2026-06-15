@@ -49616,8 +49616,10 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
         ChannelVod_game = STR_STARTED + STR_PLAYING + 'w.tv';
         ChannelVod_views = data[4];
         Play_DurationSeconds = WTV_DataDurationSeconds(data, meta);
-        Main_vodOffset = 0.001;
-        PlayVod_ResumeTime = 0.001;
+        if (WTV_IsActiveArchiveData(data)) {
+            Main_vodOffset = 0.001;
+            PlayVod_ResumeTime = 0.001;
+        }
 
         WTV_SaveVodHistory(data);
         Main_EventPlay('vod', data[6], data[3], WTV_Platform, 'WTV');

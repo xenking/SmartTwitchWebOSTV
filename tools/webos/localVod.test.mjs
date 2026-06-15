@@ -912,10 +912,14 @@ assert.equal(packageJson.scripts['hosted:prepare'], 'npm run webos:prepare-relea
 
   assert.equal(
     createdVideos[0].src,
-    'http://192.168.0.109:18080/archive/vods/grp/playlist.m3u8',
-    'HTTP local archive playlists play by direct URL instead of a blob URL'
+    'blob:playlist-1',
+    'HTTP local archive playlists keep patched media playlists through a blob URL'
   );
-  assert.equal(context.__lastBlob, undefined, 'HTTP local archive playlists do not create a media playlist Blob');
+  assert.equal(
+    context.__lastBlob.parts[0],
+    playlist,
+    'HTTP local archive playlist blob contains the patched media playlist body'
+  );
   assert.equal(createdVideos[0].currentTime, 120, 'direct HTTP local archive playback still applies VOD resume position');
   assert.equal(durationUpdate, 53246000, 'bridge reports metadata duration through the exported duration callback');
 }
