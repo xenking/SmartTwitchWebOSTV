@@ -1111,6 +1111,23 @@ function PlayVod_SizeClear() {
 }
 
 var PlayVod_last_multiplier = '';
+function PlayVod_JumpStepLabel(pos) {
+    if (
+        Settings_value &&
+        Settings_value.vod_seek_min &&
+        Settings_value.vod_seek_min.values &&
+        typeof Settings_value.vod_seek_min.values[pos] !== 'undefined'
+    ) {
+        return Settings_value.vod_seek_min.values[pos];
+    }
+
+    if (Play_DefaultjumpTimers && typeof Play_DefaultjumpTimers[pos] !== 'undefined') {
+        return Play_DefaultjumpTimers[pos] + STR_SECONDS;
+    }
+
+    return '1' + STR_SECONDS;
+}
+
 function PlayVod_jumpSteps(pos, signal) {
     if (PlayVod_addToJump && !PlayVod_PanelY) Play_BottonIcons_Progress_Steps.style.display = 'inline-block';
 
@@ -1118,9 +1135,8 @@ function PlayVod_jumpSteps(pos, signal) {
         Play_BottonIcons_Progress_Steps,
         STR_JUMPING_STEP +
             (signal ? signal : '') +
-            (PlayVod_isOn
-                ? Settings_value.vod_seek_min.values[pos] + STR_BR + (PlayVod_jumpStepsIncreaseLock ? STR_LOCKED : STR_UP_LOCKED)
-                : '1' + STR_SECONDS)
+            PlayVod_JumpStepLabel(pos) +
+            (PlayVod_isOn ? STR_BR + (PlayVod_jumpStepsIncreaseLock ? STR_LOCKED : STR_UP_LOCKED) : '')
     );
 
     PlayVod_last_multiplier = signal;

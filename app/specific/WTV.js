@@ -44,6 +44,11 @@ function WTV_GetPlaybackUrl(data) {
     return meta ? meta.playback_url : '';
 }
 
+function WTV_GetPlaybackBaseUrl(data, fallbackUrl) {
+    var meta = WTV_GetMeta(data);
+    return fallbackUrl || (meta ? meta.playback_url : '') || '';
+}
+
 function WTV_IsVodData(data) {
     var meta = WTV_GetMeta(data);
     return !!(meta && (meta.source_kind === 'vod' || meta.source_kind === 'recording' || meta.duration_seconds));
@@ -327,7 +332,7 @@ function WTV_BuildTwitchMappedLiveData(status, mapping, sourceKind) {
         meta.twitch_logo = mapping.twitch_logo;
     }
 
-    return data;
+    return WTV_NormalizeDataUrls(data);
 }
 
 function WTV_MappedFeedSlotIsWTV(pos, itemPos, mapping) {
@@ -375,8 +380,6 @@ function WTV_AddMappedLiveToUserFeed(status, mapping) {
         newCell,
         sideHtml;
 
-    if (existingPos !== null && !WTV_MappedFeedSlotIsWTV(pos, existingPos, mapping)) return;
-
     if (!UserLiveFeed_idObject[pos]) UserLiveFeed_idObject[pos] = {};
     if (!UserLiveFeed_DataObj[pos]) UserLiveFeed_DataObj[pos] = {};
     if (!UserLiveFeed_cell[pos]) UserLiveFeed_cell[pos] = [];
@@ -404,8 +407,24 @@ function WTV_AddMappedLiveToUserFeed(status, mapping) {
     if (existingPos === null) {
         Sidepannel_Html += sideHtml;
         if (Sidepannel_ScroolDoc) Sidepannel_ScroolDoc.insertAdjacentHTML('beforeend', sideHtml);
+    } else {
+        WTV_RefreshMappedLiveSideFeed(pos);
     }
     Sidepannel_Positions = JSON.parse(JSON.stringify(UserLiveFeed_idObject[pos]));
+}
+
+function WTV_RefreshMappedLiveSideFeed(pos) {
+    var i = 0,
+        html = '';
+
+    if (!UserLiveFeed_DataObj || !UserLiveFeed_DataObj[pos]) return;
+
+    for (i; i < UserLiveFeed_itemsCount[pos]; i++) {
+        if (UserLiveFeed_DataObj[pos][i]) html += UserLiveFeedobj_CreateSideFeed(i, UserLiveFeed_DataObj[pos][i]);
+    }
+
+    Sidepannel_Html = html;
+    if (Sidepannel_ScroolDoc) Main_innerHTMLWithEle(Sidepannel_ScroolDoc, Sidepannel_Html);
 }
 
 function WTV_CheckMappedUserFeedItem(mapping) {
@@ -481,32 +500,141 @@ function WTV_FindActiveVod(response) {
 function WTV_AbsoluteArchiveUrl(url) {
     var endpoint = WTV_GetEndpoint();
     if (!url) return '';
+    url = String(url).replace(/^file:\/\/\/archive\//i, '/archive/');
+    if (/^(data|blob):/i.test(url)) return url;
     if (/^https?:\/\//i.test(url)) return url;
     if (url.charAt(0) !== '/') url = '/' + url;
-    return endpoint + url;
+    return endpoint ? endpoint.replace(/\/+$/, '') + url : url;
+}
+
+function WTV_NormalizeArchiveUrl(url) {
+    if (!url) return '';
+    url = String(url).replace(/^file:\/\/\/archive\//i, '/archive/');
+    if (/^(https?|data|blob):/i.test(url)) return url;
+    if (/^\/?archive\//i.test(url)) return WTV_AbsoluteArchiveUrl(url);
+    return url;
+}
+
+function WTV_NormalizeDataUrls(data) {
+    var meta = WTV_GetMeta(data);
+    if (!meta) return data;
+
+    if (data[0]) data[0] = WTV_NormalizeArchiveUrl(data[0]);
+    if (data[9]) data[9] = WTV_NormalizeArchiveUrl(data[9]);
+
+    if (meta.thumbnail_url) meta.thumbnail_url = WTV_NormalizeArchiveUrl(meta.thumbnail_url);
+    if (meta.preview_url) meta.preview_url = WTV_NormalizeArchiveUrl(meta.preview_url);
+    if (meta.playback_url) meta.playback_url = WTV_AbsoluteArchiveUrl(meta.playback_url);
+    if (meta.vod_url) meta.vod_url = WTV_AbsoluteArchiveUrl(meta.vod_url);
+
+    data.playback_url = meta.playback_url || data.playback_url || '';
+    data.vod_url = meta.vod_url || data.vod_url || '';
+
+    return data;
+}
+
+function WTV_IsActiveArchiveData(data) {
+    var meta = WTV_GetMeta(data);
+    var status = meta && meta.status ? String(meta.status).toLowerCase() : '';
+
+    return !!(
+        meta &&
+        (meta.source_kind === 'live' ||
+            meta.active ||
+            meta.growing ||
+            status === 'open' ||
+            status === 'recording')
+    );
+}
+
+function WTV_NormalizeHistoryEntry(type, entry) {
+    var previousForceVod;
+    var previousVodImg;
+
+    if (!entry || !entry.data || !WTV_IsData(entry.data)) return entry;
+
+    previousForceVod = entry.forceVod;
+    previousVodImg = entry.vodimg;
+
+    WTV_NormalizeDataUrls(entry.data);
+    if (entry.vodimg) entry.vodimg = WTV_NormalizeArchiveUrl(entry.vodimg);
+
+    if (type === 'live' && WTV_IsActiveArchiveData(entry.data)) {
+        entry.forceVod = false;
+    }
+
+    entry.wtv_changed = previousForceVod !== entry.forceVod || previousVodImg !== entry.vodimg;
+    return entry;
+}
+
+function WTV_NormalizeHistoryData(historyData) {
+    var userId;
+    var types = ['live', 'vod'];
+    var typeIndex;
+    var i;
+    var entries;
+    var type;
+    var changed = false;
+    var normalized;
+
+    for (userId in historyData) {
+        if (!historyData.hasOwnProperty(userId)) continue;
+
+        for (typeIndex = 0; typeIndex < types.length; typeIndex++) {
+            type = types[typeIndex];
+            entries = historyData[userId][type];
+            if (!entries || !entries.length) continue;
+
+            for (i = 0; i < entries.length; i++) {
+                normalized = WTV_NormalizeHistoryEntry(type, entries[i]);
+                if (normalized && normalized.wtv_changed) {
+                    changed = true;
+                    delete normalized.wtv_changed;
+                }
+            }
+        }
+    }
+
+    return changed;
 }
 
 function WTV_IsArchiveVodUrl(url) {
     return !!(url && String(url).indexOf('/archive/vods/') !== -1);
 }
 
+function WTV_IsFinalizedVod(vod) {
+    var status = vod && vod.status ? String(vod.status).toLowerCase() : '';
+
+    if (!vod) return false;
+    if (status === 'finalized' || status === 'finished' || status === 'complete' || status === 'completed') return true;
+    return !!((vod.file_url || vod.final_url) && !vod.active && !vod.growing && status !== 'open' && status !== 'recording');
+}
+
 function WTV_ArchiveVodPlaybackUrl(vod) {
     var url = WTV_VodPlaybackUrl(vod);
-    return WTV_IsArchiveVodUrl(url) ? url : '';
+    if (!url) return '';
+    if (WTV_IsArchiveVodUrl(url)) return url;
+    return WTV_IsFinalizedVod(vod) ? url : '';
 }
 
 function WTV_BuildLiveStatusFromArchiveVod(vod, channel) {
     var playbackURL = WTV_AbsoluteArchiveUrl(WTV_ArchiveVodPlaybackUrl(vod));
+    var playbackKind = WTV_PlaybackKind(vod, playbackURL);
+    var thumbnailURL = WTV_AbsoluteArchiveUrl(vod.thumbnail_url || vod.preview_url || '') || IMG_404_BANNER;
     return {
         platform: WTV_Platform,
         channel: vod.source_channel || vod.channel || channel,
         online: true,
+        status: vod.status || '',
+        active: !!vod.active,
+        growing: !!vod.growing,
         title: vod.title || vod.channel || channel,
         viewer_count: vod.viewer_count || 0,
         started_at: vod.source_started_at || vod.started_at || new Date().toISOString(),
-        thumbnail_url: vod.thumbnail_url || vod.preview_url || IMG_404_BANNER,
+        thumbnail_url: thumbnailURL,
+        preview_url: thumbnailURL,
         playback_url: playbackURL,
-        playback_kind: 'archive_hls',
+        playback_kind: playbackKind,
         vod_url: playbackURL,
         recording_group_id: vod.recording_group_id || vod.id || '',
         stream_id: vod.recording_group_id || vod.id || WTV_Platform + ':' + channel
@@ -528,7 +656,29 @@ function WTV_FindVodByRecordingGroup(response, recordingGroupId) {
 }
 
 function WTV_VodPlaybackUrl(vod) {
-    return vod ? vod.webos_playback_url || vod.compat_playback_url || vod.h264_playback_url || vod.playback_url || vod.vod_url || vod.playlist_url || vod.hls_url || vod.url || '' : '';
+    return vod
+        ? vod.webos_playback_url ||
+              vod.compat_playback_url ||
+              vod.h264_playback_url ||
+              vod.hls_playback_url ||
+              vod.playback_url ||
+              vod.vod_url ||
+              vod.playlist_url ||
+              vod.hls_url ||
+              vod.file_url ||
+              vod.final_url ||
+              vod.url ||
+              ''
+        : '';
+}
+
+function WTV_PlaybackKind(vod, playbackURL) {
+    var rawUrl = WTV_VodPlaybackUrl(vod);
+    var url = String(rawUrl || playbackURL || '').split('?')[0];
+
+    if (vod && (vod.file_url || vod.final_url) && rawUrl && rawUrl === (vod.file_url || vod.final_url)) return 'archive_file';
+    if (/\.m3u8$/i.test(url) || /\/playlist\.m3u8$/i.test(url)) return 'archive_hls';
+    return 'archive_file';
 }
 
 function WTV_VodStartedAt(vod) {
@@ -541,13 +691,41 @@ function WTV_ParseTimeMs(value) {
     return isNaN(ms) ? 0 : ms;
 }
 
+function WTV_ParseDurationSeconds(value) {
+    var parts;
+    var seconds;
+
+    if (typeof value === 'number') return isFinite(value) && value > 0 ? parseInt(value) : 0;
+    if (typeof value !== 'string') return 0;
+
+    value = value.trim();
+    if (!value) return 0;
+    if (/^\d+(\.\d+)?$/.test(value)) return parseInt(value);
+
+    if (/^\d+:\d\d(:\d\d)?$/.test(value)) {
+        parts = value.split(':');
+        seconds = 0;
+        while (parts.length) seconds = seconds * 60 + (parseInt(parts.shift()) || 0);
+        return seconds;
+    }
+
+    seconds = typeof Play_timeHMS === 'function' ? Play_timeHMS(value) : 0;
+    return seconds > 0 ? seconds : parseInt(value) || 0;
+}
+
 function WTV_VodDurationSeconds(vod) {
     var duration = vod ? vod.duration_seconds || vod.duration || vod.length_seconds || 0 : 0;
-    if (typeof duration === 'string') duration = Play_timeHMS(duration);
-    duration = parseInt(duration);
+    duration = WTV_ParseDurationSeconds(duration);
     if ((!duration || duration < 0) && vod && vod.ended_at) {
         duration = parseInt((WTV_ParseTimeMs(vod.ended_at) - WTV_ParseTimeMs(WTV_VodStartedAt(vod))) / 1000);
     }
+    return duration > 0 ? duration : 1;
+}
+
+function WTV_DataDurationSeconds(data, meta) {
+    var duration = meta && meta.duration_seconds ? meta.duration_seconds : 0;
+    duration = WTV_ParseDurationSeconds(duration);
+    if (!duration && data && data[11]) duration = WTV_ParseDurationSeconds(data[11]);
     return duration > 0 ? duration : 1;
 }
 
@@ -591,18 +769,20 @@ function WTV_BuildVodData(vod, channel, identity) {
     if (channel.indexOf('wtv/') === 0) channel = WTV_NormalizeChannel(channel.substring(4));
 
     var playbackURL = WTV_AbsoluteArchiveUrl(WTV_ArchiveVodPlaybackUrl(vod));
+    var playbackKind = WTV_PlaybackKind(vod, playbackURL);
     var startedAt = WTV_VodStartedAt(vod);
     var durationSeconds = WTV_VodDurationSeconds(vod);
     var vodId = WTV_VodId(vod, channel);
     var title = (vod && (vod.title || vod.name)) || 'w.tv recording';
     var views = (vod && (vod.view_count || vod.views || vod.viewer_count || 0)) || 0;
     var sourceCount = vod && vod.source_count ? vod.source_count : 0;
+    var thumbnailURL = WTV_AbsoluteArchiveUrl(vod && (vod.thumbnail_url || vod.preview_url)) || IMG_404_VOD;
     var meta = {
         source_platform: WTV_Platform,
         source_channel: channel,
         source_kind: 'vod',
         playback_url: playbackURL,
-        playback_kind: 'archive_hls',
+        playback_kind: playbackKind,
         vod_url: playbackURL,
         recording_group_id: vodId,
         stream_id: vodId,
@@ -610,7 +790,10 @@ function WTV_BuildVodData(vod, channel, identity) {
         started_at: startedAt,
         duration_seconds: durationSeconds,
         viewer_count: views,
-        source_count: sourceCount
+        source_count: sourceCount,
+        status: (vod && vod.status) || '',
+        active: !!(vod && vod.active),
+        growing: !!(vod && vod.growing)
     };
     var data;
 
@@ -622,7 +805,7 @@ function WTV_BuildVodData(vod, channel, identity) {
     meta.twitch_logo = identity.logo;
 
     data = [
-        (vod && (vod.thumbnail_url || vod.preview_url)) || IMG_404_VOD,
+        thumbnailURL,
         identity.display_name,
         startedAt ? Main_videoCreatedAt(startedAt) : '',
         'w.tv',
@@ -650,10 +833,11 @@ function WTV_BuildVodData(vod, channel, identity) {
     data.vod_url = playbackURL;
     data.recording_group_id = vodId;
 
-    return data;
+    return WTV_NormalizeDataUrls(data);
 }
 
 function WTV_OpenVodData(data) {
+    data = WTV_NormalizeDataUrls(data);
     var meta = WTV_GetMeta(data);
     if (!meta || !WTV_IsVodData(data)) return false;
 
@@ -676,7 +860,11 @@ function WTV_OpenVodData(data) {
     ChannelVod_title = data[10];
     ChannelVod_game = STR_STARTED + STR_PLAYING + 'w.tv';
     ChannelVod_views = data[4];
-    Play_DurationSeconds = parseInt(data[11]) || meta.duration_seconds || 1;
+    Play_DurationSeconds = WTV_DataDurationSeconds(data, meta);
+    if (WTV_IsActiveArchiveData(data)) {
+        Main_vodOffset = 0.001;
+        PlayVod_ResumeTime = 0.001;
+    }
 
     WTV_SaveVodHistory(data);
     Main_EventPlay('vod', data[6], data[3], WTV_Platform, 'WTV');
@@ -719,13 +907,14 @@ function WTV_OpenVod(vod, channel, identity, liveData) {
 }
 
 function WTV_OpenHistoryVod(data) {
+    data = WTV_NormalizeDataUrls(data);
     var meta = WTV_GetMeta(data);
     var mapping;
     var sourceChannel;
     var identity;
 
     if (!meta) return false;
-    if (WTV_IsVodData(data)) return WTV_OpenVodData(data);
+    if (WTV_IsVodData(data) && !WTV_IsActiveArchiveData(data)) return WTV_OpenVodData(data);
 
     mapping = WTV_GetChannelMapping((meta && meta.twitch_login) || (data && data[6]) || '');
     sourceChannel = (meta && meta.source_channel) || (mapping && mapping.wtv_channel) || '';
@@ -783,6 +972,7 @@ function WTV_OpenRecordingFromLive() {
 
 function WTV_SaveVodHistory(data) {
     if (!data || !WTV_IsData(data) || !WTV_IsVodData(data)) return;
+    data = WTV_NormalizeDataUrls(data);
     Main_Set_history('vod', data);
 }
 
@@ -832,6 +1022,13 @@ function WTV_PlayVodLoadData() {
     var meta = WTV_GetMeta(Main_values_Play_data) || WTV_GetMeta(Play_data.data);
     if (!meta || !meta.playback_url) return false;
 
+    if (meta.playback_kind === 'archive_file') {
+        PlayVod_autoUrl = meta.playback_url;
+        PlayVod_loadDataSuccessEnd('');
+        WTV_SaveVodHistory(Main_values_Play_data);
+        return true;
+    }
+
     if (Main_IsOn_OSInterface) {
         PlayVod_loadDataId = new Date().getTime();
         PlayHLS_GetExternalPlayListAsync(meta.playback_url, PlayVod_loadDataId, null, PlayVod_loadDataResult);
@@ -841,15 +1038,40 @@ function WTV_PlayVodLoadData() {
     return true;
 }
 
-var WTV_PlayVodBlobUrl = '';
+function WTV_ShouldKeepArchivePlaylistOpen(data) {
+    return WTV_IsActiveArchiveData(data);
+}
 
-function WTV_PatchVodPlaylist(playlist, baseUrl) {
+function WTV_ShouldUseDirectPlaylistUrl(data, responseUrl) {
+    var meta = WTV_GetMeta(data);
+    var url = responseUrl || (meta && meta.playback_url) || '';
+
+    return !!(meta && (meta.playback_kind === 'archive_hls' || Main_A_includes_B(url, '/archive/vods/')));
+}
+
+function WTV_PlaylistForPlayback(data, playlist, responseUrl) {
+    if (WTV_ShouldUseDirectPlaylistUrl(data, responseUrl)) return '';
+
+    return WTV_PatchPlaylistForData(data, playlist, responseUrl);
+}
+
+function WTV_PatchPlaylistForData(data, playlist, baseUrl) {
+    var keepOpen = WTV_ShouldKeepArchivePlaylistOpen(data);
+    return WTV_PatchVodPlaylist(playlist, baseUrl, {
+        forceVod: !keepOpen,
+        closePlaylist: !keepOpen
+    });
+}
+
+function WTV_PatchVodPlaylist(playlist, baseUrl, options) {
     if (!playlist || typeof playlist !== 'string') return playlist || '';
 
     var lines = playlist.replace(/\r/g, '').split('\n'),
         out = [],
         hasPlaylistType = false,
         hasEndList = false,
+        forceVod = !options || options.forceVod !== false,
+        closePlaylist = !options || options.closePlaylist !== false,
         i = 0,
         line,
         trimmed;
@@ -859,7 +1081,7 @@ function WTV_PatchVodPlaylist(playlist, baseUrl) {
         trimmed = line.trim();
 
         if (trimmed.toUpperCase().indexOf('#EXT-X-PLAYLIST-TYPE:') === 0) {
-            out.push('#EXT-X-PLAYLIST-TYPE:VOD');
+            out.push(forceVod ? '#EXT-X-PLAYLIST-TYPE:VOD' : line);
             hasPlaylistType = true;
         } else if (trimmed.toUpperCase() === '#EXT-X-ENDLIST') {
             hasEndList = true;
@@ -873,7 +1095,7 @@ function WTV_PatchVodPlaylist(playlist, baseUrl) {
         }
     }
 
-    if (!hasPlaylistType) {
+    if (forceVod && !hasPlaylistType) {
         for (i = 0; i < out.length; i++) {
             if (out[i].toUpperCase().indexOf('#EXT-X-VERSION:') === 0) {
                 out.splice(i + 1, 0, '#EXT-X-PLAYLIST-TYPE:VOD');
@@ -884,7 +1106,7 @@ function WTV_PatchVodPlaylist(playlist, baseUrl) {
         if (!hasPlaylistType) out.splice(1, 0, '#EXT-X-PLAYLIST-TYPE:VOD');
     }
 
-    if (!hasEndList) out.push('#EXT-X-ENDLIST');
+    if (closePlaylist && !hasEndList) out.push('#EXT-X-ENDLIST');
 
     return out.join('\n');
 }
@@ -894,11 +1116,11 @@ function WTV_ToAbsolutePlaylistUrl(url, baseUrl) {
 
     if (url.charAt(0) === '/') {
         var endpoint = WTV_GetEndpoint();
-        return endpoint ? endpoint + url : url;
+        return endpoint ? endpoint.replace(/\/+$/, '') + url : url;
     }
 
     if (baseUrl && /^https?:\/\//i.test(baseUrl)) {
-        return baseUrl.replace(/[^/]*$/, '') + url;
+        return baseUrl.replace(/[?#].*$/, '').replace(/[^/]*$/, '') + url;
     }
 
     return url;
@@ -910,25 +1132,27 @@ function WTV_PatchPlaylistTagUris(line, baseUrl) {
     });
 }
 
-function WTV_CreatePlaylistObjectUrl(playlist) {
-    if (WTV_PlayVodBlobUrl && window.URL && window.URL.revokeObjectURL) {
-        try {
-            window.URL.revokeObjectURL(WTV_PlayVodBlobUrl);
-        } catch (e) {}
-    }
-
-    if (window.Blob && window.URL && window.URL.createObjectURL) {
-        WTV_PlayVodBlobUrl = window.URL.createObjectURL(new Blob([playlist], {type: 'application/vnd.apple.mpegurl'}));
-        return WTV_PlayVodBlobUrl;
-    }
-
-    return 'data:application/vnd.apple.mpegurl;charset=utf-8,' + encodeURIComponent(playlist);
+function WTV_PlayVodLoadDataSuccess(responseObj) {
+    var playbackUrl = responseObj.url || WTV_GetPlaybackUrl(Main_values_Play_data);
+    var playlist = WTV_PlaylistForPlayback(
+        Main_values_Play_data,
+        responseObj.responseText || '',
+        WTV_GetPlaybackBaseUrl(Main_values_Play_data, playbackUrl)
+    );
+    PlayVod_autoUrl = playbackUrl;
+    PlayVod_loadDataSuccessEnd(playlist);
 }
 
-function WTV_PlayVodLoadDataSuccess(responseObj) {
-    var patchedPlaylist = WTV_PatchVodPlaylist(responseObj.responseText || '', responseObj.url || WTV_GetPlaybackUrl(Main_values_Play_data));
-    PlayVod_autoUrl = WTV_CreatePlaylistObjectUrl(patchedPlaylist) || responseObj.url || WTV_GetPlaybackUrl(Main_values_Play_data);
-    PlayVod_loadDataSuccessEnd(patchedPlaylist);
+function WTV_PlayLiveLoadDataSuccess(responseObj) {
+    var playbackUrl = responseObj.url || WTV_GetPlaybackUrl(Play_data.data);
+    var playlist = WTV_PlaylistForPlayback(
+        Play_data.data,
+        responseObj.responseText || '',
+        WTV_GetPlaybackBaseUrl(Play_data.data, playbackUrl)
+    );
+
+    Play_data.AutoUrl = playbackUrl;
+    Play_loadDataSuccessEnd(playlist, false);
 }
 
 function WTV_BuildLiveData(status, sourceKind) {
@@ -937,22 +1161,27 @@ function WTV_BuildLiveData(status, sourceKind) {
     var streamId = status.stream_id || status.recording_group_id || WTV_Platform + ':' + channel;
     var viewerCount = status.viewer_count || 0;
     var title = status.title || channel;
-    var playbackUrl = status.playback_url || status.vod_url || '';
+    var playbackUrl = WTV_AbsoluteArchiveUrl(status.playback_url || status.vod_url || '');
+    var vodUrl = WTV_AbsoluteArchiveUrl(status.vod_url || playbackUrl);
+    var thumbnailUrl = WTV_NormalizeArchiveUrl(status.preview_url || status.thumbnail_url || IMG_404_BANNER);
     var meta = {
         source_platform: WTV_Platform,
         source_channel: channel,
         source_kind: sourceKind || 'live',
         playback_url: playbackUrl,
         playback_kind: status.playback_kind || 'direct_hls',
-        vod_url: status.vod_url || '',
+        vod_url: vodUrl,
         recording_group_id: status.recording_group_id || '',
         stream_id: streamId,
         title: title,
         started_at: startedAt,
-        viewer_count: viewerCount
+        viewer_count: viewerCount,
+        status: status.status || '',
+        active: !!status.active,
+        growing: !!status.growing
     };
     var data = [
-        status.preview_url || status.thumbnail_url || IMG_404_BANNER,
+        thumbnailUrl,
         'w.tv / ' + channel,
         title,
         'w.tv',
@@ -982,5 +1211,5 @@ function WTV_BuildLiveData(status, sourceKind) {
     data.vod_url = meta.vod_url;
     data.recording_group_id = meta.recording_group_id;
 
-    return data;
+    return WTV_NormalizeDataUrls(data);
 }

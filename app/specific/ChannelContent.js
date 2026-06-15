@@ -303,9 +303,9 @@ function ChannelContent_loadDataSuccess() {
         ChannelContent_cursorX = 1;
     } else {
         ChannelContent_createCellOffline(allowMature);
-        ChannelContent_CheckMappedWTVLive(false);
     }
 
+    ChannelContent_CheckMappedWTVLive(false);
     ChannelContent_loadDataSuccessFinish();
 }
 
@@ -369,7 +369,7 @@ function ChannelContent_CheckMappedWTVLive(isPoll) {
     if (typeof WTV_GetCurrentChannelMapping !== 'function') return;
 
     var mapping = WTV_GetCurrentChannelMapping();
-    if (!mapping || !mapping.wtv_channel || ChannelContent_responseText) {
+    if (!mapping || !mapping.wtv_channel) {
         ChannelContent_ClearWTVCheck();
         return;
     }
@@ -400,16 +400,20 @@ function ChannelContent_MappedWTVLiveResult(status, mapping, requestKey) {
             ChannelContent_addFocus();
         }
         WTV_AddMappedLiveToUserFeed(status, mapping);
-    } else if (!ChannelContent_isoffline) {
+    } else if (ChannelContent_isoffline || ChannelContent_IsMappedWTVLiveCell()) {
         ChannelContent_createCellOffline(ChannelContent_allowMature);
     }
 
     ChannelContent_ScheduleWTVCheck();
 }
 
+function ChannelContent_IsMappedWTVLiveCell() {
+    return typeof WTV_IsData === 'function' && ChannelContent_DataObj && WTV_IsData(ChannelContent_DataObj);
+}
+
 function ChannelContent_ScheduleWTVCheck() {
     ChannelContent_ClearWTVCheck();
-    if (Main_values.Main_Go !== Main_ChannelContent || ChannelContent_responseText) return;
+    if (Main_values.Main_Go !== Main_ChannelContent) return;
 
     ChannelContent_WTVCheckId = Main_setTimeout(
         function () {
@@ -423,6 +427,7 @@ function ChannelContent_ScheduleWTVCheck() {
 function ChannelContent_createCellOffline(allowMature) {
     ChannelContent_isoffline = true;
     ChannelContent_allowMature = allowMature;
+    ChannelContent_DataObj = null;
     var offlineString =
         '<div class="stream_info_live">' + STR_CH_IS_OFFLINE + '</div><div class="stream_info_live_title">' + STR_OPEN_CHAT + '</div>';
 

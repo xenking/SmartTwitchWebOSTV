@@ -2044,7 +2044,7 @@
         // loadedmetadata: metadata (duration, dimensions) available. Resume VOD/clip position.
         mv.addEventListener('loadedmetadata', function () {
             if (ms.resume > 0 && (ms.type === 2 || ms.type === 3)) try { mv.currentTime = Math.max(0, ms.resume / 1000); } catch (e) {}
-            call('Play_UpdateDuration', [localVodReportedDurationMs()]);
+            call('Play_UpdateDurationDiv', [localVodReportedDurationMs()]);
             mainErrorCount = 0;
             clearMainStallTimer();
             markMainProgressBaseline();
@@ -5143,7 +5143,7 @@
                 show(mv);
                 if (mv) tryPlay(mv);
             }
-            call('Play_UpdateDuration', [localVodReportedDurationMs()]);
+            call('Play_UpdateDurationDiv', [localVodReportedDurationMs()]);
         };
         // IMPLEMENTED: Restart playback from cached state or trigger app reload.
         A.RestartPlayer = function (t, rs, player) {

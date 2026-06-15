@@ -1630,6 +1630,16 @@ function Main_OPenAsVod(historyPos) {
         return;
     }
 
+    if (
+        typeof WTV_IsData === 'function' &&
+        typeof WTV_IsActiveArchiveData === 'function' &&
+        WTV_IsData(Main_values_Play_data) &&
+        WTV_IsActiveArchiveData(Main_values_Play_data)
+    ) {
+        Main_openStream();
+        return;
+    }
+
     Main_values.Main_selectedChannelDisplayname = Main_values_Play_data[1];
     Main_values.Main_selectedChannel = Main_values_Play_data[6];
     Main_values.Main_selectedChannelLogo = Main_values_Play_data[9];
@@ -2287,6 +2297,7 @@ function Main_Set_history(type, Data, skipUpdateDate) {
         !AddUser_IsUserSet() ||
         !Data ||
         !Data[0] || //Check is user is set, and data is valid
+        (typeof Data[7] === 'undefined' || Data[7] === null || Data[7] === '') ||
         (type === 'live' && ScreenObj[Main_HistoryLive].histPosX[1]) || //Check if the history for this type is enable
         (type === 'vod' && ScreenObj[Main_HistoryVod].histPosX[1]) ||
         (type === 'clip' && ScreenObj[Main_HistoryClip].histPosX[1])
@@ -2302,6 +2313,10 @@ function Main_Set_history(type, Data, skipUpdateDate) {
         ArrayPos.date = !skipUpdateDate ? new Date().getTime() : ArrayPos.date;
         ArrayPos.game = Data[3];
         ArrayPos.views = Data[13];
+        if (typeof WTV_NormalizeHistoryEntry === 'function') {
+            WTV_NormalizeHistoryEntry(type, ArrayPos);
+            delete ArrayPos.wtv_changed;
+        }
     } else {
         //Limit size to 2000
         if (Main_values_History_data[AddUser_UsernameArray[0].id][type].length > 1999) {
@@ -2317,7 +2332,7 @@ function Main_Set_history(type, Data, skipUpdateDate) {
             Main_values_History_data[AddUser_UsernameArray[0].id][type].shift();
         }
 
-        Main_values_History_data[AddUser_UsernameArray[0].id][type].push({
+        var historyEntry = {
             data: Main_Slice(Data),
             date: new Date().getTime(),
             name: Data[6] ? Data[6].toLowerCase() : '',
@@ -2326,7 +2341,14 @@ function Main_Set_history(type, Data, skipUpdateDate) {
             views: Data[13],
             created_at: new Date(Data[12]).getTime(),
             watched: 0
-        });
+        };
+
+        if (typeof WTV_NormalizeHistoryEntry === 'function') {
+            WTV_NormalizeHistoryEntry(type, historyEntry);
+            delete historyEntry.wtv_changed;
+        }
+
+        Main_values_History_data[AddUser_UsernameArray[0].id][type].push(historyEntry);
 
         if (type === 'live') {
             //Sort live by id this allows to always show the newst first even by sorting by othrs tipe
@@ -2370,10 +2392,15 @@ function Main_history_Exist(type, id) {
     var index = 0,
         len = Main_values_History_data[AddUser_UsernameArray[0].id][type].length;
 
+    if (typeof id === 'undefined' || id === null || id === '') return -1;
     id = id.toString();
 
     for (index; index < len; index++) {
-        if (Main_values_History_data[AddUser_UsernameArray[0].id][type][index].id.toString() === id) {
+        if (
+            typeof Main_values_History_data[AddUser_UsernameArray[0].id][type][index].id !== 'undefined' &&
+            Main_values_History_data[AddUser_UsernameArray[0].id][type][index].id !== null &&
+            Main_values_History_data[AddUser_UsernameArray[0].id][type][index].id.toString() === id
+        ) {
             return index;
         }
     }
@@ -2384,6 +2411,7 @@ function Main_history_Exist(type, id) {
 function Main_history_Clean_deleted(type, id) {
     Screens_checkDeleteObj();
 
+    if (typeof id === 'undefined' || id === null || id === '') return;
     id = id.toString();
 
     delete Main_values_History_data[AddUser_UsernameArray[0].id].deleted[type][id];
@@ -2394,12 +2422,13 @@ function Main_history_GetById(type, id) {
         len = Main_values_History_data[AddUser_UsernameArray[0].id][type].length,
         arrayPos;
 
+    if (typeof id === 'undefined' || id === null || id === '') return null;
     id = id.toString();
 
     for (index; index < len; index++) {
         arrayPos = Main_values_History_data[AddUser_UsernameArray[0].id][type][index];
 
-        if (arrayPos.id.toString() === id) {
+        if (arrayPos && typeof arrayPos.id !== 'undefined' && arrayPos.id !== null && arrayPos.id.toString() === id) {
             return arrayPos;
         }
     }
@@ -2425,6 +2454,7 @@ function Main_history_Find_Vod_In_Live(id) {
 
 function Main_history_UpdateLiveVod(id, vod, vodimg) {
     if (!AddUser_IsUserSet() || ScreenObj[Main_HistoryLive].histPosX[1]) return;
+    if (typeof id === 'undefined' || id === null || id === '') return;
 
     var index = Main_history_Exist('live', id.toString());
 
@@ -2482,6 +2512,7 @@ function Main_history_Exist_By_VOD_Id(id) {
     var index = 0,
         len = Main_values_History_data[AddUser_UsernameArray[0].id].live.length;
 
+    if (typeof id === 'undefined' || id === null || id === '') return -1;
     id = id.toString();
 
     for (index; index < len; index++) {
@@ -2501,6 +2532,7 @@ function Main_Restore_history(skipDrive) {
     Main_values_History_data = Screens_assign(Main_values_History_data, Main_getItemJson(Main_values_History_data_ItemName, {}));
 
     Main_HistoryClean();
+    if (typeof WTV_NormalizeHistoryData === 'function' && WTV_NormalizeHistoryData(Main_values_History_data)) Main_setHistoryItem();
 
     Main_history_SetVod_Watched();
     Main_UpdateBlockedHomeScreen();
@@ -2854,6 +2886,15 @@ function Main_StartHistoryworker() {
 
     while (i--) {
         if (array[i] && !array[i].forceVod) {
+            if (
+                typeof WTV_IsData === 'function' &&
+                typeof WTV_IsActiveArchiveData === 'function' &&
+                WTV_IsData(array[i].data) &&
+                WTV_IsActiveArchiveData(array[i].data)
+            ) {
+                continue;
+            }
+
             if (array[i].data[14] && array[i].data[14] !== '') {
                 Main_StartHistoryworkerBradcast(array[i], 1, header);
             } else {

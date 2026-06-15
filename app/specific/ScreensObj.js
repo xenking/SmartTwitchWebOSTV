@@ -2433,6 +2433,12 @@ function ScreensObj_HistoryLive() {
             addCell: function (cell) {
                 //cell.data[14] check here to a bug that introduce emtpy values todo maybe can be removed ins some months
                 if (!this.idObject[cell.data[7]] && cell.data[14] && cell.data[14] !== '') {
+                    var isActiveWTVArchive =
+                        typeof WTV_IsData === 'function' &&
+                        typeof WTV_IsActiveArchiveData === 'function' &&
+                        WTV_IsData(cell.data) &&
+                        WTV_IsActiveArchiveData(cell.data);
+
                     this.itemsCount++;
                     this.idObject[cell.data[7]] = 1;
 
@@ -2444,7 +2450,7 @@ function ScreensObj_HistoryLive() {
                             this.screen,
                             cell.date,
                             cell.vodimg,
-                            (this.streamerID[cell.data[14]] && cell.vodid) || cell.forceVod
+                            !isActiveWTVArchive && ((this.streamerID[cell.data[14]] && cell.vodid) || cell.forceVod)
                         )
                     );
 

@@ -835,6 +835,10 @@ function Play_loadDataResult(response) {
 function Play_loadDataResultEnd(responseObj) {
     if (responseObj.status === 200) {
         Play_WebOSLocalLiveResumeFallback = false;
+        if (WTV_IsData(Play_data.data)) {
+            WTV_PlayLiveLoadDataSuccess(responseObj);
+            return;
+        }
         Play_data.AutoUrl = responseObj.url;
         Play_loadDataSuccessEnd(responseObj.responseText, !WTV_IsData(Play_data.data));
         return;
@@ -969,9 +973,11 @@ function Play_loadDataSuccessFake() {
 }
 
 function Play_qualityChanged() {
-    Play_data.qualityIndex = 1;
+    if (!Play_data.qualities.length) return;
+    Play_data.qualityIndex = Play_data.qualities.length > 1 ? 1 : 0;
 
     for (var i = 0; i < Play_getQualitiesCount(); i++) {
+        if (!Play_data.qualities[i] || !Play_data.qualities[i].id) continue;
         if (Play_data.qualities[i].id === Play_data.quality) {
             Play_data.qualityIndex = i;
             break;
@@ -981,6 +987,7 @@ function Play_qualityChanged() {
         }
     }
 
+    if (!Play_data.qualities[Play_data.qualityIndex] || !Play_data.qualities[Play_data.qualityIndex].id) return;
     Play_SetPlayQuality(Play_data.qualities[Play_data.qualityIndex].id);
 
     Play_SetHtmlQuality(Play_info_quality);
@@ -1006,16 +1013,20 @@ function Play_getQualities(Who_Called, skipchange) {
         result = JSON.parse(baseQualities);
 
         var i = 0,
-            len = result.length;
+            len = result.length,
+            normalized = [];
 
         //add the position to the obj, as we may change the order and need the position to use in Play_controls[Play_controlsQuality]
         for (i; i < len; i++) {
+            if (!result[i] || !result[i].id) continue;
             result[i].position = i - 1;
+            normalized.push(result[i]);
         }
+        result = normalized;
 
         //sort by resolution
         result.sort(function (a, b) {
-            if (!a || !b) {
+            if (!a || !b || !a.id || !b.id) {
                 return 0;
             }
             return parseInt(b.id.split('p')[0]) - parseInt(a.id.split('p')[0]);
@@ -1976,6 +1987,7 @@ function Play_qualityIndexReset() {
         len = Play_getQualitiesCount();
 
     for (i; i < len; i++) {
+        if (!Play_data.qualities[i] || !Play_data.qualities[i].id) continue;
         if (Play_data.qualities[i].id === Play_data.quality) {
             Play_data.qualityIndex = i;
             break;

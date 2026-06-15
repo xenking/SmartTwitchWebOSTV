@@ -1580,10 +1580,7 @@ function Play_CheckPreviewLive(SkipSidepanelFocus) {
             Sidepannel_AddFocusLiveFeed(true);
         }
 
-        restorePreview = Main_A_equals_B(
-            UserLiveFeed_DataObj[UserLiveFeedobj_UserLivePos][Sidepannel_PosFeed][14].toString(),
-            Play_data.data[14].toString()
-        );
+        restorePreview = Play_IsCurrentChannelId(UserLiveFeed_DataObj[UserLiveFeedobj_UserLivePos][Sidepannel_PosFeed][14]);
 
         //live
     } else if (Settings_Obj_default('show_live_player') && !Sidepannel_isShowingUserLive()) {
@@ -1597,11 +1594,8 @@ function Play_CheckPreviewLive(SkipSidepanelFocus) {
                 ScreenObj[Main_values.Main_Go].ids[0]
             )
         ) {
-            restorePreview = Main_A_equals_B(
-                ScreenObj[Main_values.Main_Go].DataObj[
-                    ScreenObj[Main_values.Main_Go].posY + '_' + ScreenObj[Main_values.Main_Go].posX
-                ][14].toString(),
-                Play_data.data[14].toString()
+            restorePreview = Play_IsCurrentChannelId(
+                ScreenObj[Main_values.Main_Go].DataObj[ScreenObj[Main_values.Main_Go].posY + '_' + ScreenObj[Main_values.Main_Go].posX][14]
             );
         }
     }
@@ -1610,6 +1604,12 @@ function Play_CheckPreviewLive(SkipSidepanelFocus) {
     if (Play_PreviewVideoEnded) Play_PreviewVideoEnded = restorePreview;
 
     return restorePreview;
+}
+
+function Play_IsCurrentChannelId(channelId) {
+    var currentId = Play_data && Play_data.data ? Play_data.data[14] : null;
+    if (!channelId || !currentId) return false;
+    return Main_A_equals_B(channelId.toString(), currentId.toString());
 }
 
 function Play_GetAudioIcon(pos) {
