@@ -1002,6 +1002,7 @@ assert.equal(packageJson.scripts['hosted:prepare'], 'npm run webos:prepare-relea
   );
 
   assert.equal(context.Chat_cursor, 'local-live', 'active local archive chat keeps polling after an empty page');
+  assert.equal(context.Chat_offset, 15, 'empty active local archive chat keeps the requested resume offset');
   assert.equal(context.nextRequested, 42, 'active local archive chat requests the next live window instead of ending');
 }
 

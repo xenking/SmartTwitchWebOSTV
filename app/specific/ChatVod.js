@@ -624,7 +624,7 @@ function Chat_loadChatSuccess(responseObj, id) {
         });
     }
 
-    Chat_offset = 0;
+    if (comments.length) Chat_offset = 0;
 
     for (i = 0, len = comments.length; i < len; i++) {
         comments[i] = comments[i].node;

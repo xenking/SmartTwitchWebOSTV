@@ -2136,15 +2136,14 @@ function Play_OpenLiveFeed() {
     Play_OpenFeed(Play_handleKeyDown);
 }
 
-function Play_UserLiveFeedPreviewId(isVod) {
-    var data = UserLiveFeed_GetObj(UserLiveFeed_FeedPosX);
-    if (!data) return null;
-    return data[isVod ? 7 : 14] || null;
-}
-
 function Play_CanReuseUserLiveFeedPreview(isVod) {
-    var previewId = Play_UserLiveFeedPreviewId(isVod);
-    return Play_PreviewId !== null && Play_PreviewId !== undefined && previewId !== null && previewId !== undefined && String(Play_PreviewId) === String(previewId);
+    var data = UserLiveFeed_GetObj(UserLiveFeed_FeedPosX);
+    if (!data || Play_PreviewId === null || Play_PreviewId === undefined) return false;
+    if (isVod) return data[7] !== null && data[7] !== undefined && String(Play_PreviewId) === String(data[7]);
+    return (
+        (data[7] !== null && data[7] !== undefined && String(Play_PreviewId) === String(data[7])) ||
+        (data[14] !== null && data[14] !== undefined && String(Play_PreviewId) === String(data[14]))
+    );
 }
 
 function Play_OpenFeed(keyfun) {
@@ -2181,7 +2180,7 @@ function Play_OpenFeed(keyfun) {
         Play_ClearPlay(true);
         Play_isOn = false;
 
-        if (!Play_PreviewOffset) Play_PreviewOffset = UserLiveFeed_PreviewOffset;
+        if (canReusePreview && !Play_PreviewOffset) Play_PreviewOffset = UserLiveFeed_PreviewOffset;
 
         Main_OpenVodStart(
             UserLiveFeed_GetObj(UserLiveFeed_FeedPosX),
