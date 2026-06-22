@@ -11918,7 +11918,11 @@
         var offset = parseFloat(offsetSeconds) || 0;
         var currentTime = Chat_LocalVodCurrentTimeSeconds();
 
-        if (Chat_LocalVodIsLive() && currentTime && offset + Chat_LocalVodLivePollingLookbackSeconds < currentTime) {
+        if (
+            Chat_LocalVodIsLive() &&
+            currentTime &&
+            (offset + Chat_LocalVodLivePollingLookbackSeconds < currentTime || offset > currentTime + Chat_LocalVodLivePollingLookbackSeconds)
+        ) {
             offset = currentTime - Chat_LocalVodLivePollingLookbackSeconds;
         }
 

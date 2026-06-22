@@ -747,6 +747,12 @@ assert.equal(packageJson.scripts['hosted:prepare'], 'npm run webos:prepare-relea
   assert.equal(context.Chat_LocalVodLoadOffsetSeconds(), 115, 'initial active local VOD chat load starts near current player time when available');
   assert.equal(context.Chat_LocalVodLoadLimit(), 80, 'active local VOD polling uses a bounded backend page size');
 
+  context.Chat_offset = 3600;
+  context.Chat_Messages = [];
+  assert.equal(context.Chat_LocalVodLoadOffsetSeconds(), 115, 'initial active local VOD chat load clamps stale future offsets to the current player window');
+  assert.equal(context.Chat_LocalVodNextLoadOffsetSeconds(), 115, 'active local VOD polling clamps stale future cursors to the current player window');
+
+  context.Chat_offset = 0;
   context.Chat_Messages = [{ time: 118 }, { time: 119 }];
   assert.equal(context.Chat_LocalVodNextLoadOffsetSeconds(), 119.001, 'active local VOD polling keeps normal pagination when chat is already near player time');
 
@@ -761,7 +767,7 @@ assert.equal(packageJson.scripts['hosted:prepare'], 'npm run webos:prepare-relea
     Chat_Messages: [],
     Chat_MessagesNext: [],
     Chat_lastMsgTime: 0,
-    Chat_offset: 0,
+    Chat_offset: 3600,
     Main_IsOn_OSInterface: true,
     ChannelVod_vodOffset: 0,
     Chat_LocalVodChatUnavailable: false,
@@ -793,7 +799,7 @@ assert.equal(packageJson.scripts['hosted:prepare'], 'npm run webos:prepare-relea
 
   context.Chat_LocalVodStartEvents(42);
 
-  assert.equal(context.openedEventOffset, 115, 'active local VOD SSE starts from the current player window when no chat page has advanced the cursor');
+  assert.equal(context.openedEventOffset, 115, 'active local VOD SSE starts from the current player window when the chat cursor is stale or in the future');
 }
 
 {
