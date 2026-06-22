@@ -166,12 +166,19 @@ function LocalVod_PlaybackKind(vod, playbackURL) {
     return 'archive_file';
 }
 
-function LocalVod_ChatPath(meta, offsetSeconds) {
+function LocalVod_ChatPath(meta, offsetSeconds, limit) {
     var vodId = meta && (meta.recording_group_id || meta.stream_id);
     if (!vodId) return '';
     offsetSeconds = parseFloat(offsetSeconds) || 0;
     if (offsetSeconds < 0) offsetSeconds = 0;
-    return '/archive/vods/' + encodeURIComponent(vodId) + '/chat?offset_seconds=' + encodeURIComponent(offsetSeconds);
+    limit = parseInt(limit);
+    return (
+        '/archive/vods/' +
+        encodeURIComponent(vodId) +
+        '/chat?offset_seconds=' +
+        encodeURIComponent(offsetSeconds) +
+        (limit > 0 ? '&limit=' + encodeURIComponent(limit) : '')
+    );
 }
 
 function LocalVod_ChatEventsPath(meta, afterOffsetSeconds) {
@@ -248,9 +255,9 @@ function LocalVod_CanLoadChat() {
     return !!(meta && LocalVod_ChatPath(meta, 0));
 }
 
-function LocalVod_LoadChat(offsetSeconds, success, error) {
+function LocalVod_LoadChat(offsetSeconds, success, error, limit) {
     var meta = typeof PlayVod_LocalVodMeta === 'function' ? PlayVod_LocalVodMeta() : null;
-    var path = LocalVod_ChatPath(meta, offsetSeconds);
+    var path = LocalVod_ChatPath(meta, offsetSeconds, limit);
     if (!path) {
         if (error) error('Local archive chat is not available.');
         return false;

@@ -236,7 +236,7 @@ assert.doesNotMatch(functionBody(chatVodSource, 'Chat_loadChatRequest'), /Chat_o
 assert.match(functionBody(chatVodSource, 'Chat_LocalVodNextOffsetSeconds'), /Chat_Messages/, 'local archive VOD chat pagination advances from loaded message times');
 assert.match(functionBody(chatVodSource, 'Chat_loadChatSuccess'), /sourcePlatform === 'local_archive'[\s\S]*PlayVod_ChatSecondsToPlayerSeconds/, 'local archive chat stays on local timeline while Twitch comments map to player time');
 assert.match(functionBody(chatVodSource, 'Chat_loadChatNextRequest'), /PlayVod_ExternalTwitchVodId/, 'VOD chat cursor request uses linked Twitch VOD id');
-assert.match(functionBody(chatVodSource, 'Chat_loadChatNextRequest'), /Chat_LocalVodNextOffsetSeconds/, 'local archive VOD chat next request is offset based');
+assert.match(functionBody(chatVodSource, 'Chat_loadChatNextRequest'), /Chat_LocalVodNextLoadOffsetSeconds/, 'local archive VOD chat next request is offset based');
 assert.match(functionBody(chatVodSource, 'Chat_loadChatNextRequest'), /Chat_loadTwitchChatNextOffsetRequest/, 'local chat next-page fallback uses the next-result path');
 assert.match(functionBody(chatVodSource, 'Chat_loadTwitchChatNextOffsetRequest'), /Chat_LocalVodNextOffsetSeconds\(\)[\s\S]*Chat_loadChatNextResult/, 'local chat next-page Twitch fallback continues from the current local offset');
 assert.match(functionBody(chatVodSource, 'Chat_loadChatSuccess'), /Chat_LocalVodIsLive/, 'active local archive VOD chat keeps an open live cursor when a page is empty');
@@ -667,9 +667,9 @@ assert.equal(packageJson.scripts['hosted:prepare'], 'npm run webos:prepare-relea
   context.PlayVod_LocalVodMeta = () => localMeta;
   assert.equal(context.LocalVod_CanLoadChat(), true, 'local-only VOD can load archived chat');
   assert.equal(
-    context.LocalVod_ChatPath(localMeta, 12.425),
-    '/archive/vods/grp-melharucos-20260606T062240.114395769Z/chat?offset_seconds=12.425',
-    'local archived chat path uses recording group id and fractional offset seconds'
+    context.LocalVod_ChatPath(localMeta, 12.425, 80),
+    '/archive/vods/grp-melharucos-20260606T062240.114395769Z/chat?offset_seconds=12.425&limit=80',
+    'local archived chat path uses recording group id, fractional offset seconds, and optional polling limit'
   );
   assert.equal(
     context.LocalVod_ChatEventsPath(localMeta, 12.425),
@@ -710,6 +710,47 @@ assert.equal(packageJson.scripts['hosted:prepare'], 'npm run webos:prepare-relea
     'local chat badges map to Twitch-like userBadges'
   );
   assert.equal(twitchLikeNode.message.fragments[0].emote.emoteID, '25', 'local chat emote ranges map to Twitch-like fragments');
+}
+
+{
+  const context = {
+    parseFloat,
+    Chat_Messages: [{ time: 90 }, { time: 95 }],
+    Chat_MessagesNext: [],
+    Chat_lastMsgTime: 0,
+    Chat_offset: 0,
+    Main_IsOn_OSInterface: true,
+    ChannelVod_vodOffset: 0,
+    Chat_LocalVodChatUnavailable: false,
+    LocalVod_IsLiveChat: () => true,
+    OSInterface_gettime: () => 120000,
+    Chat_LocalVodLivePollingLimit: 80,
+    Chat_LocalVodLivePollingLookbackSeconds: 5,
+  };
+  vm.createContext(context);
+  vm.runInContext(
+    `
+      function Chat_LocalVodNextOffsetSeconds() {${functionBody(chatVodSource, 'Chat_LocalVodNextOffsetSeconds')}}
+      function Chat_LocalVodIsLive() {${functionBody(chatVodSource, 'Chat_LocalVodIsLive')}}
+      function Chat_LocalVodCurrentTimeSeconds() {${functionBody(chatVodSource, 'Chat_LocalVodCurrentTimeSeconds')}}
+      function Chat_LocalVodLiveOffsetSeconds(offsetSeconds) {${functionBody(chatVodSource, 'Chat_LocalVodLiveOffsetSeconds')}}
+      function Chat_LocalVodLoadOffsetSeconds() {${functionBody(chatVodSource, 'Chat_LocalVodLoadOffsetSeconds')}}
+      function Chat_LocalVodNextLoadOffsetSeconds() {${functionBody(chatVodSource, 'Chat_LocalVodNextLoadOffsetSeconds')}}
+      function Chat_LocalVodLoadLimit() {${functionBody(chatVodSource, 'Chat_LocalVodLoadLimit')}}
+    `,
+    context
+  );
+
+  assert.equal(context.Chat_LocalVodNextLoadOffsetSeconds(), 115, 'active local VOD polling catches up stale chat offsets to the current player window');
+  assert.equal(context.Chat_LocalVodLoadOffsetSeconds(), 115, 'initial active local VOD chat load starts near current player time when available');
+  assert.equal(context.Chat_LocalVodLoadLimit(), 80, 'active local VOD polling uses a bounded backend page size');
+
+  context.Chat_Messages = [{ time: 118 }, { time: 119 }];
+  assert.equal(context.Chat_LocalVodNextLoadOffsetSeconds(), 119.001, 'active local VOD polling keeps normal pagination when chat is already near player time');
+
+  context.LocalVod_IsLiveChat = () => false;
+  assert.equal(context.Chat_LocalVodLoadLimit(), 0, 'finalized local VOD chat keeps the backend default page size');
+  assert.equal(context.Chat_LocalVodLiveOffsetSeconds(40), 40, 'finalized local VOD chat does not rebase polling offsets to player time');
 }
 
 {
