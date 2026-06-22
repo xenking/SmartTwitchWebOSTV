@@ -519,7 +519,7 @@ function Chat_LocalVodStartEvents(id) {
     }
 
     Chat_LocalVodEventSource = LocalVod_OpenChatEvents(
-        Chat_LocalVodNextOffsetSeconds(),
+        Chat_LocalVodNextLoadOffsetSeconds(),
         function (response) {
             if (Chat_Id[0] !== id) return;
             Chat_loadChatNextResult(

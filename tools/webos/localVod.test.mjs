@@ -755,6 +755,47 @@ assert.equal(packageJson.scripts['hosted:prepare'], 'npm run webos:prepare-relea
 
 {
   const context = {
+    parseFloat,
+    Chat_Messages: [],
+    Chat_MessagesNext: [],
+    Chat_lastMsgTime: 0,
+    Chat_offset: 0,
+    Main_IsOn_OSInterface: true,
+    ChannelVod_vodOffset: 0,
+    Chat_LocalVodChatUnavailable: false,
+    Chat_LocalVodEventSource: null,
+    Chat_LocalVodEventSourceUnavailable: false,
+    Chat_LocalVodLivePollingLookbackSeconds: 5,
+    LocalVod_IsLiveChat: () => true,
+    OSInterface_gettime: () => 120000,
+    LocalVod_OpenChatEvents(offsetSeconds) {
+      context.openedEventOffset = offsetSeconds;
+      return { close() {} };
+    },
+    Chat_loadChatNextResult() {},
+    LocalVod_ChatResponseToTwitchComments: response => JSON.stringify(response),
+  };
+  vm.createContext(context);
+  vm.runInContext(
+    `
+      function Chat_LocalVodNextOffsetSeconds() {${functionBody(chatVodSource, 'Chat_LocalVodNextOffsetSeconds')}}
+      function Chat_LocalVodIsLive() {${functionBody(chatVodSource, 'Chat_LocalVodIsLive')}}
+      function Chat_LocalVodCurrentTimeSeconds() {${functionBody(chatVodSource, 'Chat_LocalVodCurrentTimeSeconds')}}
+      function Chat_LocalVodLiveOffsetSeconds(offsetSeconds) {${functionBody(chatVodSource, 'Chat_LocalVodLiveOffsetSeconds')}}
+      function Chat_LocalVodNextLoadOffsetSeconds() {${functionBody(chatVodSource, 'Chat_LocalVodNextLoadOffsetSeconds')}}
+      function Chat_LocalVodCloseEvents() {${functionBody(chatVodSource, 'Chat_LocalVodCloseEvents')}}
+      function Chat_LocalVodStartEvents(id) {${functionBody(chatVodSource, 'Chat_LocalVodStartEvents')}}
+    `,
+    context
+  );
+
+  context.Chat_LocalVodStartEvents(42);
+
+  assert.equal(context.openedEventOffset, 115, 'active local VOD SSE starts from the current player window when no chat page has advanced the cursor');
+}
+
+{
+  const context = {
     IMG_404_VOD: '404-vod.png',
     IMG_404_LOGO: '404-logo.png',
     Main_values: {},
