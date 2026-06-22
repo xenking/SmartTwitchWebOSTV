@@ -30,6 +30,8 @@ var Chat_offset = 0;
 var Chat_lastMsgTime = 0;
 var Chat_loadingMore = false;
 var Chat_LocalVodChatUnavailable = false;
+var Chat_LocalVodEventSource = null;
+var Chat_LocalVodEventSourceUnavailable = false;
 var Chat_fakeClock = 0;
 var Chat_fakeClockOld = 0;
 var Chat_title = '';
@@ -454,6 +456,49 @@ function Chat_LocalVodNextOffsetSeconds() {
     return offset + 0.001;
 }
 
+function Chat_LocalVodIsLive() {
+    return !Chat_LocalVodChatUnavailable && typeof LocalVod_IsLiveChat === 'function' && LocalVod_IsLiveChat();
+}
+
+function Chat_LocalVodCloseEvents() {
+    if (Chat_LocalVodEventSource) {
+        Chat_LocalVodEventSource.close();
+        Chat_LocalVodEventSource = null;
+    }
+}
+
+function Chat_LocalVodStartEvents(id) {
+    if (
+        !Chat_LocalVodIsLive() ||
+        Chat_LocalVodEventSource ||
+        Chat_LocalVodEventSourceUnavailable ||
+        typeof LocalVod_OpenChatEvents !== 'function'
+    ) {
+        return;
+    }
+
+    Chat_LocalVodEventSource = LocalVod_OpenChatEvents(
+        Chat_LocalVodNextOffsetSeconds(),
+        function (response) {
+            if (Chat_Id[0] !== id) return;
+            Chat_loadChatNextResult(
+                {
+                    status: 200,
+                    responseText: LocalVod_ChatResponseToTwitchComments(response)
+                },
+                id
+            );
+        },
+        function () {
+            Chat_LocalVodCloseEvents();
+            Chat_LocalVodEventSourceUnavailable = true;
+            if (Chat_Id[0] === id && !Chat_hasEnded) Chat_loadChatNext(id);
+        }
+    );
+
+    if (!Chat_LocalVodEventSource) Chat_LocalVodEventSourceUnavailable = true;
+}
+
 function Chat_loadChatRequest(id) {
     if (!PlayVod_CanLoadVodChat()) {
         Chat_NoVod();
@@ -566,7 +611,7 @@ function Chat_loadChatSuccess(responseObj, id) {
 
     if (responseText.data && responseText.data.video && responseText.data.video.comments && responseText.data.video.comments.edges) {
         comments = responseText.data.video.comments.edges || [];
-        Chat_cursor = comments.length ? comments[0].cursor : '';
+        Chat_cursor = comments.length ? comments[0].cursor : Chat_LocalVodIsLive() ? 'local-live' : '';
     } else {
         return;
     }
@@ -730,6 +775,7 @@ function Chat_loadChatSuccess(responseObj, id) {
         }
         Chat_loadingMore = false;
         if (Chat_cursor !== '') {
+            Chat_LocalVodStartEvents(id);
             Chat_loadChatNext(id); //if (Chat_cursor === '') chat has ended
         }
     }
@@ -779,10 +825,12 @@ function Chat_Clear() {
     // on exit cleanup the div
     Chat_hasEnded = false;
     Chat_Pause();
+    Chat_LocalVodCloseEvents();
     Chat_Id[0] = 0;
     Chat_lastMsgTime = 0;
     Chat_loadingMore = false;
     Chat_LocalVodChatUnavailable = false;
+    Chat_LocalVodEventSourceUnavailable = false;
     Main_emptyWithEle(Chat_div[0]);
     Main_emptyWithEle(Chat_div[1]);
     Chat_cursor = null;
@@ -871,6 +919,8 @@ function Chat_loadChatNext(id) {
 function Chat_loadChatNextRequest(id) {
     if (Chat_cursor === '') return;
     if (!Chat_LocalVodChatUnavailable && typeof LocalVod_CanLoadChat === 'function' && LocalVod_CanLoadChat()) {
+        if (Chat_LocalVodIsLive() && Chat_LocalVodEventSource) return;
+
         LocalVod_LoadChat(
             Chat_LocalVodNextOffsetSeconds(),
             function (response) {
