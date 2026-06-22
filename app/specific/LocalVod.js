@@ -166,12 +166,88 @@ function LocalVod_PlaybackKind(vod, playbackURL) {
     return 'archive_file';
 }
 
-function LocalVod_ChatPath(meta, offsetSeconds) {
+function LocalVod_ChatPath(meta, offsetSeconds, limit) {
     var vodId = meta && (meta.recording_group_id || meta.stream_id);
     if (!vodId) return '';
     offsetSeconds = parseFloat(offsetSeconds) || 0;
     if (offsetSeconds < 0) offsetSeconds = 0;
-    return '/archive/vods/' + encodeURIComponent(vodId) + '/chat?offset_seconds=' + encodeURIComponent(offsetSeconds);
+    limit = parseInt(limit);
+    return (
+        '/archive/vods/' +
+        encodeURIComponent(vodId) +
+        '/chat?offset_seconds=' +
+        encodeURIComponent(offsetSeconds) +
+        (limit > 0 ? '&limit=' + encodeURIComponent(limit) : '')
+    );
+}
+
+function LocalVod_ChatEventsPath(meta, afterOffsetSeconds) {
+    var vodId = meta && (meta.recording_group_id || meta.stream_id);
+    var afterOffsetMS;
+    if (!vodId) return '';
+    afterOffsetSeconds = parseFloat(afterOffsetSeconds) || 0;
+    if (afterOffsetSeconds < 0) afterOffsetSeconds = 0;
+    afterOffsetMS = Math.floor(afterOffsetSeconds * 1000);
+    return '/archive/vods/' + encodeURIComponent(vodId) + '/chat/events?after_offset_ms=' + encodeURIComponent(afterOffsetMS);
+}
+
+function LocalVod_AddQueryParam(url, key, value) {
+    if (!url) return '';
+    return url + (url.indexOf('?') === -1 ? '?' : '&') + encodeURIComponent(key) + '=' + encodeURIComponent(value);
+}
+
+function LocalVod_IsLiveChatMeta(meta) {
+    var status = meta && meta.status ? String(meta.status).toLowerCase() : '';
+    return !!(meta && (meta.active || meta.growing || status === 'open' || status === 'recording' || status === 'closing' || status === 'finalizing'));
+}
+
+function LocalVod_IsLiveChat() {
+    var meta = typeof PlayVod_LocalVodMeta === 'function' ? PlayVod_LocalVodMeta() : null;
+    return LocalVod_IsLiveChatMeta(meta);
+}
+
+function LocalVod_ChatEventsUrl(meta, afterOffsetSeconds) {
+    var url = meta && (meta.chat_events_url || meta.chat_event_url || meta.chat_sse_url || meta.live_chat_events_url);
+    var afterOffsetMS;
+
+    if (!url && LocalVod_IsLiveChatMeta(meta)) url = LocalVod_ChatEventsPath(meta, afterOffsetSeconds);
+    if (!url) return '';
+
+    afterOffsetSeconds = parseFloat(afterOffsetSeconds) || 0;
+    if (afterOffsetSeconds < 0) afterOffsetSeconds = 0;
+    afterOffsetMS = Math.floor(afterOffsetSeconds * 1000);
+
+    if (url.indexOf('after_offset_ms=') === -1) url = LocalVod_AddQueryParam(url, 'after_offset_ms', afterOffsetMS);
+    return LocalVod_AbsoluteUrl(url);
+}
+
+function LocalVod_OpenChatEvents(afterOffsetSeconds, success, error) {
+    var meta = typeof PlayVod_LocalVodMeta === 'function' ? PlayVod_LocalVodMeta() : null;
+    var url = LocalVod_ChatEventsUrl(meta, afterOffsetSeconds);
+    var source;
+
+    if (!url || !window.EventSource) return null;
+
+    try {
+        source = new window.EventSource(url);
+    } catch (e) {
+        return null;
+    }
+
+    source.addEventListener('messages', function (event) {
+        var data;
+        try {
+            data = JSON.parse(event.data);
+        } catch (e) {
+            data = null;
+        }
+        if (data && success) success(data);
+    });
+    source.onerror = function () {
+        if (source) source.close();
+        if (error) error();
+    };
+    return source;
 }
 
 function LocalVod_CanLoadChat() {
@@ -179,9 +255,9 @@ function LocalVod_CanLoadChat() {
     return !!(meta && LocalVod_ChatPath(meta, 0));
 }
 
-function LocalVod_LoadChat(offsetSeconds, success, error) {
+function LocalVod_LoadChat(offsetSeconds, success, error, limit) {
     var meta = typeof PlayVod_LocalVodMeta === 'function' ? PlayVod_LocalVodMeta() : null;
-    var path = LocalVod_ChatPath(meta, offsetSeconds);
+    var path = LocalVod_ChatPath(meta, offsetSeconds, limit);
     if (!path) {
         if (error) error('Local archive chat is not available.');
         return false;
@@ -464,6 +540,9 @@ function LocalVod_BuildData(vod, channel, identity, twitchVod) {
     var playbackKind = LocalVod_PlaybackKind(vod, playbackURL);
     var startedAt = LocalVod_StartedAt(vod);
     var durationSeconds = LocalVod_DurationSeconds(vod);
+    var status = (vod && vod.status) || '';
+    var statusLower = String(status).toLowerCase();
+    var active = !!(vod && (vod.active || vod.growing || statusLower === 'open' || statusLower === 'recording'));
     var vodId = LocalVod_Id(vod, channel);
     var twitchVodId = twitchVod && twitchVod.id ? twitchVod.id : '';
     var twitchStartedAt = twitchVod && twitchVod.createdAt ? twitchVod.createdAt : '';
@@ -482,9 +561,13 @@ function LocalVod_BuildData(vod, channel, identity, twitchVod) {
         recording_group_id: vodId,
         stream_id: vodId,
         title: title,
+        status: status,
+        active: active,
+        growing: !!(vod && (vod.growing || active)),
         started_at: startedAt,
         duration_seconds: durationSeconds,
         viewer_count: views,
+        chat_events_url: vod && (vod.chat_events_url || vod.chat_event_url || vod.chat_sse_url || vod.live_chat_events_url || ''),
         twitch_vod_id: twitchVodId,
         twitch_started_at: twitchStartedAt,
         twitch_duration_seconds: twitchDurationSeconds,

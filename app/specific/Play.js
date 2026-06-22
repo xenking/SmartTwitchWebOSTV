@@ -2136,6 +2136,16 @@ function Play_OpenLiveFeed() {
     Play_OpenFeed(Play_handleKeyDown);
 }
 
+function Play_CanReuseUserLiveFeedPreview(isVod) {
+    var data = UserLiveFeed_GetObj(UserLiveFeed_FeedPosX);
+    if (!data || Play_PreviewId === null || Play_PreviewId === undefined) return false;
+    if (isVod) return data[7] !== null && data[7] !== undefined && String(Play_PreviewId) === String(data[7]);
+    return (
+        (data[7] !== null && data[7] !== undefined && String(Play_PreviewId) === String(data[7])) ||
+        (data[14] !== null && data[14] !== undefined && String(Play_PreviewId) === String(data[14]))
+    );
+}
+
 function Play_OpenFeed(keyfun) {
     if (!Main_IsOn_OSInterface) {
         if (PlayClip_isOn || PlayVod_isOn) {
@@ -2146,19 +2156,22 @@ function Play_OpenFeed(keyfun) {
         }
     }
 
-    if (UserLiveFeed_FeedPosX >= UserLiveFeedobj_UserVodPos) {
+    var isVod = UserLiveFeed_FeedPosX >= UserLiveFeedobj_UserVodPos;
+    var canReusePreview = Play_CanReuseUserLiveFeedPreview(isVod);
+
+    if (isVod) {
         if (Play_MultiEnable || PlayExtra_PicturePicture) {
             Play_showWarningMiddleDialog(STR_PP_VOD_ERROR, 2500);
             return;
         }
 
-        Play_PreviewOffset = OSInterface_gettimepreview();
+        Play_PreviewOffset = canReusePreview ? OSInterface_gettimepreview() : 0;
 
-        if (Play_PreviewId && Main_IsOn_OSInterface) {
+        if (canReusePreview && Main_IsOn_OSInterface) {
             OSInterface_ReuseFeedPlayer(Play_PreviewURL, Play_PreviewResponseText, 2, Play_PreviewOffset, 0);
         }
 
-        UserLiveFeed_Hide(Play_PreviewId);
+        UserLiveFeed_Hide(canReusePreview ? Play_PreviewId : 0);
 
         Play_data = JSON.parse(JSON.stringify(Play_data_base));
         Play_PreviewOffset = Play_PreviewOffset / 1000;
@@ -2167,7 +2180,7 @@ function Play_OpenFeed(keyfun) {
         Play_ClearPlay(true);
         Play_isOn = false;
 
-        if (!Play_PreviewOffset) Play_PreviewOffset = UserLiveFeed_PreviewOffset;
+        if (canReusePreview && !Play_PreviewOffset) Play_PreviewOffset = UserLiveFeed_PreviewOffset;
 
         Main_OpenVodStart(
             UserLiveFeed_GetObj(UserLiveFeed_FeedPosX),
@@ -2177,11 +2190,11 @@ function Play_OpenFeed(keyfun) {
             UserLiveFeed_obj[UserLiveFeed_FeedPosX].Screen
         );
     } else {
-        if (Play_PreviewId && Main_IsOn_OSInterface) {
+        if (canReusePreview && Main_IsOn_OSInterface) {
             OSInterface_ReuseFeedPlayer(Play_PreviewURL, Play_PreviewResponseText, 1, 0, 0);
         }
 
-        UserLiveFeed_Hide(Play_PreviewId);
+        UserLiveFeed_Hide(canReusePreview ? Play_PreviewId : 0);
         Play_OpenLiveStream(keyfun);
     }
 
