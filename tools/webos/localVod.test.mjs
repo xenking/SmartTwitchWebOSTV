@@ -594,6 +594,8 @@ assert.equal(packageJson.scripts['hosted:prepare'], 'npm run webos:prepare-relea
   );
   assert.equal(context.LocalVod_GetMeta(activeLocal).active, true, 'active local VOD metadata keeps active state for live chat behavior');
   assert.equal(context.LocalVod_GetMeta(activeLocal).growing, true, 'active local VOD metadata keeps growing state for live chat behavior');
+  assert.equal(context.LocalVod_IsLiveChatMeta({ status: 'closing' }), true, 'closing local VODs keep live chat/SSE enabled');
+  assert.equal(context.LocalVod_IsLiveChatMeta({ status: 'finalizing' }), true, 'finalizing local VODs keep live chat/SSE enabled');
 
   const prunedLocal = context.LocalVod_BuildData(
     {

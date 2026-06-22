@@ -11466,6 +11466,10 @@
     var Chat_lastMsgTime = 0;
     var Chat_loadingMore = false;
     var Chat_LocalVodChatUnavailable = false;
+    var Chat_LocalVodEventSource = null;
+    var Chat_LocalVodEventSourceUnavailable = false;
+    var Chat_LocalVodLivePollingLimit = 80;
+    var Chat_LocalVodLivePollingLookbackSeconds = 5;
     var Chat_fakeClock = 0;
     var Chat_fakeClockOld = 0;
     var Chat_title = '';
@@ -11890,6 +11894,88 @@
         return offset + 0.001;
     }
 
+    function Chat_LocalVodIsLive() {
+        return !Chat_LocalVodChatUnavailable && typeof LocalVod_IsLiveChat === 'function' && LocalVod_IsLiveChat();
+    }
+
+    function Chat_LocalVodCurrentTimeSeconds() {
+        var currentTime = 0;
+
+        try {
+            if (Main_IsOn_OSInterface && typeof OSInterface_gettime === 'function') currentTime = OSInterface_gettime() / 1000;
+            else if (!Main_IsOn_OSInterface) currentTime = Chat_fakeClock;
+        } catch (e) {
+            currentTime = 0;
+        }
+
+        currentTime = parseFloat(currentTime) || 0;
+        currentTime += parseFloat(ChannelVod_vodOffset) || 0;
+
+        return currentTime > 0 ? currentTime : 0;
+    }
+
+    function Chat_LocalVodLiveOffsetSeconds(offsetSeconds) {
+        var offset = parseFloat(offsetSeconds) || 0;
+        var currentTime = Chat_LocalVodCurrentTimeSeconds();
+
+        if (Chat_LocalVodIsLive() && currentTime && offset + Chat_LocalVodLivePollingLookbackSeconds < currentTime) {
+            offset = currentTime - Chat_LocalVodLivePollingLookbackSeconds;
+        }
+
+        return offset > 0 ? offset : 0;
+    }
+
+    function Chat_LocalVodLoadOffsetSeconds() {
+        return Chat_LocalVodLiveOffsetSeconds(Chat_offset ? parseFloat(Chat_offset) : 0);
+    }
+
+    function Chat_LocalVodNextLoadOffsetSeconds() {
+        return Chat_LocalVodLiveOffsetSeconds(Chat_LocalVodNextOffsetSeconds());
+    }
+
+    function Chat_LocalVodLoadLimit() {
+        return Chat_LocalVodIsLive() ? Chat_LocalVodLivePollingLimit : 0;
+    }
+
+    function Chat_LocalVodCloseEvents() {
+        if (Chat_LocalVodEventSource) {
+            Chat_LocalVodEventSource.close();
+            Chat_LocalVodEventSource = null;
+        }
+    }
+
+    function Chat_LocalVodStartEvents(id) {
+        if (
+            !Chat_LocalVodIsLive() ||
+            Chat_LocalVodEventSource ||
+            Chat_LocalVodEventSourceUnavailable ||
+            typeof LocalVod_OpenChatEvents !== 'function'
+        ) {
+            return;
+        }
+
+        Chat_LocalVodEventSource = LocalVod_OpenChatEvents(
+            Chat_LocalVodNextLoadOffsetSeconds(),
+            function (response) {
+                if (Chat_Id[0] !== id) return;
+                Chat_loadChatNextResult(
+                    {
+                        status: 200,
+                        responseText: LocalVod_ChatResponseToTwitchComments(response)
+                    },
+                    id
+                );
+            },
+            function () {
+                Chat_LocalVodCloseEvents();
+                Chat_LocalVodEventSourceUnavailable = true;
+                if (Chat_Id[0] === id && !Chat_hasEnded) Chat_loadChatNext(id);
+            }
+        );
+
+        if (!Chat_LocalVodEventSource) Chat_LocalVodEventSourceUnavailable = true;
+    }
+
     function Chat_loadChatRequest(id) {
         if (!PlayVod_CanLoadVodChat()) {
             Chat_NoVod();
@@ -11898,7 +11984,7 @@
 
         if (!Chat_LocalVodChatUnavailable && typeof LocalVod_CanLoadChat === 'function' && LocalVod_CanLoadChat()) {
             LocalVod_LoadChat(
-                Chat_offset ? parseFloat(Chat_offset) : 0,
+                Chat_LocalVodLoadOffsetSeconds(),
                 function (response) {
                     Chat_loadChatRequestResult(
                         {
@@ -11915,7 +12001,8 @@
                     } else {
                         Chat_loadChatError(id);
                     }
-                }
+                },
+                Chat_LocalVodLoadLimit()
             );
             return;
         }
@@ -12002,7 +12089,7 @@
 
         if (responseText.data && responseText.data.video && responseText.data.video.comments && responseText.data.video.comments.edges) {
             comments = responseText.data.video.comments.edges || [];
-            Chat_cursor = comments.length ? comments[0].cursor : '';
+            Chat_cursor = comments.length ? comments[0].cursor : Chat_LocalVodIsLive() ? 'local-live' : '';
         } else {
             return;
         }
@@ -12015,7 +12102,7 @@
             });
         }
 
-        Chat_offset = 0;
+        if (comments.length) Chat_offset = 0;
 
         for (i = 0, len = comments.length; i < len; i++) {
             comments[i] = comments[i].node;
@@ -12166,6 +12253,7 @@
             }
             Chat_loadingMore = false;
             if (Chat_cursor !== '') {
+                Chat_LocalVodStartEvents(id);
                 Chat_loadChatNext(id); //if (Chat_cursor === '') chat has ended
             }
         }
@@ -12215,10 +12303,12 @@
         // on exit cleanup the div
         Chat_hasEnded = false;
         Chat_Pause();
+        Chat_LocalVodCloseEvents();
         Chat_Id[0] = 0;
         Chat_lastMsgTime = 0;
         Chat_loadingMore = false;
         Chat_LocalVodChatUnavailable = false;
+        Chat_LocalVodEventSourceUnavailable = false;
         Main_emptyWithEle(Chat_div[0]);
         Main_emptyWithEle(Chat_div[1]);
         Chat_cursor = null;
@@ -12307,8 +12397,10 @@
     function Chat_loadChatNextRequest(id) {
         if (Chat_cursor === '') return;
         if (!Chat_LocalVodChatUnavailable && typeof LocalVod_CanLoadChat === 'function' && LocalVod_CanLoadChat()) {
+            if (Chat_LocalVodIsLive() && Chat_LocalVodEventSource) return;
+
             LocalVod_LoadChat(
-                Chat_LocalVodNextOffsetSeconds(),
+                Chat_LocalVodNextLoadOffsetSeconds(),
                 function (response) {
                     Chat_loadChatNextResult(
                         {
@@ -12325,7 +12417,8 @@
                     } else {
                         Chat_loadChatNextError(id);
                     }
-                }
+                },
+                Chat_LocalVodLoadLimit()
             );
             return;
         }
@@ -12604,12 +12697,91 @@
         return 'archive_file';
     }
 
-    function LocalVod_ChatPath(meta, offsetSeconds) {
+    function LocalVod_ChatPath(meta, offsetSeconds, limit) {
         var vodId = meta && (meta.recording_group_id || meta.stream_id);
         if (!vodId) return '';
         offsetSeconds = parseFloat(offsetSeconds) || 0;
         if (offsetSeconds < 0) offsetSeconds = 0;
-        return '/archive/vods/' + encodeURIComponent(vodId) + '/chat?offset_seconds=' + encodeURIComponent(offsetSeconds);
+        limit = parseInt(limit);
+        return (
+            '/archive/vods/' +
+            encodeURIComponent(vodId) +
+            '/chat?offset_seconds=' +
+            encodeURIComponent(offsetSeconds) +
+            (limit > 0 ? '&limit=' + encodeURIComponent(limit) : '')
+        );
+    }
+
+    function LocalVod_ChatEventsPath(meta, afterOffsetSeconds) {
+        var vodId = meta && (meta.recording_group_id || meta.stream_id);
+        var afterOffsetMS;
+        if (!vodId) return '';
+        afterOffsetSeconds = parseFloat(afterOffsetSeconds) || 0;
+        if (afterOffsetSeconds < 0) afterOffsetSeconds = 0;
+        afterOffsetMS = Math.floor(afterOffsetSeconds * 1000);
+        return '/archive/vods/' + encodeURIComponent(vodId) + '/chat/events?after_offset_ms=' + encodeURIComponent(afterOffsetMS);
+    }
+
+    function LocalVod_AddQueryParam(url, key, value) {
+        if (!url) return '';
+        return url + (url.indexOf('?') === -1 ? '?' : '&') + encodeURIComponent(key) + '=' + encodeURIComponent(value);
+    }
+
+    function LocalVod_IsLiveChatMeta(meta) {
+        var status = meta && meta.status ? String(meta.status).toLowerCase() : '';
+        return !!(
+            meta &&
+            (meta.active || meta.growing || status === 'open' || status === 'recording' || status === 'closing' || status === 'finalizing')
+        );
+    }
+
+    function LocalVod_IsLiveChat() {
+        var meta = typeof PlayVod_LocalVodMeta === 'function' ? PlayVod_LocalVodMeta() : null;
+        return LocalVod_IsLiveChatMeta(meta);
+    }
+
+    function LocalVod_ChatEventsUrl(meta, afterOffsetSeconds) {
+        var url = meta && (meta.chat_events_url || meta.chat_event_url || meta.chat_sse_url || meta.live_chat_events_url);
+        var afterOffsetMS;
+
+        if (!url && LocalVod_IsLiveChatMeta(meta)) url = LocalVod_ChatEventsPath(meta, afterOffsetSeconds);
+        if (!url) return '';
+
+        afterOffsetSeconds = parseFloat(afterOffsetSeconds) || 0;
+        if (afterOffsetSeconds < 0) afterOffsetSeconds = 0;
+        afterOffsetMS = Math.floor(afterOffsetSeconds * 1000);
+
+        if (url.indexOf('after_offset_ms=') === -1) url = LocalVod_AddQueryParam(url, 'after_offset_ms', afterOffsetMS);
+        return LocalVod_AbsoluteUrl(url);
+    }
+
+    function LocalVod_OpenChatEvents(afterOffsetSeconds, success, error) {
+        var meta = typeof PlayVod_LocalVodMeta === 'function' ? PlayVod_LocalVodMeta() : null;
+        var url = LocalVod_ChatEventsUrl(meta, afterOffsetSeconds);
+        var source;
+
+        if (!url || !window.EventSource) return null;
+
+        try {
+            source = new window.EventSource(url);
+        } catch (e) {
+            return null;
+        }
+
+        source.addEventListener('messages', function (event) {
+            var data;
+            try {
+                data = JSON.parse(event.data);
+            } catch (e) {
+                data = null;
+            }
+            if (data && success) success(data);
+        });
+        source.onerror = function () {
+            if (source) source.close();
+            if (error) error();
+        };
+        return source;
     }
 
     function LocalVod_CanLoadChat() {
@@ -12617,9 +12789,9 @@
         return !!(meta && LocalVod_ChatPath(meta, 0));
     }
 
-    function LocalVod_LoadChat(offsetSeconds, success, error) {
+    function LocalVod_LoadChat(offsetSeconds, success, error, limit) {
         var meta = typeof PlayVod_LocalVodMeta === 'function' ? PlayVod_LocalVodMeta() : null;
-        var path = LocalVod_ChatPath(meta, offsetSeconds);
+        var path = LocalVod_ChatPath(meta, offsetSeconds, limit);
         if (!path) {
             if (error) error('Local archive chat is not available.');
             return false;
@@ -12904,6 +13076,9 @@
         var playbackKind = LocalVod_PlaybackKind(vod, playbackURL);
         var startedAt = LocalVod_StartedAt(vod);
         var durationSeconds = LocalVod_DurationSeconds(vod);
+        var status = (vod && vod.status) || '';
+        var statusLower = String(status).toLowerCase();
+        var active = !!(vod && (vod.active || vod.growing || statusLower === 'open' || statusLower === 'recording'));
         var vodId = LocalVod_Id(vod, channel);
         var twitchVodId = twitchVod && twitchVod.id ? twitchVod.id : '';
         var twitchStartedAt = twitchVod && twitchVod.createdAt ? twitchVod.createdAt : '';
@@ -12922,9 +13097,13 @@
             recording_group_id: vodId,
             stream_id: vodId,
             title: title,
+            status: status,
+            active: active,
+            growing: !!(vod && (vod.growing || active)),
             started_at: startedAt,
             duration_seconds: durationSeconds,
             viewer_count: views,
+            chat_events_url: vod && (vod.chat_events_url || vod.chat_event_url || vod.chat_sse_url || vod.live_chat_events_url || ''),
             twitch_vod_id: twitchVodId,
             twitch_started_at: twitchStartedAt,
             twitch_duration_seconds: twitchDurationSeconds,
@@ -20616,6 +20795,16 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
         Play_OpenFeed(Play_handleKeyDown);
     }
 
+    function Play_CanReuseUserLiveFeedPreview(isVod) {
+        var data = UserLiveFeed_GetObj(UserLiveFeed_FeedPosX);
+        if (!data || Play_PreviewId === null || Play_PreviewId === undefined) return false;
+        if (isVod) return data[7] !== null && data[7] !== undefined && String(Play_PreviewId) === String(data[7]);
+        return (
+            (data[7] !== null && data[7] !== undefined && String(Play_PreviewId) === String(data[7])) ||
+            (data[14] !== null && data[14] !== undefined && String(Play_PreviewId) === String(data[14]))
+        );
+    }
+
     function Play_OpenFeed(keyfun) {
         if (!Main_IsOn_OSInterface) {
             if (PlayClip_isOn || PlayVod_isOn) {
@@ -20626,19 +20815,22 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
             }
         }
 
-        if (UserLiveFeed_FeedPosX >= UserLiveFeedobj_UserVodPos) {
+        var isVod = UserLiveFeed_FeedPosX >= UserLiveFeedobj_UserVodPos;
+        var canReusePreview = Play_CanReuseUserLiveFeedPreview(isVod);
+
+        if (isVod) {
             if (Play_MultiEnable || PlayExtra_PicturePicture) {
                 Play_showWarningMiddleDialog(STR_PP_VOD_ERROR, 2500);
                 return;
             }
 
-            Play_PreviewOffset = OSInterface_gettimepreview();
+            Play_PreviewOffset = canReusePreview ? OSInterface_gettimepreview() : 0;
 
-            if (Play_PreviewId && Main_IsOn_OSInterface) {
+            if (canReusePreview && Main_IsOn_OSInterface) {
                 OSInterface_ReuseFeedPlayer(Play_PreviewURL, Play_PreviewResponseText, 2, Play_PreviewOffset, 0);
             }
 
-            UserLiveFeed_Hide(Play_PreviewId);
+            UserLiveFeed_Hide(canReusePreview ? Play_PreviewId : 0);
 
             Play_data = JSON.parse(JSON.stringify(Play_data_base));
             Play_PreviewOffset = Play_PreviewOffset / 1000;
@@ -20647,7 +20839,7 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
             Play_ClearPlay(true);
             Play_isOn = false;
 
-            if (!Play_PreviewOffset) Play_PreviewOffset = UserLiveFeed_PreviewOffset;
+            if (canReusePreview && !Play_PreviewOffset) Play_PreviewOffset = UserLiveFeed_PreviewOffset;
 
             Main_OpenVodStart(
                 UserLiveFeed_GetObj(UserLiveFeed_FeedPosX),
@@ -20657,11 +20849,11 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
                 UserLiveFeed_obj[UserLiveFeed_FeedPosX].Screen
             );
         } else {
-            if (Play_PreviewId && Main_IsOn_OSInterface) {
+            if (canReusePreview && Main_IsOn_OSInterface) {
                 OSInterface_ReuseFeedPlayer(Play_PreviewURL, Play_PreviewResponseText, 1, 0, 0);
             }
 
-            UserLiveFeed_Hide(Play_PreviewId);
+            UserLiveFeed_Hide(canReusePreview ? Play_PreviewId : 0);
             Play_OpenLiveStream(keyfun);
         }
 

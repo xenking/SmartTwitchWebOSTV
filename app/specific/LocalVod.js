@@ -198,7 +198,7 @@ function LocalVod_AddQueryParam(url, key, value) {
 
 function LocalVod_IsLiveChatMeta(meta) {
     var status = meta && meta.status ? String(meta.status).toLowerCase() : '';
-    return !!(meta && (meta.active || meta.growing || status === 'open' || status === 'recording'));
+    return !!(meta && (meta.active || meta.growing || status === 'open' || status === 'recording' || status === 'closing' || status === 'finalizing'));
 }
 
 function LocalVod_IsLiveChat() {
