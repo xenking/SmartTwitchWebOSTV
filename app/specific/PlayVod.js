@@ -475,6 +475,11 @@ function PlayVod_WebOSLocalBridge() {
 var PlayVod_WebOSLocalPlaylistLoadId = 0;
 var PlayVod_WebOSLocalPendingResult = null;
 
+function PlayVod_WebOSLocalCancelPlaylistRequest() {
+    PlayVod_WebOSLocalPlaylistLoadId++;
+    PlayVod_WebOSLocalPendingResult = null;
+}
+
 function PlayVod_WebOSLocalShouldFetchPlaylist(result) {
     return !!(
         result &&
@@ -617,10 +622,12 @@ function PlayVod_WebOSLocalActions() {
                 PlayHLS_GetExternalPlayListAsync(result.url, PlayVod_WebOSLocalPlaylistLoadId, null, PlayVod_WebOSLocalPlaylistResult);
                 return;
             }
+            PlayVod_WebOSLocalCancelPlaylistRequest();
             PlayVod_WebOSLocalStartResult(result, result.playlist || '');
         },
         playTwitch: function (result) {
             if (!PlayVod_isOn) return;
+            PlayVod_WebOSLocalCancelPlaylistRequest();
             var offsetSeconds = result ? parseFloat(result.offsetSeconds) : NaN;
             if (isFinite(offsetSeconds) && (offsetSeconds > 0 || (result && result.suppressLocal))) {
                 Main_vodOffset = offsetSeconds > 0 ? offsetSeconds : 0.001;

@@ -34,6 +34,7 @@ function functionBody(source, name) {
 function installPlayVodLocalActions(context) {
   vm.createContext(context);
   vm.runInContext('var PlayVod_WebOSLocalPlaylistLoadId = 0; var PlayVod_WebOSLocalPendingResult = null;', context);
+  vm.runInContext(`function PlayVod_WebOSLocalCancelPlaylistRequest() {${functionBody(playVodSource, 'PlayVod_WebOSLocalCancelPlaylistRequest')}}`, context);
   vm.runInContext(`function PlayVod_WebOSLocalShouldFetchPlaylist(result) {${functionBody(playVodSource, 'PlayVod_WebOSLocalShouldFetchPlaylist')}}`, context);
   vm.runInContext(`function PlayVod_WebOSLocalStartResult(result, playlist) {${functionBody(playVodSource, 'PlayVod_WebOSLocalStartResult')}}`, context);
   vm.runInContext(`function PlayVod_WebOSLocalPlaylistResult(response) {${functionBody(playVodSource, 'PlayVod_WebOSLocalPlaylistResult')}}`, context);
@@ -883,6 +884,54 @@ assert.equal(packageJson.scripts['hosted:prepare'], 'npm run webos:prepare-relea
 }
 
 {
+  const requests = [];
+  const context = {
+    Chat_cursor: 'local-live',
+    Chat_LocalVodChatUnavailable: false,
+    Chat_LocalVodNextRequestPending: false,
+    Chat_LocalVodEventSource: { close() {} },
+    LocalVod_CanLoadChat: () => true,
+    Chat_LocalVodNextLoadOffsetSeconds: () => 123,
+    Chat_LocalVodLoadLimit: () => 80,
+    LocalVod_LoadChat(offsetSeconds, success, error, limit) {
+      requests.push({ offsetSeconds, success, error, limit });
+      return true;
+    },
+    LocalVod_ChatResponseToTwitchComments: response => JSON.stringify(response),
+    Chat_loadChatNextResult(responseObj, id) {
+      context.nextResult = { responseObj, id };
+    },
+    PlayVod_ExternalTwitchVodId: () => '',
+    Chat_loadChatNextError(id) {
+      context.nextError = id;
+    },
+    Chat_loadTwitchChatNextOffsetRequest(id) {
+      context.twitchFallback = id;
+    },
+  };
+  vm.createContext(context);
+  vm.runInContext(`function Chat_loadChatNextRequest(id) {${functionBody(chatVodSource, 'Chat_loadChatNextRequest')}}`, context);
+
+  context.Chat_loadChatNextRequest(42);
+  context.Chat_loadChatNextRequest(42);
+
+  assert.equal(requests.length, 1, 'local VOD next polling starts even while SSE is open and avoids overlapping requests');
+  assert.equal(requests[0].offsetSeconds, 123, 'local VOD next polling uses the next local chat offset');
+  assert.equal(requests[0].limit, 80, 'local VOD next polling keeps the bounded live page size');
+
+  requests[0].success({ messages: [] });
+
+  assert.equal(context.Chat_LocalVodNextRequestPending, false, 'local VOD next polling clears pending state after success');
+  assert.equal(context.nextResult.id, 42, 'local VOD next polling passes through the chat id on success');
+  assert.equal(context.nextResult.responseObj.status, 200, 'local VOD next polling wraps successful responses');
+  assert.equal(context.nextResult.responseObj.responseText, '{"messages":[]}', 'local VOD next polling maps responses to Twitch-like comments');
+
+  context.Chat_loadChatNextRequest(42);
+
+  assert.equal(requests.length, 2, 'local VOD next polling can continue after the previous request completes');
+}
+
+{
   const context = {
     IMG_404_VOD: '404-vod.png',
     IMG_404_LOGO: '404-logo.png',
@@ -1158,6 +1207,83 @@ assert.equal(packageJson.scripts['hosted:prepare'], 'npm run webos:prepare-relea
 }
 
 {
+  const requests = [];
+  const context = {
+    PlayVod_isOn: true,
+    PlayVod_autoUrl: '',
+    PlayVod_playlist: '',
+    PlayVod_ResumeTime: 0,
+    PlayVod_currentTime: 0,
+    Main_vodOffset: 0,
+    Main_IsOn_OSInterface: true,
+    Main_values: { ChannelVod_vodId: 'twitch-live' },
+    PlayVod_WebOSLocalUpdateControlLabel() {},
+    PlayVod_WebOSLocalNotify() {},
+    Play_showBufferDialog() {},
+    PlayVod_SaveVodIds(value) {
+      context.__savedVodOffset = value;
+    },
+    LocalVod_PatchPlaylist(playlist, playbackUrl) {
+      return playlist.replace('segments/000001.ts', playbackUrl.replace(/playlist\.m3u8$/, 'segments/000001.ts'));
+    },
+    PlayHLS_GetExternalPlayListAsync(url, checkId, _headers, callback) {
+      requests.push({ url, checkId, callback });
+    },
+    PlayVod_loadDataSuccessEnd(playlist) {
+      context.__startedPlaylist = playlist;
+    },
+    PlayVod_loadDataTwitch() {
+      context.__loadedTwitch = true;
+    },
+  };
+  installPlayVodLocalActions(context);
+
+  context.PlayVod_WebOSLocalActions().playLocal({
+    url: 'http://192.168.0.109:18080/archive/vods/old/playlist.m3u8',
+    playlist: '',
+    offsetSeconds: 10,
+    twitchOffsetSeconds: 10,
+  });
+  context.PlayVod_WebOSLocalActions().playLocal({
+    url: 'http://192.168.0.109:18080/archive/vods/direct/playlist.m3u8',
+    playlist: '#EXTM3U\n#EXTINF:2,\nhttp://192.168.0.109:18080/archive/vods/direct/segments/000001.ts',
+    offsetSeconds: 30,
+    twitchOffsetSeconds: 30,
+  });
+  requests[0].callback(
+    JSON.stringify({
+      status: 200,
+      checkResult: requests[0].checkId,
+      url: requests[0].url,
+      responseText: '#EXTM3U\n#EXTINF:2,\nsegments/000001.ts',
+    })
+  );
+
+  assert.equal(context.PlayVod_autoUrl, 'http://192.168.0.109:18080/archive/vods/direct/playlist.m3u8', 'stale playlist response does not replace a newer direct local start');
+  assert.equal(context.Main_vodOffset, 30, 'stale playlist response does not replace the newer direct local offset');
+
+  context.PlayVod_WebOSLocalActions().playLocal({
+    url: 'http://192.168.0.109:18080/archive/vods/old2/playlist.m3u8',
+    playlist: '',
+    offsetSeconds: 40,
+    twitchOffsetSeconds: 40,
+  });
+  context.PlayVod_WebOSLocalActions().playTwitch({ offsetSeconds: 50, suppressLocal: true });
+  requests[1].callback(
+    JSON.stringify({
+      status: 200,
+      checkResult: requests[1].checkId,
+      url: requests[1].url,
+      responseText: '#EXTM3U\n#EXTINF:2,\nsegments/000001.ts',
+    })
+  );
+
+  assert.equal(context.__loadedTwitch, true, 'newer Twitch start runs after canceling a pending local playlist fetch');
+  assert.equal(context.PlayVod_autoUrl, 'http://192.168.0.109:18080/archive/vods/direct/playlist.m3u8', 'stale playlist response does not replace a newer Twitch start');
+  assert.equal(context.Main_vodOffset, 50, 'stale playlist response does not replace the newer Twitch offset');
+}
+
+{
   const matchResponse = {
     matched: true,
     position_within_recording: true,
@@ -1395,8 +1521,8 @@ assert.equal(packageJson.scripts['hosted:prepare'], 'npm run webos:prepare-relea
 
   context.Main_Addline(42);
 
-  assert.deepEqual(context.Chat_Messages, [heldMessage], 'active local VOD chat keeps the current queue while waiting for SSE messages');
-  assert.equal(context.nextRequested, undefined, 'active local VOD chat does not poll a next page while the SSE stream is open');
+  assert.deepEqual(context.Chat_Messages, [heldMessage], 'active local VOD chat keeps the current queue while fetching more messages');
+  assert.equal(context.nextRequested, 42, 'active local VOD chat polls the next page even while the SSE stream is open');
   assert.equal(context.Chat_hasEnded, false, 'active local VOD chat does not mark chat ended while waiting for SSE messages');
 }
 
