@@ -201,6 +201,11 @@ function LocalVod_IsLiveChatMeta(meta) {
     return !!(meta && (meta.active || meta.growing || status === 'open' || status === 'recording' || status === 'closing' || status === 'finalizing'));
 }
 
+function LocalVod_CanStreamChatEventsMeta(meta) {
+    var status = meta && meta.status ? String(meta.status).toLowerCase() : '';
+    return !!(meta && (meta.active || meta.growing || status === 'open' || status === 'recording' || status === 'closing'));
+}
+
 function LocalVod_IsLiveChat() {
     var meta = typeof PlayVod_LocalVodMeta === 'function' ? PlayVod_LocalVodMeta() : null;
     return LocalVod_IsLiveChatMeta(meta);
@@ -210,7 +215,7 @@ function LocalVod_ChatEventsUrl(meta, afterOffsetSeconds) {
     var url = meta && (meta.chat_events_url || meta.chat_event_url || meta.chat_sse_url || meta.live_chat_events_url);
     var afterOffsetMS;
 
-    if (!url && LocalVod_IsLiveChatMeta(meta)) url = LocalVod_ChatEventsPath(meta, afterOffsetSeconds);
+    if (!url && LocalVod_CanStreamChatEventsMeta(meta)) url = LocalVod_ChatEventsPath(meta, afterOffsetSeconds);
     if (!url) return '';
 
     afterOffsetSeconds = parseFloat(afterOffsetSeconds) || 0;

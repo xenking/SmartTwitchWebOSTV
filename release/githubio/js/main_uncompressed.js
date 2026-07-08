@@ -12093,7 +12093,7 @@
 
         if (responseText.data && responseText.data.video && responseText.data.video.comments && responseText.data.video.comments.edges) {
             comments = responseText.data.video.comments.edges || [];
-            Chat_cursor = comments.length ? comments[0].cursor : Chat_LocalVodIsLive() ? 'local-live' : '';
+            Chat_cursor = comments.length ? comments[comments.length - 1].cursor || '' : Chat_LocalVodIsLive() ? 'local-live' : '';
         } else {
             return;
         }
@@ -12353,7 +12353,7 @@
                 }
             }
         } else {
-            if (Chat_cursor !== '' || Chat_MessagesNext.length) {
+            if (Chat_MessagesNext.length) {
                 //array.slice() may crash RangeError: Maximum call stack size exceeded
                 Chat_Messages = Main_Slice(Chat_MessagesNext);
 
@@ -12366,6 +12366,10 @@
                 }
 
                 Chat_Clean(0);
+            } else if (Chat_cursor !== '') {
+                if (Chat_Id[0] === id && !(Chat_LocalVodIsLive() && Chat_LocalVodEventSource)) {
+                    Chat_loadChatNext(id);
+                }
             } else {
                 //Chat has ended try to load more as this may be a live that is being played as VOD
                 if (Chat_lastMsgTime && !Chat_loadingMore) {
@@ -12739,6 +12743,11 @@
         );
     }
 
+    function LocalVod_CanStreamChatEventsMeta(meta) {
+        var status = meta && meta.status ? String(meta.status).toLowerCase() : '';
+        return !!(meta && (meta.active || meta.growing || status === 'open' || status === 'recording' || status === 'closing'));
+    }
+
     function LocalVod_IsLiveChat() {
         var meta = typeof PlayVod_LocalVodMeta === 'function' ? PlayVod_LocalVodMeta() : null;
         return LocalVod_IsLiveChatMeta(meta);
@@ -12748,7 +12757,7 @@
         var url = meta && (meta.chat_events_url || meta.chat_event_url || meta.chat_sse_url || meta.live_chat_events_url);
         var afterOffsetMS;
 
-        if (!url && LocalVod_IsLiveChatMeta(meta)) url = LocalVod_ChatEventsPath(meta, afterOffsetSeconds);
+        if (!url && LocalVod_CanStreamChatEventsMeta(meta)) url = LocalVod_ChatEventsPath(meta, afterOffsetSeconds);
         if (!url) return '';
 
         afterOffsetSeconds = parseFloat(afterOffsetSeconds) || 0;

@@ -600,7 +600,17 @@ assert.equal(packageJson.scripts['hosted:prepare'], 'npm run webos:prepare-relea
   assert.equal(context.LocalVod_GetMeta(activeLocal).active, true, 'active local VOD metadata keeps active state for live chat behavior');
   assert.equal(context.LocalVod_GetMeta(activeLocal).growing, true, 'active local VOD metadata keeps growing state for live chat behavior');
   assert.equal(context.LocalVod_IsLiveChatMeta({ status: 'closing' }), true, 'closing local VODs keep live chat/SSE enabled');
-  assert.equal(context.LocalVod_IsLiveChatMeta({ status: 'finalizing' }), true, 'finalizing local VODs keep live chat/SSE enabled');
+  assert.equal(context.LocalVod_IsLiveChatMeta({ status: 'finalizing' }), true, 'finalizing local VODs keep bounded live chat polling enabled');
+  assert.equal(
+    context.LocalVod_ChatEventsUrl({ recording_group_id: 'grp-closing', status: 'closing' }, 12.425),
+    'http://192.168.0.109:18080/archive/vods/grp-closing/chat/events?after_offset_ms=12425',
+    'closing local VODs can open the live chat SSE stream'
+  );
+  assert.equal(
+    context.LocalVod_ChatEventsUrl({ recording_group_id: 'grp-finalizing', status: 'finalizing' }, 12.425),
+    '',
+    'finalizing local VODs use polling instead of opening an SSE stream the backend rejects'
+  );
 
   const prunedLocal = context.LocalVod_BuildData(
     {
@@ -1154,6 +1164,102 @@ assert.equal(packageJson.scripts['hosted:prepare'], 'npm run webos:prepare-relea
   assert.equal(context.Chat_cursor, 'local-live', 'active local archive chat keeps polling after an empty page');
   assert.equal(context.Chat_offset, 15, 'empty active local archive chat keeps the requested resume offset');
   assert.equal(context.nextRequested, 42, 'active local archive chat requests the next live window instead of ending');
+
+  context.Chat_cursor = 'local-live';
+  context.Chat_MessagesNext = [];
+  context.Chat_comment_ids = {};
+  context.Chat_loadChatSuccess(
+    JSON.stringify({
+      data: {
+        video: {
+          comments: {
+            edges: [
+              {
+                cursor: 'cursor-1',
+                node: {
+                  id: 'msg-1',
+                  contentOffsetSeconds: 16,
+                  sourcePlatform: 'local_archive',
+                  commenter: { displayName: 'viewer', login: 'viewer' },
+                  message: { fragments: [{ text: 'one' }], userBadges: [], userColor: '#fff', is_action: false },
+                },
+              },
+              {
+                cursor: 'cursor-2',
+                node: {
+                  id: 'msg-2',
+                  contentOffsetSeconds: 17,
+                  sourcePlatform: 'local_archive',
+                  commenter: { displayName: 'viewer', login: 'viewer' },
+                  message: { fragments: [{ text: 'two' }], userBadges: [], userColor: '#fff', is_action: false },
+                },
+              },
+            ],
+          },
+        },
+      },
+    }),
+    42
+  );
+
+  assert.equal(context.Chat_cursor, 'cursor-2', 'VOD chat pagination cursor advances to the newest loaded comment');
+  assert.equal(context.Chat_MessagesNext.length, 2, 'VOD chat next-page comments are queued for playback');
+}
+
+{
+  const heldMessage = { time: 10, message: 'held' };
+  const context = {
+    Chat_Messages: [heldMessage],
+    Chat_MessagesNext: [],
+    Chat_cursor: 'local-live',
+    Chat_Id: [42],
+    Chat_Position: 0,
+    Chat_lastMsgTime: 10,
+    Chat_offset: 0,
+    Chat_loadingMore: false,
+    Chat_hasEnded: false,
+    Chat_LocalVodChatUnavailable: false,
+    Chat_LocalVodEventSource: { close() {} },
+    ChannelVod_vodOffset: 0,
+    Main_values: {},
+    OSInterface_gettime: () => 12000,
+    LocalVod_IsLiveChat: () => true,
+    Main_Slice: value => value.slice(),
+    Chat_loadChatNext: id => {
+      context.nextRequested = id;
+    },
+    Chat_Clean: () => {
+      context.cleaned = true;
+    },
+    Chat_Init: () => {
+      context.reinitialized = true;
+    },
+    Chat_loadChatRequest: () => {
+      context.reloadRequested = true;
+    },
+    ChatLive_ElementAdd: message => {
+      context.added = message;
+    },
+    Main_clearInterval: () => {
+      context.intervalCleared = true;
+    },
+    STR_BR: '<br>',
+    STR_CHAT_END: 'end',
+  };
+  vm.createContext(context);
+  vm.runInContext(
+    `
+      function Chat_LocalVodIsLive() {${functionBody(chatVodSource, 'Chat_LocalVodIsLive')}}
+      function Main_Addline(id) {${functionBody(chatVodSource, 'Main_Addline')}}
+    `,
+    context
+  );
+
+  context.Main_Addline(42);
+
+  assert.deepEqual(context.Chat_Messages, [heldMessage], 'active local VOD chat keeps the current queue while waiting for SSE messages');
+  assert.equal(context.nextRequested, undefined, 'active local VOD chat does not poll a next page while the SSE stream is open');
+  assert.equal(context.Chat_hasEnded, false, 'active local VOD chat does not mark chat ended while waiting for SSE messages');
 }
 
 console.log('local VOD tests passed');

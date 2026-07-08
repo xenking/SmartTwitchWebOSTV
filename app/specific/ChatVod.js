@@ -657,7 +657,7 @@ function Chat_loadChatSuccess(responseObj, id) {
 
     if (responseText.data && responseText.data.video && responseText.data.video.comments && responseText.data.video.comments.edges) {
         comments = responseText.data.video.comments.edges || [];
-        Chat_cursor = comments.length ? comments[0].cursor : Chat_LocalVodIsLive() ? 'local-live' : '';
+        Chat_cursor = comments.length ? comments[comments.length - 1].cursor || '' : Chat_LocalVodIsLive() ? 'local-live' : '';
     } else {
         return;
     }
@@ -917,7 +917,7 @@ function Main_Addline(id) {
             }
         }
     } else {
-        if (Chat_cursor !== '' || Chat_MessagesNext.length) {
+        if (Chat_MessagesNext.length) {
             //array.slice() may crash RangeError: Maximum call stack size exceeded
             Chat_Messages = Main_Slice(Chat_MessagesNext);
 
@@ -930,6 +930,10 @@ function Main_Addline(id) {
             }
 
             Chat_Clean(0);
+        } else if (Chat_cursor !== '') {
+            if (Chat_Id[0] === id && !(Chat_LocalVodIsLive() && Chat_LocalVodEventSource)) {
+                Chat_loadChatNext(id);
+            }
         } else {
             //Chat has ended try to load more as this may be a live that is being played as VOD
             if (Chat_lastMsgTime && !Chat_loadingMore) {
