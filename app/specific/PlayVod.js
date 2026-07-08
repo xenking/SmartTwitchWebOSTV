@@ -390,6 +390,16 @@ function PlayVod_ChatSecondsToPlayerSeconds(seconds) {
     return seconds > 0 ? seconds : 0;
 }
 
+function PlayVod_LocalChatSecondsToPlayerSeconds(seconds) {
+    seconds = (parseFloat(seconds) || 0) + PlayVod_LocalVodTimelineDeltaSeconds();
+    return seconds > 0 ? seconds : 0;
+}
+
+function PlayVod_PlayerSecondsToLocalChatSeconds(seconds) {
+    seconds = (parseFloat(seconds) || 0) - PlayVod_LocalVodTimelineDeltaSeconds();
+    return seconds > 0 ? seconds : 0;
+}
+
 function PlayVod_TwitchPreviewDurationSeconds() {
     var meta = PlayVod_LocalVodMeta();
     var duration = meta && meta.twitch_duration_seconds ? parseInt(meta.twitch_duration_seconds) : 0;

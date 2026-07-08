@@ -494,11 +494,15 @@ function Chat_LocalVodLiveOffsetSeconds(offsetSeconds) {
 }
 
 function Chat_LocalVodLoadOffsetSeconds() {
-    return Chat_LocalVodLiveOffsetSeconds(Chat_offset ? parseFloat(Chat_offset) : 0);
+    var offset = Chat_LocalVodLiveOffsetSeconds(Chat_offset ? parseFloat(Chat_offset) : 0);
+    if (typeof PlayVod_PlayerSecondsToLocalChatSeconds === 'function') return PlayVod_PlayerSecondsToLocalChatSeconds(offset);
+    return offset;
 }
 
 function Chat_LocalVodNextLoadOffsetSeconds() {
-    return Chat_LocalVodLiveOffsetSeconds(Chat_LocalVodNextOffsetSeconds());
+    var offset = Chat_LocalVodLiveOffsetSeconds(Chat_LocalVodNextOffsetSeconds());
+    if (typeof PlayVod_PlayerSecondsToLocalChatSeconds === 'function') return PlayVod_PlayerSecondsToLocalChatSeconds(offset);
+    return offset;
 }
 
 function Chat_LocalVodLoadLimit() {
@@ -696,7 +700,9 @@ function Chat_loadChatSuccess(responseObj, id) {
         mmessage = comments[i].message;
         playerOffsetSeconds =
             comments[i].sourcePlatform === 'local_archive'
-                ? parseFloat(comments[i].contentOffsetSeconds) || 0
+                ? typeof PlayVod_LocalChatSecondsToPlayerSeconds === 'function'
+                    ? PlayVod_LocalChatSecondsToPlayerSeconds(comments[i].contentOffsetSeconds)
+                    : parseFloat(comments[i].contentOffsetSeconds) || 0
                 : PlayVod_ChatSecondsToPlayerSeconds(comments[i].contentOffsetSeconds);
 
         //TODO check support for this feature

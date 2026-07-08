@@ -203,7 +203,7 @@ function LocalVod_IsLiveChatMeta(meta) {
 
 function LocalVod_CanStreamChatEventsMeta(meta) {
     var status = meta && meta.status ? String(meta.status).toLowerCase() : '';
-    return !!(meta && (meta.active || meta.growing || status === 'open' || status === 'recording' || status === 'closing'));
+    return !!(meta && (meta.active || meta.growing || status === 'open' || status === 'recording' || status === 'closing' || status === 'finalizing'));
 }
 
 function LocalVod_IsLiveChat() {

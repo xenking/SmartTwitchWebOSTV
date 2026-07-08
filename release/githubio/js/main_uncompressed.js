@@ -11930,11 +11930,15 @@
     }
 
     function Chat_LocalVodLoadOffsetSeconds() {
-        return Chat_LocalVodLiveOffsetSeconds(Chat_offset ? parseFloat(Chat_offset) : 0);
+        var offset = Chat_LocalVodLiveOffsetSeconds(Chat_offset ? parseFloat(Chat_offset) : 0);
+        if (typeof PlayVod_PlayerSecondsToLocalChatSeconds === 'function') return PlayVod_PlayerSecondsToLocalChatSeconds(offset);
+        return offset;
     }
 
     function Chat_LocalVodNextLoadOffsetSeconds() {
-        return Chat_LocalVodLiveOffsetSeconds(Chat_LocalVodNextOffsetSeconds());
+        var offset = Chat_LocalVodLiveOffsetSeconds(Chat_LocalVodNextOffsetSeconds());
+        if (typeof PlayVod_PlayerSecondsToLocalChatSeconds === 'function') return PlayVod_PlayerSecondsToLocalChatSeconds(offset);
+        return offset;
     }
 
     function Chat_LocalVodLoadLimit() {
@@ -12132,7 +12136,9 @@
             mmessage = comments[i].message;
             playerOffsetSeconds =
                 comments[i].sourcePlatform === 'local_archive'
-                    ? parseFloat(comments[i].contentOffsetSeconds) || 0
+                    ? typeof PlayVod_LocalChatSecondsToPlayerSeconds === 'function'
+                        ? PlayVod_LocalChatSecondsToPlayerSeconds(comments[i].contentOffsetSeconds)
+                        : parseFloat(comments[i].contentOffsetSeconds) || 0
                     : PlayVod_ChatSecondsToPlayerSeconds(comments[i].contentOffsetSeconds);
 
             //TODO check support for this feature
@@ -12745,7 +12751,10 @@
 
     function LocalVod_CanStreamChatEventsMeta(meta) {
         var status = meta && meta.status ? String(meta.status).toLowerCase() : '';
-        return !!(meta && (meta.active || meta.growing || status === 'open' || status === 'recording' || status === 'closing'));
+        return !!(
+            meta &&
+            (meta.active || meta.growing || status === 'open' || status === 'recording' || status === 'closing' || status === 'finalizing')
+        );
     }
 
     function LocalVod_IsLiveChat() {
@@ -29054,6 +29063,16 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
     }
 
     function PlayVod_ChatSecondsToPlayerSeconds(seconds) {
+        seconds = (parseFloat(seconds) || 0) - PlayVod_LocalVodTimelineDeltaSeconds();
+        return seconds > 0 ? seconds : 0;
+    }
+
+    function PlayVod_LocalChatSecondsToPlayerSeconds(seconds) {
+        seconds = (parseFloat(seconds) || 0) + PlayVod_LocalVodTimelineDeltaSeconds();
+        return seconds > 0 ? seconds : 0;
+    }
+
+    function PlayVod_PlayerSecondsToLocalChatSeconds(seconds) {
         seconds = (parseFloat(seconds) || 0) - PlayVod_LocalVodTimelineDeltaSeconds();
         return seconds > 0 ? seconds : 0;
     }

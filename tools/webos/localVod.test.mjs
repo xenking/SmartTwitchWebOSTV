@@ -238,7 +238,7 @@ assert.match(functionBody(chatVodSource, 'Chat_loadTwitchChatOffsetRequest'), /P
 assert.match(functionBody(chatVodSource, 'Chat_loadTwitchChatOffsetRequest'), /PlayVod_PlayerSecondsToChatSeconds/, 'VOD chat request offset maps local player time to Twitch time');
 assert.doesNotMatch(functionBody(chatVodSource, 'Chat_loadChatRequest'), /Chat_offset\s*\?\s*parseInt\(PlayVod_PlayerSecondsToChatSeconds\(Chat_offset\)\)\s*:\s*0/, 'zero-offset local VOD chat requests still apply local-to-Twitch timeline mapping');
 assert.match(functionBody(chatVodSource, 'Chat_LocalVodNextOffsetSeconds'), /Chat_Messages/, 'local archive VOD chat pagination advances from loaded message times');
-assert.match(functionBody(chatVodSource, 'Chat_loadChatSuccess'), /sourcePlatform === 'local_archive'[\s\S]*PlayVod_ChatSecondsToPlayerSeconds/, 'local archive chat stays on local timeline while Twitch comments map to player time');
+assert.match(functionBody(chatVodSource, 'Chat_loadChatSuccess'), /sourcePlatform === 'local_archive'[\s\S]*PlayVod_LocalChatSecondsToPlayerSeconds/, 'local archive chat maps local recording offsets onto the player timeline');
 assert.match(functionBody(chatVodSource, 'Chat_loadChatNextRequest'), /PlayVod_ExternalTwitchVodId/, 'VOD chat cursor request uses linked Twitch VOD id');
 assert.match(functionBody(chatVodSource, 'Chat_loadChatNextRequest'), /Chat_LocalVodNextLoadOffsetSeconds/, 'local archive VOD chat next request is offset based');
 assert.match(functionBody(chatVodSource, 'Chat_loadChatNextRequest'), /Chat_loadTwitchChatNextOffsetRequest/, 'local chat next-page fallback uses the next-result path');
@@ -386,6 +386,8 @@ assert.equal(packageJson.scripts['hosted:prepare'], 'npm run webos:prepare-relea
   vm.runInContext(`function PlayVod_IsLocalArchiveVodId(vodId) {${functionBody(playVodSource, 'PlayVod_IsLocalArchiveVodId')}}`, context);
   vm.runInContext(`function PlayVod_ExternalTwitchVodId() {${functionBody(playVodSource, 'PlayVod_ExternalTwitchVodId')}}`, context);
   vm.runInContext(`function PlayVod_LocalVodTimelineDeltaSeconds() {${functionBody(playVodSource, 'PlayVod_LocalVodTimelineDeltaSeconds')}}`, context);
+  vm.runInContext(`function PlayVod_LocalChatSecondsToPlayerSeconds(seconds) {${functionBody(playVodSource, 'PlayVod_LocalChatSecondsToPlayerSeconds')}}`, context);
+  vm.runInContext(`function PlayVod_PlayerSecondsToLocalChatSeconds(seconds) {${functionBody(playVodSource, 'PlayVod_PlayerSecondsToLocalChatSeconds')}}`, context);
 
   assert.equal(context.PlayVod_ExternalTwitchVodId(), '', 'damaged local restore state must not query Twitch chat with grp-* recording id');
 
@@ -420,6 +422,8 @@ assert.equal(packageJson.scripts['hosted:prepare'], 'npm run webos:prepare-relea
 
   assert.equal(context.PlayVod_ExternalTwitchVodId(), '2794330615', 'local archive metadata still exposes linked Twitch VOD id');
   assert.equal(context.PlayVod_LocalVodTimelineDeltaSeconds(), 30.651, 'chat timeline delta uses exact timestamp difference instead of old floored history value');
+  assert.equal(Number(context.PlayVod_LocalChatSecondsToPlayerSeconds(130.651).toFixed(3)), 161.302, 'local archive chat offsets map onto the player timeline with precise local/Twitch delta');
+  assert.equal(Number(context.PlayVod_PlayerSecondsToLocalChatSeconds(161.302).toFixed(3)), 130.651, 'player timeline offsets map back to local archive chat offsets');
 }
 
 {
@@ -600,7 +604,7 @@ assert.equal(packageJson.scripts['hosted:prepare'], 'npm run webos:prepare-relea
   assert.equal(context.LocalVod_GetMeta(activeLocal).active, true, 'active local VOD metadata keeps active state for live chat behavior');
   assert.equal(context.LocalVod_GetMeta(activeLocal).growing, true, 'active local VOD metadata keeps growing state for live chat behavior');
   assert.equal(context.LocalVod_IsLiveChatMeta({ status: 'closing' }), true, 'closing local VODs keep live chat/SSE enabled');
-  assert.equal(context.LocalVod_IsLiveChatMeta({ status: 'finalizing' }), true, 'finalizing local VODs keep bounded live chat polling enabled');
+  assert.equal(context.LocalVod_IsLiveChatMeta({ status: 'finalizing' }), true, 'finalizing local VODs keep live chat enabled');
   assert.equal(
     context.LocalVod_ChatEventsUrl({ recording_group_id: 'grp-closing', status: 'closing' }, 12.425),
     'http://192.168.0.109:18080/archive/vods/grp-closing/chat/events?after_offset_ms=12425',
@@ -608,8 +612,8 @@ assert.equal(packageJson.scripts['hosted:prepare'], 'npm run webos:prepare-relea
   );
   assert.equal(
     context.LocalVod_ChatEventsUrl({ recording_group_id: 'grp-finalizing', status: 'finalizing' }, 12.425),
-    '',
-    'finalizing local VODs use polling instead of opening an SSE stream the backend rejects'
+    'http://192.168.0.109:18080/archive/vods/grp-finalizing/chat/events?after_offset_ms=12425',
+    'finalizing local VODs can attempt the native chat SSE stream before falling back to polling'
   );
 
   const prunedLocal = context.LocalVod_BuildData(
@@ -770,6 +774,11 @@ assert.equal(packageJson.scripts['hosted:prepare'], 'npm run webos:prepare-relea
   context.Chat_offset = 0;
   context.Chat_Messages = [{ time: 118 }, { time: 119 }];
   assert.equal(context.Chat_LocalVodNextLoadOffsetSeconds(), 119.001, 'active local VOD polling keeps normal pagination when chat is already near player time');
+
+  context.PlayVod_PlayerSecondsToLocalChatSeconds = value => value + 1520;
+  assert.equal(context.Chat_LocalVodNextLoadOffsetSeconds(), 1639.001, 'local archive chat requests convert player offsets into local recording offsets');
+  context.Chat_Messages = [{ time: 90 }, { time: 95 }];
+  assert.equal(context.Chat_LocalVodLoadOffsetSeconds(), 1635, 'stale active local VOD chat requests clamp in player time before converting to local recording offsets');
 
   context.LocalVod_IsLiveChat = () => false;
   assert.equal(context.Chat_LocalVodLoadLimit(), 0, 'finalized local VOD chat keeps the backend default page size');
@@ -1184,6 +1193,7 @@ assert.equal(packageJson.scripts['hosted:prepare'], 'npm run webos:prepare-relea
     Chat_Play: null,
     Chat_loadChatNext: null,
     PlayVod_ChatSecondsToPlayerSeconds: value => value,
+    PlayVod_LocalChatSecondsToPlayerSeconds: value => value - 10,
     Play_timeS: value => String(value),
     ChatLive_ShouldShowBadge: () => true,
     Main_A_includes_B: (a, b) => String(a).includes(b),
@@ -1275,6 +1285,7 @@ assert.equal(packageJson.scripts['hosted:prepare'], 'npm run webos:prepare-relea
 
   assert.equal(context.Chat_cursor, 'cursor-2', 'VOD chat pagination cursor advances to the newest loaded comment');
   assert.equal(context.Chat_MessagesNext.length, 2, 'VOD chat next-page comments are queued for playback');
+  assert.equal(context.Chat_MessagesNext[0].time, 6, 'local archive chat comments are queued on the player timeline');
 }
 
 {
