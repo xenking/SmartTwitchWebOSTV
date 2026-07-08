@@ -598,6 +598,7 @@
             offset_seconds: localOffsetSeconds,
             position_within_recording: positionWithin,
             playback_url: vod.playback_url || '',
+            playlist_url: vod.playlist_url || '',
             file_url: vod.file_url || '',
             final_url: vod.final_url || '',
             score: (positionWithin ? 0 : 1000000000) + Math.abs(deltaSeconds) - (vod.growing || vod.active ? 100 : 0)
@@ -624,6 +625,7 @@
         fallback.delta_seconds = typeof data.delta_seconds === 'number' ? data.delta_seconds : fallback.delta_seconds || 0;
         fallback.position_within_recording = data.position_within_recording !== false;
         fallback.playback_url = data.playback_url || fallback.playback_url || data.vod.playback_url || '';
+        fallback.playlist_url = data.playlist_url || fallback.playlist_url || data.vod.playlist_url || '';
         fallback.file_url = data.file_url || fallback.file_url || data.vod.file_url || '';
         fallback.final_url = data.final_url || fallback.final_url || data.vod.final_url || '';
         return fallback;
@@ -680,7 +682,7 @@
         if (compatibleUrl) return localArchiveUrl(compatibleUrl);
         var fileUrl = match.file_url || match.vod.file_url || '';
         var finalUrl = match.final_url || match.vod.final_url || '';
-        var playlistUrl = match.playback_url || match.vod.playback_url || '';
+        var playlistUrl = match.playback_url || match.vod.playback_url || match.playlist_url || match.vod.playlist_url || '';
         return localArchiveUrl(playlistUrl || fileUrl || finalUrl);
     }
     function localVodHasUsableCurrentMatch() {
@@ -1993,6 +1995,9 @@
             return '';
         }
     }
+    function isLocalArchiveVodPlaylistUrl(url) {
+        return typeof url === 'string' && /\/archive\/vods\/[^/?#]+\/playlist\.m3u8(?:[?#]|$)/i.test(url);
+    }
     function revokeMainPlaylistObjectUrl() {
         if (!ms.playlistObjectUrl || !w.URL || typeof w.URL.revokeObjectURL !== 'function') return;
         try {
@@ -3138,7 +3143,7 @@
         ms.type = t || 1;
         ms.rawUri = u || '';
         ms.playlist = pl || '';
-        ms.playlistObjectUrl = createMediaPlaylistObjectUrl(ms.playlist);
+        ms.playlistObjectUrl = isLocalArchiveVodPlaylistUrl(ms.rawUri) ? '' : createMediaPlaylistObjectUrl(ms.playlist);
         ms.q = parseQ(ms.playlist, ms.rawUri);
         ms.qp = -1;
         ms.activeCodecs = '';

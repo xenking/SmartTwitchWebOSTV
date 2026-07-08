@@ -33,6 +33,10 @@ function functionBody(source, name) {
 
 function installPlayVodLocalActions(context) {
   vm.createContext(context);
+  vm.runInContext('var PlayVod_WebOSLocalPlaylistLoadId = 0; var PlayVod_WebOSLocalPendingResult = null;', context);
+  vm.runInContext(`function PlayVod_WebOSLocalShouldFetchPlaylist(result) {${functionBody(playVodSource, 'PlayVod_WebOSLocalShouldFetchPlaylist')}}`, context);
+  vm.runInContext(`function PlayVod_WebOSLocalStartResult(result, playlist) {${functionBody(playVodSource, 'PlayVod_WebOSLocalStartResult')}}`, context);
+  vm.runInContext(`function PlayVod_WebOSLocalPlaylistResult(response) {${functionBody(playVodSource, 'PlayVod_WebOSLocalPlaylistResult')}}`, context);
   vm.runInContext(`function PlayVod_WebOSLocalActions() {${functionBody(playVodSource, 'PlayVod_WebOSLocalActions')}}`, context);
 }
 
@@ -252,6 +256,7 @@ assert.match(functionBody(playVodSource, 'PlayVod_WebOSLocalDurationSeconds'), /
 assert.match(functionBody(bridgeSource, 'localVodMatchFromVod'), /boundedActiveSeconds/, 'active local VOD matching uses a bounded active duration when archive duration is not finalized');
 assert.match(functionBody(bridgeSource, 'localVodMatchFromVod'), /final_url/, 'webOS bridge match carries final_url from local archive records');
 assert.match(functionBody(bridgeSource, 'localVodNormalizeBackendMatch'), /final_url/, 'webOS bridge backend match normalization preserves final_url');
+assert.match(functionBody(bridgeSource, 'localVodNormalizeBackendMatch'), /playlist_url/, 'webOS bridge backend match normalization preserves playlist_url');
 assert.match(functionBody(bridgeSource, 'localVodPlaybackUrl'), /finalUrl[\s\S]*playlistUrl \|\| fileUrl \|\| finalUrl/, 'webOS bridge playback URL can use final_url direct archive files');
 assert.equal(packageJson.scripts['hosted:prepare'], 'npm run webos:prepare-release', 'release workflow hosted prepare entrypoint stays available');
 
@@ -948,6 +953,65 @@ assert.equal(packageJson.scripts['hosted:prepare'], 'npm run webos:prepare-relea
 }
 
 {
+  const context = {
+    PlayVod_isOn: true,
+    PlayVod_autoUrl: '',
+    PlayVod_playlist: '',
+    PlayVod_ResumeTime: 0,
+    PlayVod_currentTime: 0,
+    Main_vodOffset: 0,
+    Main_IsOn_OSInterface: true,
+    Main_values: { ChannelVod_vodId: 'twitch-live' },
+    PlayVod_WebOSLocalUpdateControlLabel() {},
+    PlayVod_WebOSLocalNotify() {},
+    Play_showBufferDialog() {
+      context.bufferShown = true;
+    },
+    PlayVod_SaveVodIds(value) {
+      context.__savedVodOffset = value;
+    },
+    LocalVod_PatchPlaylist(playlist, playbackUrl) {
+      context.__patchBaseUrl = playbackUrl;
+      return playlist.replace('segments/000001.ts', 'http://192.168.0.109:18080/archive/vods/grp/segments/000001.ts');
+    },
+    PlayHLS_GetExternalPlayListAsync(url, checkId, _headers, callback) {
+      context.__playlistRequest = { url, checkId, callback: callback.name };
+      callback(
+        JSON.stringify({
+          status: 200,
+          checkResult: checkId,
+          url,
+          responseText: '#EXTM3U\n#EXTINF:2,\nsegments/000001.ts',
+        })
+      );
+    },
+    PlayVod_loadDataSuccessEnd(playlist) {
+      context.__startedPlaylist = playlist;
+    },
+    PlayVod_loadDataTwitch() {},
+  };
+  installPlayVodLocalActions(context);
+
+  context.PlayVod_WebOSLocalActions().playLocal({
+    url: 'http://192.168.0.109:18080/archive/vods/grp/playlist.m3u8',
+    playlist: '',
+    offsetSeconds: 1520,
+    twitchOffsetSeconds: 0,
+  });
+
+  assert.deepEqual(
+    context.__playlistRequest.url,
+    'http://192.168.0.109:18080/archive/vods/grp/playlist.m3u8',
+    'webOS local bridge playback fetches the live local archive playlist before starting'
+  );
+  assert.equal(context.__playlistRequest.callback, 'PlayVod_WebOSLocalPlaylistResult', 'webOS local bridge uses a named playlist callback');
+  assert.equal(context.__patchBaseUrl, 'http://192.168.0.109:18080/archive/vods/grp/playlist.m3u8', 'webOS local bridge patches the fetched local archive playlist');
+  assert.equal(context.PlayVod_autoUrl, 'http://192.168.0.109:18080/archive/vods/grp/playlist.m3u8', 'webOS local bridge keeps the real playlist URL');
+  assert.match(context.__startedPlaylist, /http:\/\/192\.168\.0\.109:18080\/archive\/vods\/grp\/segments\/000001\.ts/, 'webOS local bridge starts with a patched media playlist body');
+  assert.equal(context.Main_vodOffset, 0.001, 'webOS local bridge keeps explicit Twitch zero offset while using local media');
+}
+
+{
   const matchResponse = {
     matched: true,
     position_within_recording: true,
@@ -1011,14 +1075,10 @@ assert.equal(packageJson.scripts['hosted:prepare'], 'npm run webos:prepare-relea
 
   assert.equal(
     createdVideos[0].src,
-    'blob:playlist-1',
-    'HTTP local archive playlists keep patched media playlists through a blob URL'
+    'http://192.168.0.109:18080/archive/vods/grp/playlist.m3u8',
+    'HTTP local archive playlists use the same raw playlist URL for main playback as preview playback'
   );
-  assert.equal(
-    context.__lastBlob.parts[0],
-    playlist,
-    'HTTP local archive playlist blob contains the patched media playlist body'
-  );
+  assert.equal(context.__lastBlob, undefined, 'HTTP local archive media playlists do not force blob playback on webOS');
   assert.equal(createdVideos[0].currentTime, 120, 'direct HTTP local archive playback still applies VOD resume position');
   assert.equal(durationUpdate, 53246000, 'bridge reports metadata duration through the exported duration callback');
 }
