@@ -29164,8 +29164,8 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
         var responseObj;
         var playlist = '';
         var playbackUrl = '';
+        var result;
 
-        PlayVod_WebOSLocalPendingResult = null;
         if (!pending) return;
 
         try {
@@ -29174,19 +29174,20 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
             responseObj = null;
         }
 
-        if (
-            responseObj &&
-            responseObj.checkResult > 0 &&
-            responseObj.checkResult === PlayVod_WebOSLocalPlaylistLoadId &&
-            responseObj.status === 200
-        ) {
-            playbackUrl = responseObj.url || pending.url;
+        if (!responseObj || responseObj.checkResult !== pending.loadId) return;
+        PlayVod_WebOSLocalPendingResult = null;
+
+        result = pending.result;
+        if (!result) return;
+
+        if (responseObj.status === 200) {
+            playbackUrl = responseObj.url || result.url;
             playlist = responseObj.responseText || '';
             if (typeof LocalVod_PatchPlaylist === 'function') playlist = LocalVod_PatchPlaylist(playlist, playbackUrl);
-            pending.url = playbackUrl;
+            result.url = playbackUrl;
         }
 
-        PlayVod_WebOSLocalStartResult(pending, playlist);
+        PlayVod_WebOSLocalStartResult(result, playlist);
     }
 
     function PlayVod_WebOSLocalCurrentSeconds(preferPlayerTime) {
@@ -29267,8 +29268,11 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
                 if (!PlayVod_isOn || !result || !result.url) return;
                 if (PlayVod_WebOSLocalShouldFetchPlaylist(result)) {
                     Play_showBufferDialog();
-                    PlayVod_WebOSLocalPlaylistLoadId = new Date().getTime();
-                    PlayVod_WebOSLocalPendingResult = result;
+                    PlayVod_WebOSLocalPlaylistLoadId = Math.max(PlayVod_WebOSLocalPlaylistLoadId + 1, new Date().getTime());
+                    PlayVod_WebOSLocalPendingResult = {
+                        loadId: PlayVod_WebOSLocalPlaylistLoadId,
+                        result: result
+                    };
                     PlayHLS_GetExternalPlayListAsync(result.url, PlayVod_WebOSLocalPlaylistLoadId, null, PlayVod_WebOSLocalPlaylistResult);
                     return;
                 }

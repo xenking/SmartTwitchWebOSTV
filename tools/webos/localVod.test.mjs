@@ -1022,6 +1022,77 @@ assert.equal(packageJson.scripts['hosted:prepare'], 'npm run webos:prepare-relea
 }
 
 {
+  const requests = [];
+  const context = {
+    PlayVod_isOn: true,
+    PlayVod_autoUrl: '',
+    PlayVod_playlist: '',
+    PlayVod_ResumeTime: 0,
+    PlayVod_currentTime: 0,
+    Main_vodOffset: 0,
+    Main_IsOn_OSInterface: true,
+    Main_values: { ChannelVod_vodId: 'twitch-live' },
+    PlayVod_WebOSLocalUpdateControlLabel() {},
+    PlayVod_WebOSLocalNotify() {},
+    Play_showBufferDialog() {
+      context.bufferShown = true;
+    },
+    PlayVod_SaveVodIds(value) {
+      context.__savedVodOffset = value;
+    },
+    LocalVod_PatchPlaylist(playlist, playbackUrl) {
+      return playlist.replace('segments/000001.ts', playbackUrl.replace(/playlist\.m3u8$/, 'segments/000001.ts'));
+    },
+    PlayHLS_GetExternalPlayListAsync(url, checkId, _headers, callback) {
+      requests.push({ url, checkId, callback });
+    },
+    PlayVod_loadDataSuccessEnd(playlist) {
+      context.__startedPlaylist = playlist;
+    },
+    PlayVod_loadDataTwitch() {},
+  };
+  installPlayVodLocalActions(context);
+
+  context.PlayVod_WebOSLocalActions().playLocal({
+    url: 'http://192.168.0.109:18080/archive/vods/old/playlist.m3u8',
+    playlist: '',
+    offsetSeconds: 10,
+    twitchOffsetSeconds: 10,
+  });
+  context.PlayVod_WebOSLocalActions().playLocal({
+    url: 'http://192.168.0.109:18080/archive/vods/new/playlist.m3u8',
+    playlist: '',
+    offsetSeconds: 20,
+    twitchOffsetSeconds: 20,
+  });
+
+  requests[0].callback(
+    JSON.stringify({
+      status: 200,
+      checkResult: requests[0].checkId,
+      url: requests[0].url,
+      responseText: '#EXTM3U\n#EXTINF:2,\nsegments/000001.ts',
+    })
+  );
+
+  assert.equal(context.PlayVod_autoUrl, '', 'stale local playlist response does not start the newer pending playback');
+  assert.equal(context.__startedPlaylist, undefined, 'stale local playlist response keeps waiting for the matching newer response');
+
+  requests[1].callback(
+    JSON.stringify({
+      status: 200,
+      checkResult: requests[1].checkId,
+      url: requests[1].url,
+      responseText: '#EXTM3U\n#EXTINF:2,\nsegments/000001.ts',
+    })
+  );
+
+  assert.equal(context.PlayVod_autoUrl, 'http://192.168.0.109:18080/archive/vods/new/playlist.m3u8', 'matching local playlist response starts the newest local VOD request');
+  assert.match(context.__startedPlaylist, /http:\/\/192\.168\.0\.109:18080\/archive\/vods\/new\/segments\/000001\.ts/, 'matching local playlist response patches the newest playlist');
+  assert.equal(context.Main_vodOffset, 20, 'matching local playlist response keeps the newest requested offset');
+}
+
+{
   const matchResponse = {
     matched: true,
     position_within_recording: true,
