@@ -827,6 +827,62 @@ assert.equal(packageJson.scripts['hosted:prepare'], 'npm run webos:prepare-relea
 }
 
 {
+  const eventSource = {
+    closed: false,
+    close() {
+      eventSource.closed = true;
+    },
+  };
+  const context = {
+    parseFloat,
+    Chat_Messages: [],
+    Chat_MessagesNext: [],
+    Chat_lastMsgTime: 0,
+    Chat_offset: 120,
+    Main_IsOn_OSInterface: true,
+    ChannelVod_vodOffset: 0,
+    Chat_LocalVodChatUnavailable: false,
+    Chat_LocalVodEventSource: null,
+    Chat_LocalVodEventSourceUnavailable: false,
+    Chat_LocalVodLivePollingLookbackSeconds: 5,
+    Chat_hasEnded: false,
+    Chat_Id: [42],
+    LocalVod_IsLiveChat: () => true,
+    OSInterface_gettime: () => 120000,
+    LocalVod_OpenChatEvents(_offsetSeconds, _success, error) {
+      context.sseError = error;
+      return eventSource;
+    },
+    Chat_loadChatNext(id) {
+      context.nextRequested = id;
+    },
+    Chat_loadChatNextResult() {},
+    LocalVod_ChatResponseToTwitchComments: response => JSON.stringify(response),
+  };
+  vm.createContext(context);
+  vm.runInContext(
+    `
+      function Chat_LocalVodNextOffsetSeconds() {${functionBody(chatVodSource, 'Chat_LocalVodNextOffsetSeconds')}}
+      function Chat_LocalVodIsLive() {${functionBody(chatVodSource, 'Chat_LocalVodIsLive')}}
+      function Chat_LocalVodCurrentTimeSeconds() {${functionBody(chatVodSource, 'Chat_LocalVodCurrentTimeSeconds')}}
+      function Chat_LocalVodLiveOffsetSeconds(offsetSeconds) {${functionBody(chatVodSource, 'Chat_LocalVodLiveOffsetSeconds')}}
+      function Chat_LocalVodNextLoadOffsetSeconds() {${functionBody(chatVodSource, 'Chat_LocalVodNextLoadOffsetSeconds')}}
+      function Chat_LocalVodCloseEvents() {${functionBody(chatVodSource, 'Chat_LocalVodCloseEvents')}}
+      function Chat_LocalVodStartEvents(id) {${functionBody(chatVodSource, 'Chat_LocalVodStartEvents')}}
+    `,
+    context
+  );
+
+  context.Chat_LocalVodStartEvents(42);
+  context.sseError();
+
+  assert.equal(eventSource.closed, true, 'local VOD SSE error closes the rejected EventSource');
+  assert.equal(context.Chat_LocalVodEventSource, null, 'local VOD SSE error clears the active EventSource');
+  assert.equal(context.Chat_LocalVodEventSourceUnavailable, true, 'local VOD SSE error disables repeat SSE attempts for this chat session');
+  assert.equal(context.nextRequested, 42, 'local VOD SSE error falls back to the next polling request');
+}
+
+{
   const context = {
     IMG_404_VOD: '404-vod.png',
     IMG_404_LOGO: '404-logo.png',
