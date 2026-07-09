@@ -390,6 +390,28 @@ function PlayVod_ChatSecondsToPlayerSeconds(seconds) {
     return seconds > 0 ? seconds : 0;
 }
 
+function PlayVod_LocalVodChatDisplayDelaySeconds() {
+    var meta = PlayVod_LocalVodMeta();
+    var delay;
+
+    if (meta && typeof meta.local_chat_display_delay_seconds !== 'undefined') {
+        delay = parseFloat(meta.local_chat_display_delay_seconds);
+        if (isFinite(delay)) return delay;
+    }
+
+    return 16.368;
+}
+
+function PlayVod_LocalChatSecondsToPlayerSeconds(seconds) {
+    seconds = (parseFloat(seconds) || 0) + PlayVod_LocalVodChatDisplayDelaySeconds();
+    return seconds > 0 ? seconds : 0;
+}
+
+function PlayVod_PlayerSecondsToLocalChatSeconds(seconds) {
+    seconds = (parseFloat(seconds) || 0) - PlayVod_LocalVodChatDisplayDelaySeconds();
+    return seconds > 0 ? seconds : 0;
+}
+
 function PlayVod_TwitchPreviewDurationSeconds() {
     var meta = PlayVod_LocalVodMeta();
     var duration = meta && meta.twitch_duration_seconds ? parseInt(meta.twitch_duration_seconds) : 0;
@@ -460,6 +482,71 @@ function PlayVod_loadDataSuccessFake() {
 
 function PlayVod_WebOSLocalBridge() {
     return window.STTVWebOSLocalVod && Main_IsOn_OSInterface ? window.STTVWebOSLocalVod : null;
+}
+
+var PlayVod_WebOSLocalPlaylistLoadId = 0;
+var PlayVod_WebOSLocalPendingResult = null;
+
+function PlayVod_WebOSLocalCancelPlaylistRequest() {
+    PlayVod_WebOSLocalPlaylistLoadId++;
+    PlayVod_WebOSLocalPendingResult = null;
+}
+
+function PlayVod_WebOSLocalShouldFetchPlaylist(result) {
+    return !!(
+        result &&
+        result.url &&
+        !result.playlist &&
+        typeof Main_IsOn_OSInterface !== 'undefined' &&
+        Main_IsOn_OSInterface &&
+        /\.m3u8(?:[?#]|$)/i.test(result.url) &&
+        typeof PlayHLS_GetExternalPlayListAsync === 'function'
+    );
+}
+
+function PlayVod_WebOSLocalStartResult(result, playlist) {
+    if (!PlayVod_isOn || !result || !result.url) return;
+    var twitchOffsetSeconds = parseFloat(result.twitchOffsetSeconds);
+    var targetSeconds = isFinite(twitchOffsetSeconds) ? twitchOffsetSeconds : result.offsetSeconds || 0;
+    Play_showBufferDialog();
+    PlayVod_autoUrl = result.url;
+    PlayVod_playlist = playlist || result.playlist || '';
+    Main_vodOffset = targetSeconds > 0 ? targetSeconds : 0.001;
+    PlayVod_ResumeTime = Main_vodOffset;
+    PlayVod_currentTime = Main_vodOffset * 1000;
+    if (Main_values.ChannelVod_vodId) PlayVod_SaveVodIds(Main_vodOffset);
+    PlayVod_loadDataSuccessEnd(PlayVod_playlist);
+}
+
+function PlayVod_WebOSLocalPlaylistResult(response) {
+    var pending = PlayVod_WebOSLocalPendingResult;
+    var responseObj;
+    var playlist = '';
+    var playbackUrl = '';
+    var result;
+
+    if (!pending) return;
+
+    try {
+        responseObj = typeof response === 'string' ? JSON.parse(response) : response;
+    } catch (e) {
+        responseObj = null;
+    }
+
+    if (!responseObj || responseObj.checkResult !== pending.loadId) return;
+    PlayVod_WebOSLocalPendingResult = null;
+
+    result = pending.result;
+    if (!result) return;
+
+    if (responseObj.status === 200) {
+        playbackUrl = responseObj.url || result.url;
+        playlist = responseObj.responseText || '';
+        if (typeof LocalVod_PatchPlaylist === 'function') playlist = LocalVod_PatchPlaylist(playlist, playbackUrl);
+        result.url = playbackUrl;
+    }
+
+    PlayVod_WebOSLocalStartResult(result, playlist);
 }
 
 function PlayVod_WebOSLocalCurrentSeconds(preferPlayerTime) {
@@ -537,19 +624,22 @@ function PlayVod_WebOSLocalActions() {
         },
         playLocal: function (result) {
             if (!PlayVod_isOn || !result || !result.url) return;
-            var twitchOffsetSeconds = parseFloat(result.twitchOffsetSeconds);
-            var targetSeconds = isFinite(twitchOffsetSeconds) ? twitchOffsetSeconds : result.offsetSeconds || 0;
-            Play_showBufferDialog();
-            PlayVod_autoUrl = result.url;
-            PlayVod_playlist = result.playlist || '';
-            Main_vodOffset = targetSeconds > 0 ? targetSeconds : 0.001;
-            PlayVod_ResumeTime = Main_vodOffset;
-            PlayVod_currentTime = Main_vodOffset * 1000;
-            if (Main_values.ChannelVod_vodId) PlayVod_SaveVodIds(Main_vodOffset);
-            PlayVod_loadDataSuccessEnd(PlayVod_playlist);
+            if (PlayVod_WebOSLocalShouldFetchPlaylist(result)) {
+                Play_showBufferDialog();
+                PlayVod_WebOSLocalPlaylistLoadId = Math.max(PlayVod_WebOSLocalPlaylistLoadId + 1, new Date().getTime());
+                PlayVod_WebOSLocalPendingResult = {
+                    loadId: PlayVod_WebOSLocalPlaylistLoadId,
+                    result: result
+                };
+                PlayHLS_GetExternalPlayListAsync(result.url, PlayVod_WebOSLocalPlaylistLoadId, null, PlayVod_WebOSLocalPlaylistResult);
+                return;
+            }
+            PlayVod_WebOSLocalCancelPlaylistRequest();
+            PlayVod_WebOSLocalStartResult(result, result.playlist || '');
         },
         playTwitch: function (result) {
             if (!PlayVod_isOn) return;
+            PlayVod_WebOSLocalCancelPlaylistRequest();
             var offsetSeconds = result ? parseFloat(result.offsetSeconds) : NaN;
             if (isFinite(offsetSeconds) && (offsetSeconds > 0 || (result && result.suppressLocal))) {
                 Main_vodOffset = offsetSeconds > 0 ? offsetSeconds : 0.001;

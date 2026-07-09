@@ -32,6 +32,7 @@ var Chat_loadingMore = false;
 var Chat_LocalVodChatUnavailable = false;
 var Chat_LocalVodEventSource = null;
 var Chat_LocalVodEventSourceUnavailable = false;
+var Chat_LocalVodNextRequestPending = false;
 var Chat_LocalVodLivePollingLimit = 80;
 var Chat_LocalVodLivePollingLookbackSeconds = 5;
 var Chat_fakeClock = 0;
@@ -494,11 +495,15 @@ function Chat_LocalVodLiveOffsetSeconds(offsetSeconds) {
 }
 
 function Chat_LocalVodLoadOffsetSeconds() {
-    return Chat_LocalVodLiveOffsetSeconds(Chat_offset ? parseFloat(Chat_offset) : 0);
+    var offset = Chat_LocalVodLiveOffsetSeconds(Chat_offset ? parseFloat(Chat_offset) : 0);
+    if (typeof PlayVod_PlayerSecondsToLocalChatSeconds === 'function') return PlayVod_PlayerSecondsToLocalChatSeconds(offset);
+    return offset;
 }
 
 function Chat_LocalVodNextLoadOffsetSeconds() {
-    return Chat_LocalVodLiveOffsetSeconds(Chat_LocalVodNextOffsetSeconds());
+    var offset = Chat_LocalVodLiveOffsetSeconds(Chat_LocalVodNextOffsetSeconds());
+    if (typeof PlayVod_PlayerSecondsToLocalChatSeconds === 'function') return PlayVod_PlayerSecondsToLocalChatSeconds(offset);
+    return offset;
 }
 
 function Chat_LocalVodLoadLimit() {
@@ -657,7 +662,7 @@ function Chat_loadChatSuccess(responseObj, id) {
 
     if (responseText.data && responseText.data.video && responseText.data.video.comments && responseText.data.video.comments.edges) {
         comments = responseText.data.video.comments.edges || [];
-        Chat_cursor = comments.length ? comments[0].cursor : Chat_LocalVodIsLive() ? 'local-live' : '';
+        Chat_cursor = comments.length ? comments[comments.length - 1].cursor || '' : Chat_LocalVodIsLive() ? 'local-live' : '';
     } else {
         return;
     }
@@ -696,7 +701,9 @@ function Chat_loadChatSuccess(responseObj, id) {
         mmessage = comments[i].message;
         playerOffsetSeconds =
             comments[i].sourcePlatform === 'local_archive'
-                ? parseFloat(comments[i].contentOffsetSeconds) || 0
+                ? typeof PlayVod_LocalChatSecondsToPlayerSeconds === 'function'
+                    ? PlayVod_LocalChatSecondsToPlayerSeconds(comments[i].contentOffsetSeconds)
+                    : parseFloat(comments[i].contentOffsetSeconds) || 0
                 : PlayVod_ChatSecondsToPlayerSeconds(comments[i].contentOffsetSeconds);
 
         //TODO check support for this feature
@@ -877,6 +884,7 @@ function Chat_Clear() {
     Chat_loadingMore = false;
     Chat_LocalVodChatUnavailable = false;
     Chat_LocalVodEventSourceUnavailable = false;
+    Chat_LocalVodNextRequestPending = false;
     Main_emptyWithEle(Chat_div[0]);
     Main_emptyWithEle(Chat_div[1]);
     Chat_cursor = null;
@@ -917,7 +925,7 @@ function Main_Addline(id) {
             }
         }
     } else {
-        if (Chat_cursor !== '' || Chat_MessagesNext.length) {
+        if (Chat_MessagesNext.length) {
             //array.slice() may crash RangeError: Maximum call stack size exceeded
             Chat_Messages = Main_Slice(Chat_MessagesNext);
 
@@ -930,6 +938,10 @@ function Main_Addline(id) {
             }
 
             Chat_Clean(0);
+        } else if (Chat_cursor !== '') {
+            if (Chat_Id[0] === id) {
+                Chat_loadChatNext(id);
+            }
         } else {
             //Chat has ended try to load more as this may be a live that is being played as VOD
             if (Chat_lastMsgTime && !Chat_loadingMore) {
@@ -965,11 +977,13 @@ function Chat_loadChatNext(id) {
 function Chat_loadChatNextRequest(id) {
     if (Chat_cursor === '') return;
     if (!Chat_LocalVodChatUnavailable && typeof LocalVod_CanLoadChat === 'function' && LocalVod_CanLoadChat()) {
-        if (Chat_LocalVodIsLive() && Chat_LocalVodEventSource) return;
+        if (Chat_LocalVodNextRequestPending) return;
+        Chat_LocalVodNextRequestPending = true;
 
         LocalVod_LoadChat(
             Chat_LocalVodNextLoadOffsetSeconds(),
             function (response) {
+                Chat_LocalVodNextRequestPending = false;
                 Chat_loadChatNextResult(
                     {
                         status: 200,
@@ -979,6 +993,7 @@ function Chat_loadChatNextRequest(id) {
                 );
             },
             function () {
+                Chat_LocalVodNextRequestPending = false;
                 if (PlayVod_ExternalTwitchVodId()) {
                     Chat_LocalVodChatUnavailable = true;
                     Chat_loadTwitchChatNextOffsetRequest(id);

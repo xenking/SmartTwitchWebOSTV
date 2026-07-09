@@ -11468,6 +11468,7 @@
     var Chat_LocalVodChatUnavailable = false;
     var Chat_LocalVodEventSource = null;
     var Chat_LocalVodEventSourceUnavailable = false;
+    var Chat_LocalVodNextRequestPending = false;
     var Chat_LocalVodLivePollingLimit = 80;
     var Chat_LocalVodLivePollingLookbackSeconds = 5;
     var Chat_fakeClock = 0;
@@ -11930,11 +11931,15 @@
     }
 
     function Chat_LocalVodLoadOffsetSeconds() {
-        return Chat_LocalVodLiveOffsetSeconds(Chat_offset ? parseFloat(Chat_offset) : 0);
+        var offset = Chat_LocalVodLiveOffsetSeconds(Chat_offset ? parseFloat(Chat_offset) : 0);
+        if (typeof PlayVod_PlayerSecondsToLocalChatSeconds === 'function') return PlayVod_PlayerSecondsToLocalChatSeconds(offset);
+        return offset;
     }
 
     function Chat_LocalVodNextLoadOffsetSeconds() {
-        return Chat_LocalVodLiveOffsetSeconds(Chat_LocalVodNextOffsetSeconds());
+        var offset = Chat_LocalVodLiveOffsetSeconds(Chat_LocalVodNextOffsetSeconds());
+        if (typeof PlayVod_PlayerSecondsToLocalChatSeconds === 'function') return PlayVod_PlayerSecondsToLocalChatSeconds(offset);
+        return offset;
     }
 
     function Chat_LocalVodLoadLimit() {
@@ -12093,7 +12098,7 @@
 
         if (responseText.data && responseText.data.video && responseText.data.video.comments && responseText.data.video.comments.edges) {
             comments = responseText.data.video.comments.edges || [];
-            Chat_cursor = comments.length ? comments[0].cursor : Chat_LocalVodIsLive() ? 'local-live' : '';
+            Chat_cursor = comments.length ? comments[comments.length - 1].cursor || '' : Chat_LocalVodIsLive() ? 'local-live' : '';
         } else {
             return;
         }
@@ -12132,7 +12137,9 @@
             mmessage = comments[i].message;
             playerOffsetSeconds =
                 comments[i].sourcePlatform === 'local_archive'
-                    ? parseFloat(comments[i].contentOffsetSeconds) || 0
+                    ? typeof PlayVod_LocalChatSecondsToPlayerSeconds === 'function'
+                        ? PlayVod_LocalChatSecondsToPlayerSeconds(comments[i].contentOffsetSeconds)
+                        : parseFloat(comments[i].contentOffsetSeconds) || 0
                     : PlayVod_ChatSecondsToPlayerSeconds(comments[i].contentOffsetSeconds);
 
             //TODO check support for this feature
@@ -12313,6 +12320,7 @@
         Chat_loadingMore = false;
         Chat_LocalVodChatUnavailable = false;
         Chat_LocalVodEventSourceUnavailable = false;
+        Chat_LocalVodNextRequestPending = false;
         Main_emptyWithEle(Chat_div[0]);
         Main_emptyWithEle(Chat_div[1]);
         Chat_cursor = null;
@@ -12353,7 +12361,7 @@
                 }
             }
         } else {
-            if (Chat_cursor !== '' || Chat_MessagesNext.length) {
+            if (Chat_MessagesNext.length) {
                 //array.slice() may crash RangeError: Maximum call stack size exceeded
                 Chat_Messages = Main_Slice(Chat_MessagesNext);
 
@@ -12366,6 +12374,10 @@
                 }
 
                 Chat_Clean(0);
+            } else if (Chat_cursor !== '') {
+                if (Chat_Id[0] === id) {
+                    Chat_loadChatNext(id);
+                }
             } else {
                 //Chat has ended try to load more as this may be a live that is being played as VOD
                 if (Chat_lastMsgTime && !Chat_loadingMore) {
@@ -12401,11 +12413,13 @@
     function Chat_loadChatNextRequest(id) {
         if (Chat_cursor === '') return;
         if (!Chat_LocalVodChatUnavailable && typeof LocalVod_CanLoadChat === 'function' && LocalVod_CanLoadChat()) {
-            if (Chat_LocalVodIsLive() && Chat_LocalVodEventSource) return;
+            if (Chat_LocalVodNextRequestPending) return;
+            Chat_LocalVodNextRequestPending = true;
 
             LocalVod_LoadChat(
                 Chat_LocalVodNextLoadOffsetSeconds(),
                 function (response) {
+                    Chat_LocalVodNextRequestPending = false;
                     Chat_loadChatNextResult(
                         {
                             status: 200,
@@ -12415,6 +12429,7 @@
                     );
                 },
                 function () {
+                    Chat_LocalVodNextRequestPending = false;
                     if (PlayVod_ExternalTwitchVodId()) {
                         Chat_LocalVodChatUnavailable = true;
                         Chat_loadTwitchChatNextOffsetRequest(id);
@@ -12739,6 +12754,14 @@
         );
     }
 
+    function LocalVod_CanStreamChatEventsMeta(meta) {
+        var status = meta && meta.status ? String(meta.status).toLowerCase() : '';
+        return !!(
+            meta &&
+            (meta.active || meta.growing || status === 'open' || status === 'recording' || status === 'closing' || status === 'finalizing')
+        );
+    }
+
     function LocalVod_IsLiveChat() {
         var meta = typeof PlayVod_LocalVodMeta === 'function' ? PlayVod_LocalVodMeta() : null;
         return LocalVod_IsLiveChatMeta(meta);
@@ -12748,7 +12771,7 @@
         var url = meta && (meta.chat_events_url || meta.chat_event_url || meta.chat_sse_url || meta.live_chat_events_url);
         var afterOffsetMS;
 
-        if (!url && LocalVod_IsLiveChatMeta(meta)) url = LocalVod_ChatEventsPath(meta, afterOffsetSeconds);
+        if (!url && LocalVod_CanStreamChatEventsMeta(meta)) url = LocalVod_ChatEventsPath(meta, afterOffsetSeconds);
         if (!url) return '';
 
         afterOffsetSeconds = parseFloat(afterOffsetSeconds) || 0;
@@ -13089,6 +13112,8 @@
         var twitchDurationSeconds = LocalVod_TwitchVodDurationSeconds(twitchVod);
         var localStartMs = LocalVod_LocalStartMs(vod);
         var twitchStartMs = LocalVod_TwitchVodStartMs(twitchVod);
+        var chatDisplayDelaySeconds =
+            vod && typeof vod.local_chat_display_delay_seconds !== 'undefined' ? parseFloat(vod.local_chat_display_delay_seconds) : NaN;
         var title = (vod && (vod.title || vod.name)) || 'Local recording';
         var views = (vod && (vod.view_count || vod.views || vod.viewer_count || 0)) || 0;
         var meta = {
@@ -13108,6 +13133,7 @@
             duration_seconds: durationSeconds,
             viewer_count: views,
             chat_events_url: vod && (vod.chat_events_url || vod.chat_event_url || vod.chat_sse_url || vod.live_chat_events_url || ''),
+            local_chat_display_delay_seconds: isFinite(chatDisplayDelaySeconds) ? chatDisplayDelaySeconds : undefined,
             twitch_vod_id: twitchVodId,
             twitch_started_at: twitchStartedAt,
             twitch_duration_seconds: twitchDurationSeconds,
@@ -29049,6 +29075,28 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
         return seconds > 0 ? seconds : 0;
     }
 
+    function PlayVod_LocalVodChatDisplayDelaySeconds() {
+        var meta = PlayVod_LocalVodMeta();
+        var delay;
+
+        if (meta && typeof meta.local_chat_display_delay_seconds !== 'undefined') {
+            delay = parseFloat(meta.local_chat_display_delay_seconds);
+            if (isFinite(delay)) return delay;
+        }
+
+        return 16.368;
+    }
+
+    function PlayVod_LocalChatSecondsToPlayerSeconds(seconds) {
+        seconds = (parseFloat(seconds) || 0) + PlayVod_LocalVodChatDisplayDelaySeconds();
+        return seconds > 0 ? seconds : 0;
+    }
+
+    function PlayVod_PlayerSecondsToLocalChatSeconds(seconds) {
+        seconds = (parseFloat(seconds) || 0) - PlayVod_LocalVodChatDisplayDelaySeconds();
+        return seconds > 0 ? seconds : 0;
+    }
+
     function PlayVod_TwitchPreviewDurationSeconds() {
         var meta = PlayVod_LocalVodMeta();
         var duration = meta && meta.twitch_duration_seconds ? parseInt(meta.twitch_duration_seconds) : 0;
@@ -29119,6 +29167,71 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
 
     function PlayVod_WebOSLocalBridge() {
         return window.STTVWebOSLocalVod && Main_IsOn_OSInterface ? window.STTVWebOSLocalVod : null;
+    }
+
+    var PlayVod_WebOSLocalPlaylistLoadId = 0;
+    var PlayVod_WebOSLocalPendingResult = null;
+
+    function PlayVod_WebOSLocalCancelPlaylistRequest() {
+        PlayVod_WebOSLocalPlaylistLoadId++;
+        PlayVod_WebOSLocalPendingResult = null;
+    }
+
+    function PlayVod_WebOSLocalShouldFetchPlaylist(result) {
+        return !!(
+            result &&
+            result.url &&
+            !result.playlist &&
+            typeof Main_IsOn_OSInterface !== 'undefined' &&
+            Main_IsOn_OSInterface &&
+            /\.m3u8(?:[?#]|$)/i.test(result.url) &&
+            typeof PlayHLS_GetExternalPlayListAsync === 'function'
+        );
+    }
+
+    function PlayVod_WebOSLocalStartResult(result, playlist) {
+        if (!PlayVod_isOn || !result || !result.url) return;
+        var twitchOffsetSeconds = parseFloat(result.twitchOffsetSeconds);
+        var targetSeconds = isFinite(twitchOffsetSeconds) ? twitchOffsetSeconds : result.offsetSeconds || 0;
+        Play_showBufferDialog();
+        PlayVod_autoUrl = result.url;
+        PlayVod_playlist = playlist || result.playlist || '';
+        Main_vodOffset = targetSeconds > 0 ? targetSeconds : 0.001;
+        PlayVod_ResumeTime = Main_vodOffset;
+        PlayVod_currentTime = Main_vodOffset * 1000;
+        if (Main_values.ChannelVod_vodId) PlayVod_SaveVodIds(Main_vodOffset);
+        PlayVod_loadDataSuccessEnd(PlayVod_playlist);
+    }
+
+    function PlayVod_WebOSLocalPlaylistResult(response) {
+        var pending = PlayVod_WebOSLocalPendingResult;
+        var responseObj;
+        var playlist = '';
+        var playbackUrl = '';
+        var result;
+
+        if (!pending) return;
+
+        try {
+            responseObj = typeof response === 'string' ? JSON.parse(response) : response;
+        } catch (e) {
+            responseObj = null;
+        }
+
+        if (!responseObj || responseObj.checkResult !== pending.loadId) return;
+        PlayVod_WebOSLocalPendingResult = null;
+
+        result = pending.result;
+        if (!result) return;
+
+        if (responseObj.status === 200) {
+            playbackUrl = responseObj.url || result.url;
+            playlist = responseObj.responseText || '';
+            if (typeof LocalVod_PatchPlaylist === 'function') playlist = LocalVod_PatchPlaylist(playlist, playbackUrl);
+            result.url = playbackUrl;
+        }
+
+        PlayVod_WebOSLocalStartResult(result, playlist);
     }
 
     function PlayVod_WebOSLocalCurrentSeconds(preferPlayerTime) {
@@ -29197,19 +29310,22 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
             },
             playLocal: function (result) {
                 if (!PlayVod_isOn || !result || !result.url) return;
-                var twitchOffsetSeconds = parseFloat(result.twitchOffsetSeconds);
-                var targetSeconds = isFinite(twitchOffsetSeconds) ? twitchOffsetSeconds : result.offsetSeconds || 0;
-                Play_showBufferDialog();
-                PlayVod_autoUrl = result.url;
-                PlayVod_playlist = result.playlist || '';
-                Main_vodOffset = targetSeconds > 0 ? targetSeconds : 0.001;
-                PlayVod_ResumeTime = Main_vodOffset;
-                PlayVod_currentTime = Main_vodOffset * 1000;
-                if (Main_values.ChannelVod_vodId) PlayVod_SaveVodIds(Main_vodOffset);
-                PlayVod_loadDataSuccessEnd(PlayVod_playlist);
+                if (PlayVod_WebOSLocalShouldFetchPlaylist(result)) {
+                    Play_showBufferDialog();
+                    PlayVod_WebOSLocalPlaylistLoadId = Math.max(PlayVod_WebOSLocalPlaylistLoadId + 1, new Date().getTime());
+                    PlayVod_WebOSLocalPendingResult = {
+                        loadId: PlayVod_WebOSLocalPlaylistLoadId,
+                        result: result
+                    };
+                    PlayHLS_GetExternalPlayListAsync(result.url, PlayVod_WebOSLocalPlaylistLoadId, null, PlayVod_WebOSLocalPlaylistResult);
+                    return;
+                }
+                PlayVod_WebOSLocalCancelPlaylistRequest();
+                PlayVod_WebOSLocalStartResult(result, result.playlist || '');
             },
             playTwitch: function (result) {
                 if (!PlayVod_isOn) return;
+                PlayVod_WebOSLocalCancelPlaylistRequest();
                 var offsetSeconds = result ? parseFloat(result.offsetSeconds) : NaN;
                 if (isFinite(offsetSeconds) && (offsetSeconds > 0 || (result && result.suppressLocal))) {
                     Main_vodOffset = offsetSeconds > 0 ? offsetSeconds : 0.001;
