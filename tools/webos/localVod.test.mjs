@@ -424,9 +424,9 @@ assert.equal(packageJson.scripts['hosted:prepare'], 'npm run webos:prepare-relea
 
   assert.equal(context.PlayVod_ExternalTwitchVodId(), '2794330615', 'local archive metadata still exposes linked Twitch VOD id');
   assert.equal(context.PlayVod_LocalVodTimelineDeltaSeconds(), 30.651, 'chat timeline delta uses exact timestamp difference instead of old floored history value');
-  assert.equal(context.PlayVod_LocalVodChatDisplayDelaySeconds(), 19.368, 'local archive chat defaults to the calibrated in-video chat widget delay');
-  assert.equal(Number(context.PlayVod_LocalChatSecondsToPlayerSeconds(130.651).toFixed(3)), 150.019, 'local archive chat offsets stay on the local video timeline instead of Twitch VOD time');
-  assert.equal(Number(context.PlayVod_PlayerSecondsToLocalChatSeconds(150.019).toFixed(3)), 130.651, 'player timeline offsets map back to local archive chat offsets with the same delay');
+  assert.equal(context.PlayVod_LocalVodChatDisplayDelaySeconds(), 16.368, 'local archive chat defaults to a calibrated display delay with app overlay lag allowance');
+  assert.equal(Number(context.PlayVod_LocalChatSecondsToPlayerSeconds(130.651).toFixed(3)), 147.019, 'local archive chat offsets stay on the local video timeline instead of Twitch VOD time');
+  assert.equal(Number(context.PlayVod_PlayerSecondsToLocalChatSeconds(147.019).toFixed(3)), 130.651, 'player timeline offsets map back to local archive chat offsets with the same delay');
 
   context.Play_data.data[19].local_chat_display_delay_seconds = 19.368;
   assert.equal(Number(context.PlayVod_LocalChatSecondsToPlayerSeconds(14391.632).toFixed(3)), 14411, 'calibrated local chat display delay aligns the HTPC message with the in-video widget timestamp');

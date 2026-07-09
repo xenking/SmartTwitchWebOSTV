@@ -399,7 +399,7 @@ function PlayVod_LocalVodChatDisplayDelaySeconds() {
         if (isFinite(delay)) return delay;
     }
 
-    return 19.368;
+    return 16.368;
 }
 
 function PlayVod_LocalChatSecondsToPlayerSeconds(seconds) {
