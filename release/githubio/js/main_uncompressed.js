@@ -13112,6 +13112,8 @@
         var twitchDurationSeconds = LocalVod_TwitchVodDurationSeconds(twitchVod);
         var localStartMs = LocalVod_LocalStartMs(vod);
         var twitchStartMs = LocalVod_TwitchVodStartMs(twitchVod);
+        var chatDisplayDelaySeconds =
+            vod && typeof vod.local_chat_display_delay_seconds !== 'undefined' ? parseFloat(vod.local_chat_display_delay_seconds) : NaN;
         var title = (vod && (vod.title || vod.name)) || 'Local recording';
         var views = (vod && (vod.view_count || vod.views || vod.viewer_count || 0)) || 0;
         var meta = {
@@ -13131,6 +13133,7 @@
             duration_seconds: durationSeconds,
             viewer_count: views,
             chat_events_url: vod && (vod.chat_events_url || vod.chat_event_url || vod.chat_sse_url || vod.live_chat_events_url || ''),
+            local_chat_display_delay_seconds: isFinite(chatDisplayDelaySeconds) ? chatDisplayDelaySeconds : undefined,
             twitch_vod_id: twitchVodId,
             twitch_started_at: twitchStartedAt,
             twitch_duration_seconds: twitchDurationSeconds,
@@ -29072,13 +29075,25 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
         return seconds > 0 ? seconds : 0;
     }
 
+    function PlayVod_LocalVodChatDisplayDelaySeconds() {
+        var meta = PlayVod_LocalVodMeta();
+        var delay;
+
+        if (meta && typeof meta.local_chat_display_delay_seconds !== 'undefined') {
+            delay = parseFloat(meta.local_chat_display_delay_seconds);
+            if (isFinite(delay)) return delay;
+        }
+
+        return 19.368;
+    }
+
     function PlayVod_LocalChatSecondsToPlayerSeconds(seconds) {
-        seconds = (parseFloat(seconds) || 0) + PlayVod_LocalVodTimelineDeltaSeconds();
+        seconds = (parseFloat(seconds) || 0) + PlayVod_LocalVodChatDisplayDelaySeconds();
         return seconds > 0 ? seconds : 0;
     }
 
     function PlayVod_PlayerSecondsToLocalChatSeconds(seconds) {
-        seconds = (parseFloat(seconds) || 0) - PlayVod_LocalVodTimelineDeltaSeconds();
+        seconds = (parseFloat(seconds) || 0) - PlayVod_LocalVodChatDisplayDelaySeconds();
         return seconds > 0 ? seconds : 0;
     }
 

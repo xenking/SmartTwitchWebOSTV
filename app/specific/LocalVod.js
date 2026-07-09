@@ -554,6 +554,8 @@ function LocalVod_BuildData(vod, channel, identity, twitchVod) {
     var twitchDurationSeconds = LocalVod_TwitchVodDurationSeconds(twitchVod);
     var localStartMs = LocalVod_LocalStartMs(vod);
     var twitchStartMs = LocalVod_TwitchVodStartMs(twitchVod);
+    var chatDisplayDelaySeconds =
+        vod && typeof vod.local_chat_display_delay_seconds !== 'undefined' ? parseFloat(vod.local_chat_display_delay_seconds) : NaN;
     var title = (vod && (vod.title || vod.name)) || 'Local recording';
     var views = (vod && (vod.view_count || vod.views || vod.viewer_count || 0)) || 0;
     var meta = {
@@ -573,6 +575,7 @@ function LocalVod_BuildData(vod, channel, identity, twitchVod) {
         duration_seconds: durationSeconds,
         viewer_count: views,
         chat_events_url: vod && (vod.chat_events_url || vod.chat_event_url || vod.chat_sse_url || vod.live_chat_events_url || ''),
+        local_chat_display_delay_seconds: isFinite(chatDisplayDelaySeconds) ? chatDisplayDelaySeconds : undefined,
         twitch_vod_id: twitchVodId,
         twitch_started_at: twitchStartedAt,
         twitch_duration_seconds: twitchDurationSeconds,

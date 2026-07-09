@@ -390,13 +390,25 @@ function PlayVod_ChatSecondsToPlayerSeconds(seconds) {
     return seconds > 0 ? seconds : 0;
 }
 
+function PlayVod_LocalVodChatDisplayDelaySeconds() {
+    var meta = PlayVod_LocalVodMeta();
+    var delay;
+
+    if (meta && typeof meta.local_chat_display_delay_seconds !== 'undefined') {
+        delay = parseFloat(meta.local_chat_display_delay_seconds);
+        if (isFinite(delay)) return delay;
+    }
+
+    return 19.368;
+}
+
 function PlayVod_LocalChatSecondsToPlayerSeconds(seconds) {
-    seconds = (parseFloat(seconds) || 0) + PlayVod_LocalVodTimelineDeltaSeconds();
+    seconds = (parseFloat(seconds) || 0) + PlayVod_LocalVodChatDisplayDelaySeconds();
     return seconds > 0 ? seconds : 0;
 }
 
 function PlayVod_PlayerSecondsToLocalChatSeconds(seconds) {
-    seconds = (parseFloat(seconds) || 0) - PlayVod_LocalVodTimelineDeltaSeconds();
+    seconds = (parseFloat(seconds) || 0) - PlayVod_LocalVodChatDisplayDelaySeconds();
     return seconds > 0 ? seconds : 0;
 }
 

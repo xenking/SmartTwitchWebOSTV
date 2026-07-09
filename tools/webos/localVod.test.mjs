@@ -387,6 +387,7 @@ assert.equal(packageJson.scripts['hosted:prepare'], 'npm run webos:prepare-relea
   vm.runInContext(`function PlayVod_IsLocalArchiveVodId(vodId) {${functionBody(playVodSource, 'PlayVod_IsLocalArchiveVodId')}}`, context);
   vm.runInContext(`function PlayVod_ExternalTwitchVodId() {${functionBody(playVodSource, 'PlayVod_ExternalTwitchVodId')}}`, context);
   vm.runInContext(`function PlayVod_LocalVodTimelineDeltaSeconds() {${functionBody(playVodSource, 'PlayVod_LocalVodTimelineDeltaSeconds')}}`, context);
+  vm.runInContext(`function PlayVod_LocalVodChatDisplayDelaySeconds() {${functionBody(playVodSource, 'PlayVod_LocalVodChatDisplayDelaySeconds')}}`, context);
   vm.runInContext(`function PlayVod_LocalChatSecondsToPlayerSeconds(seconds) {${functionBody(playVodSource, 'PlayVod_LocalChatSecondsToPlayerSeconds')}}`, context);
   vm.runInContext(`function PlayVod_PlayerSecondsToLocalChatSeconds(seconds) {${functionBody(playVodSource, 'PlayVod_PlayerSecondsToLocalChatSeconds')}}`, context);
 
@@ -423,8 +424,13 @@ assert.equal(packageJson.scripts['hosted:prepare'], 'npm run webos:prepare-relea
 
   assert.equal(context.PlayVod_ExternalTwitchVodId(), '2794330615', 'local archive metadata still exposes linked Twitch VOD id');
   assert.equal(context.PlayVod_LocalVodTimelineDeltaSeconds(), 30.651, 'chat timeline delta uses exact timestamp difference instead of old floored history value');
-  assert.equal(Number(context.PlayVod_LocalChatSecondsToPlayerSeconds(130.651).toFixed(3)), 161.302, 'local archive chat offsets map onto the player timeline with precise local/Twitch delta');
-  assert.equal(Number(context.PlayVod_PlayerSecondsToLocalChatSeconds(161.302).toFixed(3)), 130.651, 'player timeline offsets map back to local archive chat offsets');
+  assert.equal(context.PlayVod_LocalVodChatDisplayDelaySeconds(), 19.368, 'local archive chat defaults to the calibrated in-video chat widget delay');
+  assert.equal(Number(context.PlayVod_LocalChatSecondsToPlayerSeconds(130.651).toFixed(3)), 150.019, 'local archive chat offsets stay on the local video timeline instead of Twitch VOD time');
+  assert.equal(Number(context.PlayVod_PlayerSecondsToLocalChatSeconds(150.019).toFixed(3)), 130.651, 'player timeline offsets map back to local archive chat offsets with the same delay');
+
+  context.Play_data.data[19].local_chat_display_delay_seconds = 19.368;
+  assert.equal(Number(context.PlayVod_LocalChatSecondsToPlayerSeconds(14391.632).toFixed(3)), 14411, 'calibrated local chat display delay aligns the HTPC message with the in-video widget timestamp');
+  assert.equal(Number(context.PlayVod_PlayerSecondsToLocalChatSeconds(14411).toFixed(3)), 14391.632, 'calibrated local chat fetch offset is inverse of display time');
 }
 
 {
@@ -494,6 +500,7 @@ assert.equal(packageJson.scripts['hosted:prepare'], 'npm run webos:prepare-relea
       source_started_at: '2026-06-06T06:22:40.114395769Z',
       duration_seconds: 53246,
       playback_url: '/archive/vods/grp-melharucos-20260606T062240.114395769Z/playlist.m3u8',
+      local_chat_display_delay_seconds: 21.25,
     },
   ];
 
@@ -511,6 +518,7 @@ assert.equal(packageJson.scripts['hosted:prepare'], 'npm run webos:prepare-relea
   assert.equal(context.LocalVod_GetMeta(merged[1]).twitch_started_at, '2026-06-06T06:48:00Z', 'local joined VOD keeps linked Twitch start time');
   assert.equal(context.LocalVod_GetMeta(merged[1]).twitch_duration_seconds, 24480, 'local joined VOD keeps linked Twitch duration for preview mapping');
   assert.equal(context.LocalVod_GetMeta(merged[1]).twitch_timeline_delta_seconds, -1519.886, 'local joined VOD stores precise local-to-Twitch timeline delta');
+  assert.equal(context.LocalVod_GetMeta(merged[1]).local_chat_display_delay_seconds, 21.25, 'local joined VOD keeps backend chat display delay override');
 
   const viewSorted = context.LocalVod_MergeWithTwitchVods(
     [
