@@ -169,6 +169,7 @@ segments/sess-wtv-kuboeb/000000002.ts
     'http://archive.local:18080/archive/vods/grp-wtv-kuboeb/thumbnail.jpg',
     'archive fallback live thumbnail is absolute for file:// webOS runtime'
   );
+	assert.equal(context.WTV_BuildLiveStatusFromArchiveVod({source_channel: 'kuboeb', playback_url: '/archive/vods/live/playlist.m3u8', viewer_count: 42}, 'kuboeb').viewer_count, 42, 'archive live status preserves W.TV viewer count');
 
   assert.equal(typeof context.WTV_PlayLiveLoadDataSuccess, 'function', 'W.TV live playlist success helper exists');
 
@@ -203,6 +204,38 @@ segments/sess-wtv-kuboeb/000000002.ts
   assert.equal(context.Play_data.AutoUrl, playbackUrl, 'W.TV live playback keeps direct archive HLS URL');
   assert.equal(context.captured.livePlaylist, '', 'W.TV archive HLS live playback avoids blob media playlists on webOS');
   assert.equal(context.captured.liveStartChat, false, 'W.TV live fallback does not start Twitch chat');
+}
+
+{
+  const context = createContext();
+  context.WTV_GetCurrentChannelMapping = () => ({
+    twitch_login: 'streamer',
+    twitch_display_name: 'Streamer',
+    twitch_id: '123',
+    twitch_logo: 'logo.jpg',
+    wtv_channel: 'kuboeb',
+  });
+  context.WTV_GetChannelVods = (_channel, success) => success({vods: [
+    {
+      id: 'wtv-finished',
+      source_channel: 'kuboeb',
+      status: 'finalized',
+      started_at: '2026-07-12T10:00:00Z',
+      duration_seconds: 100,
+      file_url: '/archive/vods/wtv-finished/file',
+    },
+    {
+      id: 'wtv-active',
+      source_channel: 'kuboeb',
+      status: 'open',
+      active: true,
+      playback_url: '/archive/vods/wtv-active/playlist.m3u8',
+    },
+  ]});
+  const response = {edges: [{id: 'twitch-vod', created_at: '2026-07-11T10:00:00Z'}]};
+  let merged;
+  context.WTV_MergeChannelVodResponse({periodPos: 0, data: null, highlight: false}, response, value => { merged = value; });
+  assert.deepEqual(Array.from(merged.edges, item => item.id || item[7]), ['wtv-finished', 'twitch-vod'], 'finalized mapped W.TV recordings merge beside Twitch VODs; active recording stays out');
 }
 
 {

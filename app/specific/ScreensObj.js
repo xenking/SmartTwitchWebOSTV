@@ -1300,11 +1300,13 @@ function ScreensObj_InitChannelVod() {
             this.cursor = null;
         }
 
-        if (typeof LocalVod_MergeChannelVodResponse === 'function') {
-            LocalVod_MergeChannelVodResponse(this, responseObj, this.concatenateAfter.bind(this));
-        } else {
-            this.concatenateAfter(responseObj);
-        }
+		var finishVodMerge = this.concatenateAfter.bind(this);
+		var mergeWTVVods = function (mergedResponse) {
+			if (typeof WTV_MergeChannelVodResponse === 'function') WTV_MergeChannelVodResponse(this, mergedResponse, finishVodMerge);
+			else finishVodMerge(mergedResponse);
+		}.bind(this);
+		if (typeof LocalVod_MergeChannelVodResponse === 'function') LocalVod_MergeChannelVodResponse(this, responseObj, mergeWTVVods);
+		else mergeWTVVods(responseObj);
     };
 }
 

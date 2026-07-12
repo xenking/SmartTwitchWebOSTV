@@ -36777,11 +36777,13 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
                 this.cursor = null;
             }
 
-            if (typeof LocalVod_MergeChannelVodResponse === 'function') {
-                LocalVod_MergeChannelVodResponse(this, responseObj, this.concatenateAfter.bind(this));
-            } else {
-                this.concatenateAfter(responseObj);
-            }
+            var finishVodMerge = this.concatenateAfter.bind(this);
+            var mergeWTVVods = function (mergedResponse) {
+                if (typeof WTV_MergeChannelVodResponse === 'function') WTV_MergeChannelVodResponse(this, mergedResponse, finishVodMerge);
+                else finishVodMerge(mergedResponse);
+            }.bind(this);
+            if (typeof LocalVod_MergeChannelVodResponse === 'function') LocalVod_MergeChannelVodResponse(this, responseObj, mergeWTVVods);
+            else mergeWTVVods(responseObj);
         };
     }
 
@@ -49235,9 +49237,7 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
     }
 
     function WTV_GetLive(channel, success, error) {
-        WTV_Request('/api/sources/wtv/' + encodeURIComponent(channel) + '/live', null, null, success, function () {
-            WTV_GetLiveFromActiveArchive(channel, success, error);
-        });
+        WTV_GetLiveFromActiveArchive(channel, success, error);
     }
 
     function WTV_GetChannelVods(channel, success, error) {
@@ -49555,6 +49555,66 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
         if (response && response.recordings) return response.recordings;
         if (response && response.data) return response.data;
         return response;
+    }
+
+    function WTV_MergeChannelVodResponse(screenObj, responseObj, done) {
+        var mapping = WTV_GetCurrentChannelMapping();
+        var twitchVods = (responseObj && responseObj.edges) || [];
+
+        if (!screenObj || screenObj.highlight || screenObj.data || !mapping || !mapping.wtv_channel || !WTV_GetEndpoint()) {
+            done(responseObj);
+            return true;
+        }
+
+        WTV_GetChannelVods(
+            mapping.wtv_channel,
+            function (wtvResponse) {
+                var vods = WTV_GetVodList(wtvResponse) || [];
+                var identity = WTV_IdentityFromMapping(mapping, mapping.wtv_channel);
+                var seen = {};
+                var merged = [];
+                var i;
+                var data;
+
+                for (i = 0; i < twitchVods.length; i++) {
+                    if (twitchVods[i] && twitchVods[i].id) seen[twitchVods[i].id] = true;
+                    merged.push(twitchVods[i]);
+                }
+                for (i = 0; i < vods.length; i++) {
+                    if (!WTV_IsFinalizedVod(vods[i]) || !WTV_ArchiveVodPlaybackUrl(vods[i])) continue;
+                    data = WTV_BuildVodData(vods[i], mapping.wtv_channel, identity);
+                    if (!data[7] || seen[data[7]]) continue;
+                    seen[data[7]] = true;
+                    merged.push(data);
+                }
+
+                if (screenObj.periodPos === 2) {
+                    merged.sort(function (a, b) {
+                        return WTV_VodViewCount(b) - WTV_VodViewCount(a);
+                    });
+                } else {
+                    merged.sort(function (a, b) {
+                        return WTV_VodSortTime(b) - WTV_VodSortTime(a);
+                    });
+                }
+                responseObj.edges = merged;
+                done(responseObj);
+            },
+            function () {
+                done(responseObj);
+            }
+        );
+        return true;
+    }
+
+    function WTV_VodViewCount(data) {
+        var meta = WTV_GetMeta(data);
+        return parseInt(meta ? meta.viewer_count : data && (data.view_count || data.views || data.viewer_count || data[13])) || 0;
+    }
+
+    function WTV_VodSortTime(data) {
+        var meta = WTV_GetMeta(data);
+        return WTV_ParseTimeMs(meta ? meta.started_at : data && (data.created_at || data.createdAt || data.published_at));
     }
 
     function WTV_FindVod(response) {
