@@ -151,6 +151,26 @@ segments/sess-wtv-kuboeb/000000002.ts
 
 {
   const context = createContext();
+  let fallbackCalls = 0;
+  context.WTV_GetLiveFromActiveArchive = () => fallbackCalls++;
+  context.WTV_Request = (path, method, body, success) => {
+    assert.equal(path, '/archive/sources/wtv/kuboeb/live', 'W.TV live check uses direct status endpoint');
+    assert.equal(method, null);
+    assert.equal(body, null);
+    success({online: true, playback_kind: 'direct_hls'});
+  };
+  let status;
+  context.WTV_GetLive('kuboeb', value => { status = value; });
+  assert.equal(status.online, true, 'direct W.TV live status remains primary');
+  assert.equal(fallbackCalls, 0, 'active archive fallback is not called after direct success');
+
+  context.WTV_Request = (_path, _method, _body, _success, error) => error('offline');
+  context.WTV_GetLive('kuboeb', () => {}, () => {});
+  assert.equal(fallbackCalls, 1, 'active archive lookup is the fallback after direct status failure');
+}
+
+{
+  const context = createContext();
   const liveStatus = context.WTV_BuildLiveStatusFromArchiveVod(
     {
       id: 'grp-wtv-kuboeb',

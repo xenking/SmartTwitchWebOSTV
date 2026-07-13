@@ -49238,7 +49238,9 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
     }
 
     function WTV_GetLive(channel, success, error) {
-        WTV_GetLiveFromActiveArchive(channel, success, error);
+        WTV_Request('/archive/sources/wtv/' + encodeURIComponent(channel) + '/live', null, null, success, function () {
+            WTV_GetLiveFromActiveArchive(channel, success, error);
+        });
     }
 
     function WTV_GetChannelVods(channel, success, error) {

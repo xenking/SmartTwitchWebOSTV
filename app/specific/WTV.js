@@ -147,7 +147,15 @@ function WTV_AddSource(channel, success, error) {
 }
 
 function WTV_GetLive(channel, success, error) {
-	WTV_GetLiveFromActiveArchive(channel, success, error);
+    WTV_Request(
+        '/archive/sources/wtv/' + encodeURIComponent(channel) + '/live',
+        null,
+        null,
+        success,
+        function () {
+            WTV_GetLiveFromActiveArchive(channel, success, error);
+        }
+    );
 }
 
 function WTV_GetChannelVods(channel, success, error) {
