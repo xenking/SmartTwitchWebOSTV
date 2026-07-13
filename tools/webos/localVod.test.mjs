@@ -213,6 +213,7 @@ assert.match(
 assert.match(screensSource, /LocalVod_IsData\(valuesArray\)/, 'local VOD cells render as LOCAL, not W.TV');
 assert.match(wtvSource, /function WTV_MergeChannelVodResponse/, 'WTV module adds mapped finalized recordings after generic local VOD merge');
 assert.match(screensObjSource, /WTV_MergeChannelVodResponse/, 'channel VOD screen chains W.TV merge after local archive merge');
+assert.match(screensObjSource, /WTV_IsData\(cell\)/, 'channel VOD cells preserve prebuilt W.TV rows instead of reparsing them as Twitch GraphQL nodes');
 assert.match(indexSource, /specific\/LocalVod\.js/, 'LocalVod runtime module is loaded');
 assert.match(localVodSource, /function LocalVod_SaveVodHistory/, 'local VOD playback saves independent VOD history');
 assert.match(functionBody(localVodSource, 'LocalVod_ApplyVodInfo'), /LocalVod_SaveVodHistory/, 'local VOD info path records resume history');

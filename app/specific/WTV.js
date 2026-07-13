@@ -465,7 +465,7 @@ function WTV_MergeChannelVodResponse(screenObj, responseObj, done) {
 	var mapping = WTV_GetCurrentChannelMapping();
 	var twitchVods = (responseObj && responseObj.edges) || [];
 
-	if (!screenObj || screenObj.highlight || screenObj.data || !mapping || !mapping.wtv_channel || !WTV_GetEndpoint()) {
+	if (!screenObj || screenObj.highlight || !mapping || !mapping.wtv_channel || !WTV_GetEndpoint()) {
 		done(responseObj);
 		return true;
 	}
@@ -479,7 +479,13 @@ function WTV_MergeChannelVodResponse(screenObj, responseObj, done) {
 			var merged = [];
 			var i;
 			var data;
+			var sortMode = screenObj.periodPos === 2 ? 'views' : 'recent';
+			var cutoff = twitchVods.length ? WTV_VodSortValue(twitchVods[twitchVods.length - 1], sortMode) : 0;
+			var existing = screenObj.data || [];
 
+			for (i = 0; i < existing.length; i++) {
+				if (existing[i] && (existing[i].id || existing[i][7])) seen[existing[i].id || existing[i][7]] = true;
+			}
 			for (i = 0; i < twitchVods.length; i++) {
 				if (twitchVods[i] && twitchVods[i].id) seen[twitchVods[i].id] = true;
 				merged.push(twitchVods[i]);
@@ -488,11 +494,12 @@ function WTV_MergeChannelVodResponse(screenObj, responseObj, done) {
 				if (!WTV_IsFinalizedVod(vods[i]) || !WTV_ArchiveVodPlaybackUrl(vods[i])) continue;
 				data = WTV_BuildVodData(vods[i], mapping.wtv_channel, identity);
 				if (!data[7] || seen[data[7]]) continue;
+				if (!screenObj.dataEnded && twitchVods.length && WTV_VodSortValue(data, sortMode) < cutoff) continue;
 				seen[data[7]] = true;
 				merged.push(data);
 			}
 
-			if (screenObj.periodPos === 2) {
+			if (sortMode === 'views') {
 				merged.sort(function (a, b) {
 					return WTV_VodViewCount(b) - WTV_VodViewCount(a);
 				});
@@ -513,12 +520,19 @@ function WTV_MergeChannelVodResponse(screenObj, responseObj, done) {
 
 function WTV_VodViewCount(data) {
 	var meta = WTV_GetMeta(data);
-	return parseInt(meta ? meta.viewer_count : data && (data.view_count || data.views || data.viewer_count || data[13])) || 0;
+	return parseInt(meta ? meta.viewer_count : data && (data.viewCount || data.view_count || data.views || data.viewer_count || data[13])) || 0;
 }
 
 function WTV_VodSortTime(data) {
 	var meta = WTV_GetMeta(data);
-	return WTV_ParseTimeMs(meta ? meta.started_at : data && (data.created_at || data.createdAt || data.published_at));
+	var localMeta = typeof LocalVod_GetMeta === 'function' ? LocalVod_GetMeta(data) : null;
+	return WTV_ParseTimeMs(
+		meta ? meta.started_at : localMeta ? localMeta.started_at : data && (data.created_at || data.createdAt || data.published_at || data[12])
+	);
+}
+
+function WTV_VodSortValue(data, sortMode) {
+	return sortMode === 'views' ? WTV_VodViewCount(data) : WTV_VodSortTime(data);
 }
 
 function WTV_FindVod(response) {

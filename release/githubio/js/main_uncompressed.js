@@ -35985,9 +35985,10 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
             Vod_newImg: new Image(),
             AnimateThumb: ScreensObj_AnimateThumbId,
             addCell: function (cell) {
-                var isLocalVod = typeof LocalVod_IsData === 'function' && LocalVod_IsData(cell);
-                var valuesArray = isLocalVod ? cell : ScreensObj_VodCellArray(cell, this.isQuery, this.gameSelected_Id, this.gameSelected_name);
-                var channelId = isLocalVod ? valuesArray[14] : this.isQuery && cell.creator ? cell.creator.id : cell.user_id;
+                var isExternalVod =
+                    (typeof LocalVod_IsData === 'function' && LocalVod_IsData(cell)) || (typeof WTV_IsData === 'function' && WTV_IsData(cell));
+                var valuesArray = isExternalVod ? cell : ScreensObj_VodCellArray(cell, this.isQuery, this.gameSelected_Id, this.gameSelected_name);
+                var channelId = isExternalVod ? valuesArray[14] : this.isQuery && cell.creator ? cell.creator.id : cell.user_id;
 
                 //skip check if game is blocked as we are on the blocked game section
                 var skipBlockedCheck = this.screen === Main_AGameVod && AddUser_IsUserSet() && Screens_getGameIsBlocked(this.gameSelected_Id);
@@ -49561,7 +49562,7 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
         var mapping = WTV_GetCurrentChannelMapping();
         var twitchVods = (responseObj && responseObj.edges) || [];
 
-        if (!screenObj || screenObj.highlight || screenObj.data || !mapping || !mapping.wtv_channel || !WTV_GetEndpoint()) {
+        if (!screenObj || screenObj.highlight || !mapping || !mapping.wtv_channel || !WTV_GetEndpoint()) {
             done(responseObj);
             return true;
         }
@@ -49575,7 +49576,13 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
                 var merged = [];
                 var i;
                 var data;
+                var sortMode = screenObj.periodPos === 2 ? 'views' : 'recent';
+                var cutoff = twitchVods.length ? WTV_VodSortValue(twitchVods[twitchVods.length - 1], sortMode) : 0;
+                var existing = screenObj.data || [];
 
+                for (i = 0; i < existing.length; i++) {
+                    if (existing[i] && (existing[i].id || existing[i][7])) seen[existing[i].id || existing[i][7]] = true;
+                }
                 for (i = 0; i < twitchVods.length; i++) {
                     if (twitchVods[i] && twitchVods[i].id) seen[twitchVods[i].id] = true;
                     merged.push(twitchVods[i]);
@@ -49584,11 +49591,12 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
                     if (!WTV_IsFinalizedVod(vods[i]) || !WTV_ArchiveVodPlaybackUrl(vods[i])) continue;
                     data = WTV_BuildVodData(vods[i], mapping.wtv_channel, identity);
                     if (!data[7] || seen[data[7]]) continue;
+                    if (!screenObj.dataEnded && twitchVods.length && WTV_VodSortValue(data, sortMode) < cutoff) continue;
                     seen[data[7]] = true;
                     merged.push(data);
                 }
 
-                if (screenObj.periodPos === 2) {
+                if (sortMode === 'views') {
                     merged.sort(function (a, b) {
                         return WTV_VodViewCount(b) - WTV_VodViewCount(a);
                     });
@@ -49609,12 +49617,19 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
 
     function WTV_VodViewCount(data) {
         var meta = WTV_GetMeta(data);
-        return parseInt(meta ? meta.viewer_count : data && (data.view_count || data.views || data.viewer_count || data[13])) || 0;
+        return parseInt(meta ? meta.viewer_count : data && (data.viewCount || data.view_count || data.views || data.viewer_count || data[13])) || 0;
     }
 
     function WTV_VodSortTime(data) {
         var meta = WTV_GetMeta(data);
-        return WTV_ParseTimeMs(meta ? meta.started_at : data && (data.created_at || data.createdAt || data.published_at));
+        var localMeta = typeof LocalVod_GetMeta === 'function' ? LocalVod_GetMeta(data) : null;
+        return WTV_ParseTimeMs(
+            meta ? meta.started_at : localMeta ? localMeta.started_at : data && (data.created_at || data.createdAt || data.published_at || data[12])
+        );
+    }
+
+    function WTV_VodSortValue(data, sortMode) {
+        return sortMode === 'views' ? WTV_VodViewCount(data) : WTV_VodSortTime(data);
     }
 
     function WTV_FindVod(response) {

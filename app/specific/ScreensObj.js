@@ -507,9 +507,11 @@ function ScreensObj_StartAllVars() {
         Vod_newImg: new Image(),
         AnimateThumb: ScreensObj_AnimateThumbId,
         addCell: function (cell) {
-            var isLocalVod = typeof LocalVod_IsData === 'function' && LocalVod_IsData(cell);
-            var valuesArray = isLocalVod ? cell : ScreensObj_VodCellArray(cell, this.isQuery, this.gameSelected_Id, this.gameSelected_name);
-            var channelId = isLocalVod ? valuesArray[14] : this.isQuery && cell.creator ? cell.creator.id : cell.user_id;
+            var isExternalVod =
+                (typeof LocalVod_IsData === 'function' && LocalVod_IsData(cell)) ||
+                (typeof WTV_IsData === 'function' && WTV_IsData(cell));
+            var valuesArray = isExternalVod ? cell : ScreensObj_VodCellArray(cell, this.isQuery, this.gameSelected_Id, this.gameSelected_name);
+            var channelId = isExternalVod ? valuesArray[14] : this.isQuery && cell.creator ? cell.creator.id : cell.user_id;
 
             //skip check if game is blocked as we are on the blocked game section
             var skipBlockedCheck = this.screen === Main_AGameVod && AddUser_IsUserSet() && Screens_getGameIsBlocked(this.gameSelected_Id);

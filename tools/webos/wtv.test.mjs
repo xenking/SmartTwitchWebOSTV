@@ -240,6 +240,39 @@ segments/sess-wtv-kuboeb/000000002.ts
 
 {
   const context = createContext();
+  assert.equal(context.WTV_VodViewCount({viewCount: 123}), 123, 'views sort reads Twitch GraphQL viewCount');
+  context.LocalVod_GetMeta = data => data && data.localMeta;
+  assert.equal(
+    context.WTV_VodSortTime({localMeta: {started_at: '2026-07-10T10:00:00Z'}}),
+    Date.parse('2026-07-10T10:00:00Z'),
+    'recent sort reads local archive metadata inserted before W.TV merge'
+  );
+}
+
+{
+  const context = createContext();
+  context.WTV_GetCurrentChannelMapping = () => ({twitch_login: 'streamer', twitch_id: '123', wtv_channel: 'kuboeb'});
+  context.WTV_GetChannelVods = (_channel, success) => success({vods: [{
+    id: 'wtv-80',
+    source_channel: 'kuboeb',
+    status: 'finalized',
+    started_at: '2026-07-01T10:00:00Z',
+    duration_seconds: 100,
+    viewer_count: 80,
+    file_url: '/archive/vods/wtv-80/file',
+  }]});
+  const screen = {periodPos: 2, data: null, dataEnded: false, highlight: false};
+  let firstPage;
+  context.WTV_MergeChannelVodResponse(screen, {edges: [{id: 'tw-100', viewCount: 100}, {id: 'tw-90', viewCount: 90}]}, value => { firstPage = value; });
+  assert.deepEqual(Array.from(firstPage.edges, item => item.id || item[7]), ['tw-100', 'tw-90'], 'lower-view W.TV VOD is deferred past the first Twitch page');
+  screen.data = firstPage.edges;
+  let secondPage;
+  context.WTV_MergeChannelVodResponse(screen, {edges: [{id: 'tw-70', viewCount: 70}, {id: 'tw-60', viewCount: 60}]}, value => { secondPage = value; });
+  assert.deepEqual(Array.from(secondPage.edges, item => item.id || item[7]), ['wtv-80', 'tw-70', 'tw-60'], 'deferred W.TV VOD is inserted on the page matching the global views order');
+}
+
+{
+  const context = createContext();
   const playbackUrl = 'http://archive.local:18080/archive/vods/grp-wtv-kuboeb/file';
   const vodData = context.WTV_BuildVodData(
     {
