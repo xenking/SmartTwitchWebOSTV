@@ -1302,9 +1302,10 @@ function ScreensObj_InitChannelVod() {
             this.cursor = null;
         }
 
+		var twitchPageVods = responseObj && responseObj.edges ? responseObj.edges.slice(0) : [];
 		var finishVodMerge = this.concatenateAfter.bind(this);
 		var mergeWTVVods = function (mergedResponse) {
-			if (typeof WTV_MergeChannelVodResponse === 'function') WTV_MergeChannelVodResponse(this, mergedResponse, finishVodMerge);
+			if (typeof WTV_MergeChannelVodResponse === 'function') WTV_MergeChannelVodResponse(this, mergedResponse, finishVodMerge, twitchPageVods);
 			else finishVodMerge(mergedResponse);
 		}.bind(this);
 		if (typeof LocalVod_MergeChannelVodResponse === 'function') LocalVod_MergeChannelVodResponse(this, responseObj, mergeWTVVods);

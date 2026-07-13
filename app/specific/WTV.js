@@ -469,9 +469,10 @@ function WTV_GetVodList(response) {
     return response;
 }
 
-function WTV_MergeChannelVodResponse(screenObj, responseObj, done) {
+function WTV_MergeChannelVodResponse(screenObj, responseObj, done, twitchPageVods) {
 	var mapping = WTV_GetCurrentChannelMapping();
-	var twitchVods = (responseObj && responseObj.edges) || [];
+	var mergedVods = (responseObj && responseObj.edges) || [];
+	var pageVods = twitchPageVods || mergedVods;
 
 	if (!screenObj || screenObj.highlight || !mapping || !mapping.wtv_channel || !WTV_GetEndpoint()) {
 		done(responseObj);
@@ -488,21 +489,21 @@ function WTV_MergeChannelVodResponse(screenObj, responseObj, done) {
 			var i;
 			var data;
 			var sortMode = screenObj.periodPos === 2 ? 'views' : 'recent';
-			var cutoff = twitchVods.length ? WTV_VodSortValue(twitchVods[twitchVods.length - 1], sortMode) : 0;
+			var cutoff = pageVods.length ? WTV_VodSortValue(pageVods[pageVods.length - 1], sortMode) : 0;
 			var existing = screenObj.data || [];
 
 			for (i = 0; i < existing.length; i++) {
 				if (existing[i] && (existing[i].id || existing[i][7])) seen[existing[i].id || existing[i][7]] = true;
 			}
-			for (i = 0; i < twitchVods.length; i++) {
-				if (twitchVods[i] && twitchVods[i].id) seen[twitchVods[i].id] = true;
-				merged.push(twitchVods[i]);
+			for (i = 0; i < mergedVods.length; i++) {
+				if (mergedVods[i] && mergedVods[i].id) seen[mergedVods[i].id] = true;
+				merged.push(mergedVods[i]);
 			}
 			for (i = 0; i < vods.length; i++) {
 				if (!WTV_IsFinalizedVod(vods[i]) || !WTV_ArchiveVodPlaybackUrl(vods[i])) continue;
 				data = WTV_BuildVodData(vods[i], mapping.wtv_channel, identity);
 				if (!data[7] || seen[data[7]]) continue;
-				if (!screenObj.dataEnded && twitchVods.length && WTV_VodSortValue(data, sortMode) < cutoff) continue;
+				if (!screenObj.dataEnded && (!pageVods.length || WTV_VodSortValue(data, sortMode) < cutoff)) continue;
 				seen[data[7]] = true;
 				merged.push(data);
 			}

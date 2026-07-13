@@ -293,6 +293,40 @@ segments/sess-wtv-kuboeb/000000002.ts
 
 {
   const context = createContext();
+  context.WTV_GetCurrentChannelMapping = () => ({twitch_login: 'streamer', twitch_id: '123', wtv_channel: 'kuboeb'});
+  context.WTV_GetChannelVods = (_channel, success) => success({vods: [{
+    id: 'wtv-80',
+    source_channel: 'kuboeb',
+    status: 'finalized',
+    viewer_count: 80,
+    file_url: '/archive/vods/wtv-80/file',
+  }]});
+  const localVod = [];
+  localVod[7] = 'local-1';
+  localVod[13] = 1;
+  const twitchPage = [{id: 'tw-100', viewCount: 100}, {id: 'tw-90', viewCount: 90}];
+  const response = {edges: [twitchPage[0], twitchPage[1], localVod]};
+  let merged;
+  context.WTV_MergeChannelVodResponse(
+    {periodPos: 2, data: null, dataEnded: false, highlight: false},
+    response,
+    value => { merged = value; },
+    twitchPage
+  );
+  assert.deepEqual(
+    Array.from(merged.edges, item => item.id || item[7]),
+    ['tw-100', 'tw-90', 'local-1'],
+    'local archive rows do not lower the Twitch page cutoff and pull deferred W.TV VODs forward'
+  );
+  assert.match(
+    functionBody(screensObjSource, 'ScreensObj_InitChannelVod'),
+    /WTV_MergeChannelVodResponse\(this, mergedResponse, finishVodMerge, twitchPageVods\)/,
+    'Channel VOD pipeline passes the immutable Twitch page rows into the W.TV merge'
+  );
+}
+
+{
+  const context = createContext();
   const playbackUrl = 'http://archive.local:18080/archive/vods/grp-wtv-kuboeb/file';
   const vodData = context.WTV_BuildVodData(
     {
