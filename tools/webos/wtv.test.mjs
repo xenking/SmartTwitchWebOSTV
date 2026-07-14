@@ -151,6 +151,28 @@ segments/sess-wtv-kuboeb/000000002.ts
 
 {
   const context = createContext();
+  let fallbackCalls = 0;
+  context.WTV_GetLiveFromActiveArchive = () => fallbackCalls++;
+  context.WTV_Request = (path, method, body, success) => {
+    assert.equal(path, '/archive/sources/wtv/kuboeb/live', 'W.TV live check uses the active archive status endpoint');
+    assert.equal(method, null);
+    assert.equal(body, null);
+    success({online: true, playback_kind: 'archive_hls', playback_url: '/archive/vods/grp-wtv-kuboeb/playlist.m3u8'});
+  };
+  let status;
+  context.WTV_GetLive('kuboeb', value => { status = value; });
+  assert.equal(status.online, true, 'active W.TV archive status remains primary');
+  assert.equal(status.playback_kind, 'archive_hls', 'active status identifies archive HLS playback');
+  assert.match(status.playback_url, /^\/archive\/vods\//, 'active status never points at W.TV origin playback');
+  assert.equal(fallbackCalls, 0, 'VOD-list fallback is not called after active archive success');
+
+  context.WTV_Request = (_path, _method, _body, _success, error) => error('offline');
+  context.WTV_GetLive('kuboeb', () => {}, () => {});
+  assert.equal(fallbackCalls, 1, 'active archive VOD lookup is the fallback after status failure');
+}
+
+{
+  const context = createContext();
   const liveStatus = context.WTV_BuildLiveStatusFromArchiveVod(
     {
       id: 'grp-wtv-kuboeb',
@@ -169,6 +191,7 @@ segments/sess-wtv-kuboeb/000000002.ts
     'http://archive.local:18080/archive/vods/grp-wtv-kuboeb/thumbnail.jpg',
     'archive fallback live thumbnail is absolute for file:// webOS runtime'
   );
+	assert.equal(context.WTV_BuildLiveStatusFromArchiveVod({source_channel: 'kuboeb', playback_url: '/archive/vods/live/playlist.m3u8', viewer_count: 42}, 'kuboeb').viewer_count, 42, 'archive live status preserves W.TV viewer count');
 
   assert.equal(typeof context.WTV_PlayLiveLoadDataSuccess, 'function', 'W.TV live playlist success helper exists');
 
@@ -203,6 +226,105 @@ segments/sess-wtv-kuboeb/000000002.ts
   assert.equal(context.Play_data.AutoUrl, playbackUrl, 'W.TV live playback keeps direct archive HLS URL');
   assert.equal(context.captured.livePlaylist, '', 'W.TV archive HLS live playback avoids blob media playlists on webOS');
   assert.equal(context.captured.liveStartChat, false, 'W.TV live fallback does not start Twitch chat');
+}
+
+{
+  const context = createContext();
+  context.WTV_GetCurrentChannelMapping = () => ({
+    twitch_login: 'streamer',
+    twitch_display_name: 'Streamer',
+    twitch_id: '123',
+    twitch_logo: 'logo.jpg',
+    wtv_channel: 'kuboeb',
+  });
+  context.WTV_GetChannelVods = (_channel, success) => success({vods: [
+    {
+      id: 'wtv-finished',
+      source_channel: 'kuboeb',
+      status: 'finalized',
+      started_at: '2026-07-12T10:00:00Z',
+      duration_seconds: 100,
+      file_url: '/archive/vods/wtv-finished/file',
+    },
+    {
+      id: 'wtv-active',
+      source_channel: 'kuboeb',
+      status: 'open',
+      active: true,
+      playback_url: '/archive/vods/wtv-active/playlist.m3u8',
+    },
+  ]});
+  const response = {edges: [{id: 'twitch-vod', created_at: '2026-07-11T10:00:00Z'}]};
+  let merged;
+  context.WTV_MergeChannelVodResponse({periodPos: 0, data: null, highlight: false}, response, value => { merged = value; });
+  assert.deepEqual(Array.from(merged.edges, item => item.id || item[7]), ['wtv-finished', 'twitch-vod'], 'finalized mapped W.TV recordings merge beside Twitch VODs; active recording stays out');
+}
+
+{
+  const context = createContext();
+  assert.equal(context.WTV_VodViewCount({viewCount: 123}), 123, 'views sort reads Twitch GraphQL viewCount');
+  context.LocalVod_GetMeta = data => data && data.localMeta;
+  assert.equal(
+    context.WTV_VodSortTime({localMeta: {started_at: '2026-07-10T10:00:00Z'}}),
+    Date.parse('2026-07-10T10:00:00Z'),
+    'recent sort reads local archive metadata inserted before W.TV merge'
+  );
+}
+
+{
+  const context = createContext();
+  context.WTV_GetCurrentChannelMapping = () => ({twitch_login: 'streamer', twitch_id: '123', wtv_channel: 'kuboeb'});
+  context.WTV_GetChannelVods = (_channel, success) => success({vods: [{
+    id: 'wtv-80',
+    source_channel: 'kuboeb',
+    status: 'finalized',
+    started_at: '2026-07-01T10:00:00Z',
+    duration_seconds: 100,
+    viewer_count: 80,
+    file_url: '/archive/vods/wtv-80/file',
+  }]});
+  const screen = {periodPos: 2, data: null, dataEnded: false, highlight: false};
+  let firstPage;
+  context.WTV_MergeChannelVodResponse(screen, {edges: [{id: 'tw-100', viewCount: 100}, {id: 'tw-90', viewCount: 90}]}, value => { firstPage = value; });
+  assert.deepEqual(Array.from(firstPage.edges, item => item.id || item[7]), ['tw-100', 'tw-90'], 'lower-view W.TV VOD is deferred past the first Twitch page');
+  screen.data = firstPage.edges;
+  let secondPage;
+  context.WTV_MergeChannelVodResponse(screen, {edges: [{id: 'tw-70', viewCount: 70}, {id: 'tw-60', viewCount: 60}]}, value => { secondPage = value; });
+  assert.deepEqual(Array.from(secondPage.edges, item => item.id || item[7]), ['wtv-80', 'tw-70', 'tw-60'], 'deferred W.TV VOD is inserted on the page matching the global views order');
+}
+
+{
+  const context = createContext();
+  context.WTV_GetCurrentChannelMapping = () => ({twitch_login: 'streamer', twitch_id: '123', wtv_channel: 'kuboeb'});
+  context.WTV_GetChannelVods = (_channel, success) => success({vods: [{
+    id: 'wtv-80',
+    source_channel: 'kuboeb',
+    status: 'finalized',
+    viewer_count: 80,
+    file_url: '/archive/vods/wtv-80/file',
+  }]});
+  const localVod = [];
+  localVod[7] = 'local-1';
+  localVod[13] = 1;
+  const twitchPage = [{id: 'tw-100', viewCount: 100}, {id: 'tw-90', viewCount: 90}];
+  const response = {edges: [twitchPage[0], twitchPage[1], localVod]};
+  let merged;
+  context.WTV_MergeChannelVodResponse(
+    {periodPos: 2, data: null, dataEnded: false, highlight: false},
+    response,
+    value => { merged = value; },
+    twitchPage
+  );
+  assert.deepEqual(
+    Array.from(merged.edges, item => item.id || item[7]),
+    ['tw-100', 'tw-90', 'local-1'],
+    'local archive rows do not lower the Twitch page cutoff and pull deferred W.TV VODs forward'
+  );
+  assert.match(
+    functionBody(screensObjSource, 'ScreensObj_InitChannelVod'),
+    /WTV_MergeChannelVodResponse\(this, mergedResponse, finishVodMerge, twitchPageVods\)/,
+    'Channel VOD pipeline passes the immutable Twitch page rows into the W.TV merge'
+  );
 }
 
 {

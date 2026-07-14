@@ -148,7 +148,7 @@ function WTV_AddSource(channel, success, error) {
 
 function WTV_GetLive(channel, success, error) {
     WTV_Request(
-        '/api/sources/wtv/' + encodeURIComponent(channel) + '/live',
+        '/archive/sources/wtv/' + encodeURIComponent(channel) + '/live',
         null,
         null,
         success,
@@ -467,6 +467,81 @@ function WTV_GetVodList(response) {
     if (response && response.recordings) return response.recordings;
     if (response && response.data) return response.data;
     return response;
+}
+
+function WTV_MergeChannelVodResponse(screenObj, responseObj, done, twitchPageVods) {
+	var mapping = WTV_GetCurrentChannelMapping();
+	var mergedVods = (responseObj && responseObj.edges) || [];
+	var pageVods = twitchPageVods || mergedVods;
+
+	if (!screenObj || screenObj.highlight || !mapping || !mapping.wtv_channel || !WTV_GetEndpoint()) {
+		done(responseObj);
+		return true;
+	}
+
+	WTV_GetChannelVods(
+		mapping.wtv_channel,
+		function (wtvResponse) {
+			var vods = WTV_GetVodList(wtvResponse) || [];
+			var identity = WTV_IdentityFromMapping(mapping, mapping.wtv_channel);
+			var seen = {};
+			var merged = [];
+			var i;
+			var data;
+			var sortMode = screenObj.periodPos === 2 ? 'views' : 'recent';
+			var cutoff = pageVods.length ? WTV_VodSortValue(pageVods[pageVods.length - 1], sortMode) : 0;
+			var existing = screenObj.data || [];
+
+			for (i = 0; i < existing.length; i++) {
+				if (existing[i] && (existing[i].id || existing[i][7])) seen[existing[i].id || existing[i][7]] = true;
+			}
+			for (i = 0; i < mergedVods.length; i++) {
+				if (mergedVods[i] && mergedVods[i].id) seen[mergedVods[i].id] = true;
+				merged.push(mergedVods[i]);
+			}
+			for (i = 0; i < vods.length; i++) {
+				if (!WTV_IsFinalizedVod(vods[i]) || !WTV_ArchiveVodPlaybackUrl(vods[i])) continue;
+				data = WTV_BuildVodData(vods[i], mapping.wtv_channel, identity);
+				if (!data[7] || seen[data[7]]) continue;
+				if (!screenObj.dataEnded && (!pageVods.length || WTV_VodSortValue(data, sortMode) < cutoff)) continue;
+				seen[data[7]] = true;
+				merged.push(data);
+			}
+
+			if (sortMode === 'views') {
+				merged.sort(function (a, b) {
+					return WTV_VodViewCount(b) - WTV_VodViewCount(a);
+				});
+			} else {
+				merged.sort(function (a, b) {
+					return WTV_VodSortTime(b) - WTV_VodSortTime(a);
+				});
+			}
+			responseObj.edges = merged;
+			done(responseObj);
+		},
+		function () {
+			done(responseObj);
+		}
+	);
+	return true;
+}
+
+function WTV_VodViewCount(data) {
+	var meta = WTV_GetMeta(data);
+	return parseInt(meta ? meta.viewer_count : data && (data.viewCount || data.view_count || data.views || data.viewer_count || data[13])) || 0;
+}
+
+function WTV_VodSortTime(data) {
+	var meta = WTV_GetMeta(data);
+	var localMeta = typeof LocalVod_GetMeta === 'function' ? LocalVod_GetMeta(data) : null;
+	return WTV_ParseTimeMs(
+		meta ? meta.started_at : localMeta ? localMeta.started_at : data && (data.created_at || data.createdAt || data.published_at || data[12])
+	);
+}
+
+function WTV_VodSortValue(data, sortMode) {
+	return sortMode === 'views' ? WTV_VodViewCount(data) : WTV_VodSortTime(data);
 }
 
 function WTV_FindVod(response) {

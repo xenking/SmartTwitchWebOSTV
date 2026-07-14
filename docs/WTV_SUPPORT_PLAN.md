@@ -18,12 +18,13 @@ Keep this ownership narrow:
 
 ## Corrected understanding
 
-Playback default is direct HLS, not archiver proxy.
+Playback default is the active/growing archiver HLS playlist. The TV never
+plays a W.TV origin URL directly.
 
 Target:
 
 - STW can show/play a `w.tv` live stream explicitly as `w.tv`.
-- Live playback should prefer direct HLS URL by default.
+- Live playback should use the archiver's active/growing HLS URL.
 - If archiver has a live recording/VOD for the same w.tv stream, STW should also expose the existing “go to VOD/recording” style switch, same conceptual UX as Twitch live -> VOD recording switch.
 - Finished w.tv recordings appearing in the all-recordings/VOD list is a separate task, but plan it here.
 - Need clear UI marker that this is `w.tv`, not Twitch. Example: replace/augment red `LIVE` label with `W.TV LIVE` or add platform badge next to title.
@@ -41,11 +42,21 @@ PATCH  /api/sources/wtv/{channel}
 DELETE /api/sources/wtv/{channel}
 ```
 
-Live direct-HLS status:
+Admin-only upstream resolver status:
 
 ```text
 GET /api/sources/wtv/{channel}/live
 ```
+
+TV playback status:
+
+```text
+GET /archive/sources/wtv/{channel}/live
+```
+
+This route reports online only when an active archive exists and always returns
+the archive playlist. Upstream W.TV status may enrich title/viewer count, but
+its direct playback URL must not be returned to the TV.
 
 Response:
 
@@ -57,11 +68,9 @@ Response:
   "title": "...",
   "viewer_count": 123,
   "started_at": "2026-06-04T...Z",
-  "stream_id": "wtv:...",
-  "playback_url": "https://....m3u8",
-  "playback_kind": "direct_hls",
-  "recording_group_id": "...optional if archiver is recording it",
-  "vod_url": "http://archive.local/archive/... optional"
+  "stream_id": "grp-wtv-...",
+  "playback_url": "/archive/vods/grp-wtv-.../playlist.m3u8",
+  "playback_kind": "archive_hls"
 }
 ```
 
@@ -127,26 +136,26 @@ When a w.tv stream is shown:
 
 Acceptance: user can tell immediately that playback is w.tv, not Twitch.
 
-## Direct live playback plan
+## Active archive playback plan
 
-Direct HLS is default.
+The growing archive HLS playlist is the only live playback source.
 
 Flow:
 
 1. User enters/selects `w.tv` channel.
-2. STW asks archiver live-status endpoint or w.tv resolver endpoint for direct HLS.
-3. If online, STW opens `playback_url` directly as HLS.
-4. Do not route through archiver proxy unless direct playback fails or user explicitly picks archived/recorded playback.
+2. STW asks the archiver for the active archive status and growing HLS URL.
+3. If online, STW opens the returned `/archive/vods/.../playlist.m3u8` URL.
+4. Never return or fall back to a W.TV origin HLS URL on the TV.
 
 Implementation options:
 
-1. Add external direct-HLS branch in `Main_OpenLiveStream(data)`:
-   - detect metadata `{ source_platform:'wtv', playback_kind:'direct_hls' }`;
+1. Add external archive-HLS branch in `Main_OpenLiveStream(data)`:
+	- detect metadata `{ source_platform:'wtv', playback_kind:'archive_hls' }`;
    - skip Twitch token/usher path;
    - pass URL to generic HLS player startup.
 2. If generic HLS player path is not clean, add `PlayExternalHLS` wrapper around the existing player init.
 
-Need verification on real webOS/local browser because direct Amazon IVS HLS may have device-specific behavior.
+Verify the growing EVENT playlist in a local browser and on real webOS.
 
 ## Live-to-recording/VOD switch plan
 
@@ -203,11 +212,11 @@ Known high-signal files:
 - `app/specific/ScreensObj.js`
   - add w.tv live cell/source metadata helpers and `W.TV LIVE` label support.
 - `app/specific/Main.js`
-  - direct-HLS branch in `Main_OpenLiveStream` or equivalent open path.
+  - archive-HLS branch in `Main_OpenLiveStream` or equivalent open path.
 - `app/specific/PlayHLS.js` / `app/specific/PlayEtc.js`
-  - generic direct-HLS playback wrapper if needed.
+  - generic archive-HLS playback wrapper if needed.
 - optional new file: `app/specific/WTV.js` or `app/specific/ExternalSources.js`
-  - archiver API client and direct-HLS source normalization.
+  - archiver API client and archive-HLS source normalization.
 
 ## Suggested agent task split
 
@@ -219,7 +228,7 @@ Tasks:
 2. Use existing local archive endpoint config.
 3. Implement:
    - add/list/delete tracked `w.tv` source via archiver API;
-   - get `w.tv` live status and direct HLS URL.
+   - get active `w.tv` archive status and archive HLS URL.
 4. Add simple input action for w.tv nickname.
 
 Acceptance:
@@ -242,19 +251,19 @@ Acceptance:
 - w.tv live row/tile is visually distinct.
 - no accidental Twitch branding/identity in w.tv stream cell.
 
-### Agent STW-3: direct HLS playback
+### Agent STW-3: active archive HLS playback
 
 Tasks:
 
-1. Add direct-HLS playback branch.
+1. Add archive-HLS playback branch.
 2. Skip Twitch token/usher for `source_platform=wtv`.
 3. Start player from `playback_url`.
-4. Test with live `sosohe` or captured URL.
+4. Test with a growing archive playlist.
 
 Acceptance:
 
-- direct HLS opens by default.
-- if direct HLS fails, error is visible and does not corrupt Twitch player state.
+- active archive HLS opens by default.
+- if archive HLS fails, error is visible and does not corrupt Twitch player state.
 
 ### Agent STW-4: live recording/VOD switch
 
@@ -297,9 +306,9 @@ Manual live smoke:
 1. Configure local archive endpoint.
 2. Add w.tv source `sosohe`.
 3. Fetch live status.
-4. Expected: online source includes direct HLS URL.
+4. Expected: online source includes an `/archive/vods/...` HLS URL.
 5. Open source.
-6. Expected: direct HLS playback starts.
+6. Expected: growing archive HLS playback starts.
 7. Expected UI label says `W.TV LIVE` / `w.tv`, not plain Twitch `LIVE`.
 8. If archiver recording metadata exists, open VOD/recording action.
 9. Expected: archive recording playback opens separately.
@@ -315,9 +324,9 @@ Finished VOD smoke:
 ## Open decisions
 
 1. Best MVP placement for “Add w.tv channel”: Settings vs Channel Content vs new source list.
-2. Whether archiver returns selected source media playlist or master playlist for direct HLS. PoC source variant worked best for IINA.
+2. The archiver returns its own growing media playlist; W.TV origin playlists remain server-side ingest details.
 3. Exact existing STW live->VOD switch hook to reuse.
-4. Real webOS direct HLS compatibility must be tested; direct remains default, fallback/proxy only after evidence.
+4. Real webOS growing archive HLS compatibility must remain covered by device smoke tests.
 
 ## Follow-up task: w.tv chat in SmartTwitchWebOSTV
 
