@@ -154,19 +154,21 @@ segments/sess-wtv-kuboeb/000000002.ts
   let fallbackCalls = 0;
   context.WTV_GetLiveFromActiveArchive = () => fallbackCalls++;
   context.WTV_Request = (path, method, body, success) => {
-    assert.equal(path, '/archive/sources/wtv/kuboeb/live', 'W.TV live check uses direct status endpoint');
+    assert.equal(path, '/archive/sources/wtv/kuboeb/live', 'W.TV live check uses the active archive status endpoint');
     assert.equal(method, null);
     assert.equal(body, null);
-    success({online: true, playback_kind: 'direct_hls'});
+    success({online: true, playback_kind: 'archive_hls', playback_url: '/archive/vods/grp-wtv-kuboeb/playlist.m3u8'});
   };
   let status;
   context.WTV_GetLive('kuboeb', value => { status = value; });
-  assert.equal(status.online, true, 'direct W.TV live status remains primary');
-  assert.equal(fallbackCalls, 0, 'active archive fallback is not called after direct success');
+  assert.equal(status.online, true, 'active W.TV archive status remains primary');
+  assert.equal(status.playback_kind, 'archive_hls', 'active status identifies archive HLS playback');
+  assert.match(status.playback_url, /^\/archive\/vods\//, 'active status never points at W.TV origin playback');
+  assert.equal(fallbackCalls, 0, 'VOD-list fallback is not called after active archive success');
 
   context.WTV_Request = (_path, _method, _body, _success, error) => error('offline');
   context.WTV_GetLive('kuboeb', () => {}, () => {});
-  assert.equal(fallbackCalls, 1, 'active archive lookup is the fallback after direct status failure');
+  assert.equal(fallbackCalls, 1, 'active archive VOD lookup is the fallback after status failure');
 }
 
 {
