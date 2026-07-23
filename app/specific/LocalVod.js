@@ -181,6 +181,12 @@ function LocalVod_ChatPath(meta, offsetSeconds, limit) {
     );
 }
 
+function LocalVod_ChatTimelinePath(meta) {
+    var vodId = meta && (meta.recording_group_id || meta.stream_id);
+    if (!vodId) return '';
+    return '/archive/vods/' + encodeURIComponent(vodId) + '/chat/timeline';
+}
+
 function LocalVod_ChatEventsPath(meta, afterOffsetSeconds) {
     var vodId = meta && (meta.recording_group_id || meta.stream_id);
     var afterOffsetMS;
@@ -230,6 +236,7 @@ function LocalVod_OpenChatEvents(afterOffsetSeconds, success, error) {
     var meta = typeof PlayVod_LocalVodMeta === 'function' ? PlayVod_LocalVodMeta() : null;
     var url = LocalVod_ChatEventsUrl(meta, afterOffsetSeconds);
     var source;
+    var handleEvent;
 
     if (!url || !window.EventSource) return null;
 
@@ -239,7 +246,7 @@ function LocalVod_OpenChatEvents(afterOffsetSeconds, success, error) {
         return null;
     }
 
-    source.addEventListener('messages', function (event) {
+    handleEvent = function (event) {
         var data;
         try {
             data = JSON.parse(event.data);
@@ -247,7 +254,9 @@ function LocalVod_OpenChatEvents(afterOffsetSeconds, success, error) {
             data = null;
         }
         if (data && success) success(data);
-    });
+    };
+    source.addEventListener('messages', handleEvent);
+    source.addEventListener('timeline', handleEvent);
     source.onerror = function () {
         if (source) source.close();
         if (error) error();
@@ -268,6 +277,32 @@ function LocalVod_LoadChat(offsetSeconds, success, error, limit) {
         return false;
     }
     LocalVod_Request(path, null, null, success, error);
+    return true;
+}
+
+function LocalVod_UpdateChatTimeline(response) {
+    if (!response || !Object.prototype.hasOwnProperty.call(response, 'chat_timeline') || typeof PlayVod_SetLocalChatTimeline !== 'function') return false;
+    return PlayVod_SetLocalChatTimeline(response.chat_timeline);
+}
+
+function LocalVod_LoadChatTimeline(success, error) {
+    var meta = typeof PlayVod_LocalVodMeta === 'function' ? PlayVod_LocalVodMeta() : null;
+    var path = LocalVod_ChatTimelinePath(meta);
+    if (!path) {
+        if (error) error('Local archive chat timeline is not available.');
+        return false;
+    }
+    LocalVod_Request(
+        path,
+        null,
+        null,
+        function (response, status) {
+            if (success) success(response, status);
+        },
+        function (message) {
+            if (error) error(message);
+        }
+    );
     return true;
 }
 
@@ -408,6 +443,8 @@ function LocalVod_ChatResponseToTwitchComments(response) {
     var edges = [];
     var i;
     var edge;
+
+    LocalVod_UpdateChatTimeline(response);
 
     for (i = 0; i < messages.length; i++) {
         edge = LocalVod_ChatMessageToTwitchComment(messages[i]);

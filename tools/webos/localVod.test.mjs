@@ -181,6 +181,32 @@ function createBridgeContext(matchResponse, storageEntries) {
 }
 
 {
+  const bridgeMeta = {
+    source_platform: 'local_archive',
+    recording_group_id: 'grp-bridge',
+  };
+  const staleCardMeta = {
+    source_platform: 'local_archive',
+  };
+  const context = {
+    Main_values_Play_data: [staleCardMeta],
+    Play_data: { data: [] },
+    LocalVod_GetMeta: data => data && data[0],
+    PlayVod_WebOSLocalBridge: () => ({ getArchiveMeta: () => bridgeMeta }),
+  };
+  vm.createContext(context);
+  vm.runInContext(`function PlayVod_LocalVodMeta() {${functionBody(playVodSource, 'PlayVod_LocalVodMeta')}}`, context);
+
+  assert.equal(
+    context.PlayVod_LocalVodMeta(),
+    bridgeMeta,
+    'active webOS local playback metadata overrides stale card metadata for VOD chat'
+  );
+  context.PlayVod_WebOSLocalBridge = () => ({ getArchiveMeta: () => null });
+  assert.equal(context.PlayVod_LocalVodMeta(), staleCardMeta, 'card metadata remains the fallback outside active webOS local playback');
+}
+
+{
   const body = functionBody(playVodSource, 'PlayVod_WebOSLocalSwitchSource');
   assert.doesNotMatch(body, /Already using W\.TV archive/, 'w.tv VOD playback must still allow switching local/Twitch source');
 }
@@ -234,13 +260,15 @@ assert.match(functionBody(playVodSource, 'PlayVod_get_vod_infoResult'), /LocalVo
 assert.match(functionBody(playVodSource, 'PlayVod_previews_success'), /PlayVod_ExternalTwitchVodId/, 'seek preview sprite validation uses linked Twitch VOD id');
 assert.match(functionBody(playVodSource, 'PlayVod_previews_success_end'), /PlayVod_ExternalTwitchVodId/, 'seek preview sprite base URL uses linked Twitch VOD id');
 assert.match(functionBody(playVodSource, 'PlayVod_previews_move'), /PlayVod_PlayerPositionToPreviewPosition/, 'local joined VOD seek preview positions map to Twitch timeline');
-assert.match(functionBody(chatVodSource, 'Chat_loadChatRequest'), /PlayVod_ExternalTwitchVodId/, 'VOD chat request uses linked Twitch VOD id');
-assert.match(functionBody(chatVodSource, 'Chat_loadChatRequest'), /LocalVod_LoadChat/, 'local archive VOD chat request uses local archive chat endpoint first');
+assert.match(functionBody(chatVodSource, 'Chat_LocalVodLoadChatRequest'), /PlayVod_ExternalTwitchVodId/, 'VOD chat request uses linked Twitch VOD id');
+assert.match(functionBody(chatVodSource, 'Chat_LocalVodLoadChatRequest'), /LocalVod_LoadChat/, 'local archive VOD chat request uses local archive chat endpoint first');
+assert.match(functionBody(chatVodSource, 'Chat_loadChatRequest'), /LocalVod_LoadChatTimeline/, 'initial local archive chat fetches its timeline before requesting messages');
 assert.match(functionBody(chatVodSource, 'Chat_loadChatRequest'), /Chat_LocalVodChatUnavailable/, 'missing local archive chat falls back to linked Twitch VOD comments');
 assert.match(functionBody(chatVodSource, 'Chat_loadTwitchChatOffsetRequest'), /PlayVod_PlayerSecondsToChatSeconds/, 'Twitch VOD chat fallback keeps local-to-Twitch offset mapping');
 assert.match(functionBody(chatVodSource, 'Chat_loadTwitchChatOffsetRequest'), /PlayVod_PlayerSecondsToChatSeconds/, 'VOD chat request offset maps local player time to Twitch time');
 assert.doesNotMatch(functionBody(chatVodSource, 'Chat_loadChatRequest'), /Chat_offset\s*\?\s*parseInt\(PlayVod_PlayerSecondsToChatSeconds\(Chat_offset\)\)\s*:\s*0/, 'zero-offset local VOD chat requests still apply local-to-Twitch timeline mapping');
 assert.match(functionBody(chatVodSource, 'Chat_LocalVodNextOffsetSeconds'), /Chat_Messages/, 'local archive VOD chat pagination advances from loaded message times');
+assert.match(functionBody(chatVodSource, 'Chat_LocalVodNextLoadOffsetSeconds'), /Chat_LocalVodLastSourceOffsetSeconds/, 'local chat pagination advances past skipped source-gap messages');
 assert.match(functionBody(chatVodSource, 'Chat_loadChatSuccess'), /sourcePlatform === 'local_archive'[\s\S]*PlayVod_LocalChatSecondsToPlayerSeconds/, 'local archive chat maps local recording offsets onto the player timeline');
 assert.match(functionBody(chatVodSource, 'Chat_loadChatNextRequest'), /PlayVod_ExternalTwitchVodId/, 'VOD chat cursor request uses linked Twitch VOD id');
 assert.match(functionBody(chatVodSource, 'Chat_loadChatNextRequest'), /Chat_LocalVodNextLoadOffsetSeconds/, 'local archive VOD chat next request is offset based');
@@ -248,6 +276,7 @@ assert.match(functionBody(chatVodSource, 'Chat_loadChatNextRequest'), /Chat_load
 assert.match(functionBody(chatVodSource, 'Chat_loadTwitchChatNextOffsetRequest'), /Chat_LocalVodNextOffsetSeconds\(\)[\s\S]*Chat_loadChatNextResult/, 'local chat next-page Twitch fallback continues from the current local offset');
 assert.match(functionBody(chatVodSource, 'Chat_loadChatSuccess'), /Chat_LocalVodIsLive/, 'active local archive VOD chat keeps an open live cursor when a page is empty');
 assert.match(functionBody(chatVodSource, 'Chat_Clear'), /Chat_LocalVodCloseEvents/, 'VOD chat cleanup closes local archive live chat EventSource');
+assert.match(functionBody(chatVodSource, 'Chat_Clear'), /Chat_LocalVodPendingComments = \[\]/, 'VOD chat cleanup drops pending out-of-range comments');
 assert.match(functionBody(localVodSource, 'LocalVod_MergeChannelVodResponse'), /LocalVod_FilterTwitchVodsForExistingLocalData/, 'paginated channel VOD loads suppress Twitch entries already represented by local archive cards');
 assert.match(functionBody(screensSource, 'Screens_LoadPreviewStart'), /Screens_LoadExternalVodPreview/, 'local and w.tv VOD previews use their external archive playlist');
 assert.match(functionBody(screensSource, 'Screens_LoadPreviewResult'), /Screens_PatchExternalVodPreviewPlaylist/, 'external archive VOD previews patch relative playlist URLs before starting preview');
@@ -389,7 +418,19 @@ assert.equal(packageJson.scripts['hosted:prepare'], 'npm run webos:prepare-relea
   vm.runInContext(`function PlayVod_IsLocalArchiveVodId(vodId) {${functionBody(playVodSource, 'PlayVod_IsLocalArchiveVodId')}}`, context);
   vm.runInContext(`function PlayVod_ExternalTwitchVodId() {${functionBody(playVodSource, 'PlayVod_ExternalTwitchVodId')}}`, context);
   vm.runInContext(`function PlayVod_LocalVodTimelineDeltaSeconds() {${functionBody(playVodSource, 'PlayVod_LocalVodTimelineDeltaSeconds')}}`, context);
+  vm.runInContext(
+    'var PlayVod_LocalChatTimeline = []; var PlayVod_LocalChatTimelineVodId = ""; var PlayVod_LocalChatTimelineValid = false;',
+    context
+  );
+  vm.runInContext(`function PlayVod_LocalChatTimelineId() {${functionBody(playVodSource, 'PlayVod_LocalChatTimelineId')}}`, context);
+  vm.runInContext(`function PlayVod_NormalizeLocalChatTimeline(timeline) {${functionBody(playVodSource, 'PlayVod_NormalizeLocalChatTimeline')}}`, context);
+  vm.runInContext(`function PlayVod_SetLocalChatTimeline(timeline) {${functionBody(playVodSource, 'PlayVod_SetLocalChatTimeline')}}`, context);
+  vm.runInContext(`function PlayVod_HasLocalChatTimeline() {${functionBody(playVodSource, 'PlayVod_HasLocalChatTimeline')}}`, context);
+  vm.runInContext(`function PlayVod_MapLocalChatTimelineSeconds(seconds, sourceToMedia) {${functionBody(playVodSource, 'PlayVod_MapLocalChatTimelineSeconds')}}`, context);
+  vm.runInContext(`function PlayVod_LocalChatSecondsAfterTimeline(seconds) {${functionBody(playVodSource, 'PlayVod_LocalChatSecondsAfterTimeline')}}`, context);
+  vm.runInContext(`function PlayVod_NextLocalChatSecondsForPlayerSeconds(seconds) {${functionBody(playVodSource, 'PlayVod_NextLocalChatSecondsForPlayerSeconds')}}`, context);
   vm.runInContext(`function PlayVod_LocalVodChatDisplayDelaySeconds() {${functionBody(playVodSource, 'PlayVod_LocalVodChatDisplayDelaySeconds')}}`, context);
+  vm.runInContext(`function PlayVod_LocalVodPlayerTimelineDeltaSeconds() {${functionBody(playVodSource, 'PlayVod_LocalVodPlayerTimelineDeltaSeconds')}}`, context);
   vm.runInContext(`function PlayVod_LocalChatSecondsToPlayerSeconds(seconds) {${functionBody(playVodSource, 'PlayVod_LocalChatSecondsToPlayerSeconds')}}`, context);
   vm.runInContext(`function PlayVod_PlayerSecondsToLocalChatSeconds(seconds) {${functionBody(playVodSource, 'PlayVod_PlayerSecondsToLocalChatSeconds')}}`, context);
 
@@ -417,6 +458,7 @@ assert.equal(packageJson.scripts['hosted:prepare'], 'npm run webos:prepare-relea
     null,
     {
       source_platform: 'local_archive',
+      recording_group_id: 'grp-elwycco-20260611T201308.651145575Z',
       twitch_vod_id: '2794330615',
       twitch_timeline_delta_seconds: 30,
       started_at: '2026-06-11T20:13:08.651145575Z',
@@ -429,6 +471,67 @@ assert.equal(packageJson.scripts['hosted:prepare'], 'npm run webos:prepare-relea
   assert.equal(context.PlayVod_LocalVodChatDisplayDelaySeconds(), 16.368, 'local archive chat defaults to a calibrated display delay with app overlay lag allowance');
   assert.equal(Number(context.PlayVod_LocalChatSecondsToPlayerSeconds(130.651).toFixed(3)), 147.019, 'local archive chat offsets stay on the local video timeline instead of Twitch VOD time');
   assert.equal(Number(context.PlayVod_PlayerSecondsToLocalChatSeconds(147.019).toFixed(3)), 130.651, 'player timeline offsets map back to local archive chat offsets with the same delay');
+
+  assert.equal(
+    context.PlayVod_SetLocalChatTimeline([
+      { source_start_ms: 20000, source_end_ms: 30000, media_start_ms: 10000, media_end_ms: 20000 },
+      { source_start_ms: 0, source_end_ms: 10000, media_start_ms: 0, media_end_ms: 8000 },
+    ]),
+    true,
+    'two valid chat timeline ranges normalize into a usable map'
+  );
+  assert.equal(context.PlayVod_LocalVodChatDisplayDelaySeconds(), 0, 'valid chat timeline removes the legacy display calibration by default');
+  assert.equal(context.PlayVod_LocalChatSecondsToPlayerSeconds(5), 4, 'source chat offset maps linearly into the first media range');
+  assert.equal(context.PlayVod_LocalChatSecondsToPlayerSeconds(15), null, 'source chat gaps are unmappable');
+  assert.equal(context.PlayVod_LocalChatSecondsToPlayerSeconds(25), 15, 'source chat offset maps linearly into the second media range');
+  assert.equal(context.PlayVod_PlayerSecondsToLocalChatSeconds(15), 25, 'media-to-source conversion uses the inverse normalized range');
+  assert.equal(context.PlayVod_PlayerSecondsToLocalChatSeconds(9), null, 'media gaps are unmappable in the inverse direction');
+  assert.equal(context.PlayVod_NextLocalChatSecondsForPlayerSeconds(9), 20, 'chat requests advance to the next source range when player time is in a media gap');
+  assert.equal(context.PlayVod_LocalChatSecondsAfterTimeline(31), true, 'source offsets beyond the map tail remain eligible for a later live extension');
+  assert.equal(context.PlayVod_LocalChatSecondsAfterTimeline(15), false, 'closed interior source gaps are not treated as future timeline extensions');
+
+  context.Play_data.data[19].player_timeline_delta_seconds = 30;
+  assert.equal(context.PlayVod_LocalChatSecondsToPlayerSeconds(5), 34, 'native Twitch-time player delta is added after source-to-media mapping');
+  assert.equal(context.PlayVod_PlayerSecondsToLocalChatSeconds(34), 5, 'native Twitch-time player delta is removed before inverse mapping');
+  assert.equal(context.PlayVod_PlayerSecondsToLocalChatSeconds(39), null, 'native Twitch-time player gap stays unmappable');
+  assert.equal(
+    context.PlayVod_NextLocalChatSecondsForPlayerSeconds(39),
+    20,
+    'chat requests remove native player delta before advancing across a media gap'
+  );
+  delete context.Play_data.data[19].player_timeline_delta_seconds;
+
+  context.Play_data.data[19].local_chat_display_delay_seconds = 2;
+  assert.equal(context.PlayVod_LocalChatSecondsToPlayerSeconds(25), 17, 'explicit display calibration still applies after timeline mapping');
+  assert.equal(context.PlayVod_PlayerSecondsToLocalChatSeconds(17), 25, 'explicit timeline calibration remains reciprocal');
+
+  delete context.Play_data.data[19].local_chat_display_delay_seconds;
+  assert.equal(context.PlayVod_SetLocalChatTimeline([{ source_start_ms: 0 }]), false, 'invalid chat timeline is rejected');
+  assert.equal(context.PlayVod_LocalVodChatDisplayDelaySeconds(), 16.368, 'invalid chat timeline retains the legacy display calibration');
+  assert.equal(
+    context.PlayVod_SetLocalChatTimeline([
+      { source_start_ms: 0, source_end_ms: 10000, media_start_ms: 0, media_end_ms: 10000 },
+      { source_start_ms: 10000, source_end_ms: 10000, media_start_ms: 10000, media_end_ms: 11000 },
+    ]),
+    false,
+    'zero-length source ranges reject the whole map instead of inventing media time'
+  );
+  assert.equal(
+    context.PlayVod_SetLocalChatTimeline([
+      { source_start_ms: 0, source_end_ms: 10000, media_start_ms: 0, media_end_ms: 10000 },
+      { source_start_ms: 9000, source_end_ms: 20000, media_start_ms: 10000, media_end_ms: 21000 },
+    ]),
+    false,
+    'overlapping timeline rejects the whole map'
+  );
+  assert.equal(
+    context.PlayVod_SetLocalChatTimeline([
+      { source_start_ms: 20000, source_end_ms: 30000, media_start_ms: 10000, media_end_ms: 20000 },
+      { source_start_ms: -1, source_end_ms: 10000, media_start_ms: 0, media_end_ms: 10000 },
+    ]),
+    false,
+    'negative timeline values reject the whole map instead of keeping partial ranges'
+  );
 
   context.Play_data.data[19].local_chat_display_delay_seconds = 19.368;
   assert.equal(Number(context.PlayVod_LocalChatSecondsToPlayerSeconds(14391.632).toFixed(3)), 14411, 'calibrated local chat display delay aligns the HTPC message with the in-video widget timestamp');
@@ -708,9 +811,21 @@ assert.equal(packageJson.scripts['hosted:prepare'], 'npm run webos:prepare-relea
     '/archive/vods/grp-melharucos-20260606T062240.114395769Z/chat/events?after_offset_ms=12425',
     'local VOD chat SSE endpoint follows vod-edge live chat cursor shape'
   );
+  assert.equal(
+    context.LocalVod_ChatTimelinePath(localMeta),
+    '/archive/vods/grp-melharucos-20260606T062240.114395769Z/chat/timeline',
+    'local VOD chat timeline endpoint uses the recording group id'
+  );
 
+  const chatTimeline = [{ source_start_ms: 0, source_end_ms: 10000, media_start_ms: 0, media_end_ms: 8000 }];
+  let updatedChatTimeline = null;
+  context.PlayVod_SetLocalChatTimeline = timeline => {
+    updatedChatTimeline = timeline;
+    return true;
+  };
   const twitchLikeChat = JSON.parse(
     context.LocalVod_ChatResponseToTwitchComments({
+      chat_timeline: chatTimeline,
       messages: [
         {
           msg_id: 'a4ba2223-0f47-4eb9-aa8d-c71c4c78f73c',
@@ -729,6 +844,7 @@ assert.equal(packageJson.scripts['hosted:prepare'], 'npm run webos:prepare-relea
     })
   );
   const twitchLikeNode = twitchLikeChat.data.video.comments.edges[0].node;
+  assert.equal(updatedChatTimeline, chatTimeline, 'polling or SSE chat responses refresh the active timeline before message conversion');
   assert.equal(twitchLikeNode.id, 'a4ba2223-0f47-4eb9-aa8d-c71c4c78f73c', 'local chat msg id maps to Twitch-like comment id');
   assert.equal(twitchLikeNode.contentOffsetSeconds, 12.425, 'local chat offset_ms maps to contentOffsetSeconds');
   assert.equal(twitchLikeNode.sourcePlatform, 'local_archive', 'local chat comments are marked so the player does not remap them from Twitch timeline');
@@ -742,6 +858,91 @@ assert.equal(packageJson.scripts['hosted:prepare'], 'npm run webos:prepare-relea
     'local chat badges map to Twitch-like userBadges'
   );
   assert.equal(twitchLikeNode.message.fragments[0].emote.emoteID, '25', 'local chat emote ranges map to Twitch-like fragments');
+}
+
+{
+  const order = [];
+  const context = {
+    Chat_Id: [42],
+    Chat_LocalVodChatUnavailable: false,
+    PlayVod_CanLoadVodChat: () => true,
+    LocalVod_CanLoadChat: () => true,
+    LocalVod_LoadChatTimeline(success) {
+      order.push('timeline');
+      context.timelineSuccess = success;
+      return true;
+    },
+    LocalVod_UpdateChatTimeline() {
+      order.push('update');
+    },
+    Chat_LocalVodLoadOffsetSeconds() {
+      order.push('convert');
+      return 25;
+    },
+    LocalVod_LoadChat(offsetSeconds) {
+      order.push(`chat:${offsetSeconds}`);
+      return true;
+    },
+    Chat_LocalVodLoadLimit: () => 0,
+    Chat_NoVod() {},
+    Chat_loadChatError() {},
+    Chat_loadChatRequestResult() {},
+    LocalVod_ChatResponseToTwitchComments: response => JSON.stringify(response),
+    PlayVod_ExternalTwitchVodId: () => '',
+    Chat_loadTwitchChatRequest() {},
+  };
+  vm.createContext(context);
+  vm.runInContext(`function Chat_LocalVodLoadChatRequest(id) {${functionBody(chatVodSource, 'Chat_LocalVodLoadChatRequest')}}`, context);
+  vm.runInContext(`function Chat_loadChatRequest(id) {${functionBody(chatVodSource, 'Chat_loadChatRequest')}}`, context);
+
+  context.Chat_loadChatRequest(42);
+  assert.deepEqual(order, ['timeline'], 'initial local chat waits for timeline before converting the player offset');
+  context.timelineSuccess({ chat_timeline: [] });
+  assert.deepEqual(order, ['timeline', 'update', 'convert', 'chat:25'], 'initial local chat updates the map, then converts and requests messages');
+}
+
+{
+  const listeners = {};
+  let updatedTimeline = null;
+  let queuedEdges = -1;
+  const context = {
+    JSON,
+    encodeURIComponent,
+    window: {
+      EventSource: function EventSource(url) {
+        context.eventUrl = url;
+        this.addEventListener = (name, callback) => {
+          listeners[name] = callback;
+        };
+        this.close = () => {};
+      },
+    },
+    PlayVod_LocalVodMeta: () => ({ recording_group_id: 'grp-live', active: true }),
+    LocalVod_GetEndpoint: () => 'http://192.168.0.109:18080',
+    PlayVod_SetLocalChatTimeline(timeline) {
+      updatedTimeline = timeline;
+      return true;
+    },
+  };
+  vm.createContext(context);
+  vm.runInContext(`function LocalVod_AbsoluteUrl(url) {${functionBody(localVodSource, 'LocalVod_AbsoluteUrl')}}`, context);
+  vm.runInContext(`function LocalVod_ChatEventsPath(meta, afterOffsetSeconds) {${functionBody(localVodSource, 'LocalVod_ChatEventsPath')}}`, context);
+  vm.runInContext(`function LocalVod_AddQueryParam(url, key, value) {${functionBody(localVodSource, 'LocalVod_AddQueryParam')}}`, context);
+  vm.runInContext(`function LocalVod_CanStreamChatEventsMeta(meta) {${functionBody(localVodSource, 'LocalVod_CanStreamChatEventsMeta')}}`, context);
+  vm.runInContext(`function LocalVod_ChatEventsUrl(meta, afterOffsetSeconds) {${functionBody(localVodSource, 'LocalVod_ChatEventsUrl')}}`, context);
+  vm.runInContext(`function LocalVod_OpenChatEvents(afterOffsetSeconds, success, error) {${functionBody(localVodSource, 'LocalVod_OpenChatEvents')}}`, context);
+  vm.runInContext(`function LocalVod_UpdateChatTimeline(response) {${functionBody(localVodSource, 'LocalVod_UpdateChatTimeline')}}`, context);
+  vm.runInContext(`function LocalVod_ChatResponseToTwitchComments(response) {${functionBody(localVodSource, 'LocalVod_ChatResponseToTwitchComments')}}`, context);
+
+  context.LocalVod_OpenChatEvents(12, response => {
+    const converted = JSON.parse(context.LocalVod_ChatResponseToTwitchComments(response));
+    queuedEdges = converted.data.video.comments.edges.length;
+  });
+  const timeline = [{ source_start_ms: 0, source_end_ms: 10000, media_start_ms: 0, media_end_ms: 8000 }];
+  listeners.timeline({ data: JSON.stringify({ vod_id: 'grp-live', channel: 'elwycco', chat_timeline: timeline }) });
+
+  assert.equal(JSON.stringify(updatedTimeline), JSON.stringify(timeline), 'timeline-only SSE event refreshes the active normalized map');
+  assert.equal(queuedEdges, 0, 'timeline-only SSE event does not queue a chat message');
 }
 
 {
@@ -896,6 +1097,7 @@ assert.equal(packageJson.scripts['hosted:prepare'], 'npm run webos:prepare-relea
 {
   const requests = [];
   const context = {
+    Chat_Id: [42],
     Chat_cursor: 'local-live',
     Chat_LocalVodChatUnavailable: false,
     Chat_LocalVodNextRequestPending: false,
@@ -939,6 +1141,198 @@ assert.equal(packageJson.scripts['hosted:prepare'], 'npm run webos:prepare-relea
   context.Chat_loadChatNextRequest(42);
 
   assert.equal(requests.length, 2, 'local VOD next polling can continue after the previous request completes');
+}
+
+{
+  const scheduled = [];
+  const requested = [];
+  const context = {
+    Chat_JustStarted: false,
+    Chat_Id: [0],
+    Chat_VodGeneration: 0,
+    Chat_title: '',
+    Chat_Channels: {},
+    Main_IsOn_OSInterface: true,
+    Main_values: {
+      Play_ChatForceDisable: false,
+      Main_selectedChannel_id: 'channel',
+      Main_selectedChannel: 'channel',
+      Main_selectedChannelDisplayname: 'Channel',
+    },
+    STR_LOADING_CHAT: 'loading',
+    STR_SPACE_HTML: ' ',
+    Chat_Clear() {
+      context.Chat_Id[0] = 0;
+    },
+    Chat_Disable() {},
+    ChatLive_SetOptions(_chatNumber, _channelId, _channel, sessionId) {
+      context.Chat_Id[0] = sessionId || 1000 + scheduled.length;
+    },
+    ChatLive_ElementAdd() {},
+    Chat_loadChatRequest(id) {
+      requested.push(id);
+    },
+    Main_setTimeout(callback) {
+      scheduled.push(callback);
+    },
+  };
+  vm.createContext(context);
+  vm.runInContext(`function Chat_loadChat(id) {${functionBody(chatVodSource, 'Chat_loadChat')}}`, context);
+  vm.runInContext(`function Chat_Init() {${functionBody(chatVodSource, 'Chat_Init')}}`, context);
+
+  context.Chat_Init();
+  const firstId = context.Chat_Id[0];
+  context.Chat_Init();
+  const secondId = context.Chat_Id[0];
+  scheduled[0]();
+  scheduled[1]();
+
+  assert.notEqual(firstId, secondId, 'each VOD chat init gets a fresh callback generation');
+  assert.deepEqual(requested, [secondId], 'a delayed load callback from the previous VOD cannot enter the new chat session');
+}
+
+{
+  const context = {
+    Chat_Id: [42],
+    Chat_LocalVodChatUnavailable: false,
+    PlayVod_CanLoadVodChat: () => true,
+    LocalVod_CanLoadChat: () => true,
+    LocalVod_LoadChatTimeline(success, error) {
+      context.timelineSuccess = success;
+      context.timelineError = error;
+      return true;
+    },
+    LocalVod_UpdateChatTimeline() {
+      context.timelineUpdated = true;
+    },
+    Chat_LocalVodLoadChatRequest() {
+      context.initialRequested = true;
+    },
+    PlayVod_SetLocalChatTimeline() {
+      context.timelineReset = true;
+    },
+    Chat_NoVod() {},
+    Chat_loadTwitchChatRequest() {},
+  };
+  vm.createContext(context);
+  vm.runInContext(`function Chat_loadChatRequest(id) {${functionBody(chatVodSource, 'Chat_loadChatRequest')}}`, context);
+
+  context.Chat_loadChatRequest(42);
+  context.Chat_Id[0] = 99;
+  context.timelineSuccess({ chat_timeline: [] });
+  context.timelineError();
+
+  assert.equal(context.timelineUpdated, undefined, 'stale initial timeline success does not replace the new chat timeline');
+  assert.equal(context.timelineReset, undefined, 'stale initial timeline error does not reset the new chat timeline');
+  assert.equal(context.initialRequested, undefined, 'stale initial timeline callbacks do not start a chat request for the old id');
+}
+
+{
+  const requests = [];
+  const context = {
+    Chat_Id: [42],
+    Chat_cursor: 'local-live',
+    Chat_LocalVodChatUnavailable: false,
+    Chat_LocalVodNextRequestPending: false,
+    Chat_LocalVodLoadOffsetSeconds: () => 10,
+    Chat_LocalVodNextLoadOffsetSeconds: () => 20,
+    Chat_LocalVodLoadLimit: () => 80,
+    LocalVod_CanLoadChat: () => true,
+    LocalVod_LoadChat(offsetSeconds, success, error) {
+      requests.push({ offsetSeconds, success, error });
+      return true;
+    },
+    LocalVod_ChatResponseToTwitchComments() {
+      context.responseConverted = true;
+      return '{}';
+    },
+    Chat_loadChatRequestResult() {
+      context.initialResult = true;
+    },
+    Chat_loadChatNextResult() {
+      context.nextResult = true;
+    },
+    PlayVod_ExternalTwitchVodId() {
+      context.fallbackChecked = true;
+      return 'twitch-vod';
+    },
+    Chat_loadChatError() {
+      context.initialError = true;
+    },
+    Chat_loadChatNextError() {
+      context.nextError = true;
+    },
+    Chat_loadTwitchChatRequest() {
+      context.initialFallback = true;
+    },
+    Chat_loadTwitchChatNextOffsetRequest() {
+      context.nextFallback = true;
+    },
+  };
+  vm.createContext(context);
+  vm.runInContext(`function Chat_LocalVodLoadChatRequest(id) {${functionBody(chatVodSource, 'Chat_LocalVodLoadChatRequest')}}`, context);
+  vm.runInContext(`function Chat_loadChatNextRequest(id) {${functionBody(chatVodSource, 'Chat_loadChatNextRequest')}}`, context);
+
+  context.Chat_LocalVodLoadChatRequest(42);
+  context.Chat_loadChatNextRequest(42);
+  assert.equal(requests.length, 2, 'initial and poll requests are dispatched for the active chat id');
+
+  context.Chat_Id[0] = 99;
+  requests[0].success({ messages: [] });
+  requests[0].error();
+  requests[1].success({ messages: [] });
+  requests[1].error();
+
+  assert.equal(context.responseConverted, undefined, 'stale initial and poll successes do not apply old response timelines');
+  assert.equal(context.initialResult, undefined, 'stale initial success does not enter the new chat result path');
+  assert.equal(context.nextResult, undefined, 'stale poll success does not enter the new chat result path');
+  assert.equal(context.fallbackChecked, undefined, 'stale initial and poll errors do not inspect fallback state for the new chat');
+  assert.equal(context.initialFallback, undefined, 'stale initial error does not switch the new chat to Twitch');
+  assert.equal(context.nextFallback, undefined, 'stale poll error does not switch the new chat to Twitch');
+  assert.equal(context.initialError, undefined, 'stale initial error does not schedule a retry for the old chat');
+  assert.equal(context.nextError, undefined, 'stale poll error does not schedule a retry for the old chat');
+  assert.equal(context.Chat_LocalVodChatUnavailable, false, 'stale errors do not mark local chat unavailable for the new id');
+  assert.equal(context.Chat_LocalVodNextRequestPending, true, 'stale poll callbacks do not clear the new chat pending flag');
+}
+
+{
+  const oldSource = { close() {} };
+  const newSource = {
+    closed: false,
+    close() {
+      newSource.closed = true;
+    },
+  };
+  const context = {
+    Chat_Id: [42],
+    Chat_LocalVodEventSource: null,
+    Chat_LocalVodEventSourceUnavailable: false,
+    Chat_hasEnded: false,
+    Chat_LocalVodIsLive: () => true,
+    Chat_LocalVodNextLoadOffsetSeconds: () => 20,
+    LocalVod_OpenChatEvents(_offset, _success, error) {
+      context.staleSSEError = error;
+      return oldSource;
+    },
+    Chat_loadChatNextResult() {},
+    LocalVod_ChatResponseToTwitchComments: response => JSON.stringify(response),
+    Chat_loadChatNext() {
+      context.nextRequested = true;
+    },
+  };
+  vm.createContext(context);
+  vm.runInContext(`function Chat_LocalVodCloseEvents() {${functionBody(chatVodSource, 'Chat_LocalVodCloseEvents')}}`, context);
+  vm.runInContext(`function Chat_LocalVodStartEvents(id) {${functionBody(chatVodSource, 'Chat_LocalVodStartEvents')}}`, context);
+
+  context.Chat_LocalVodStartEvents(42);
+  context.Chat_Id[0] = 99;
+  context.Chat_LocalVodEventSource = newSource;
+  context.staleSSEError();
+
+  assert.equal(context.Chat_LocalVodEventSource, newSource, 'stale SSE error does not clear the new chat EventSource');
+  assert.equal(newSource.closed, false, 'stale SSE error does not close the new chat EventSource');
+  assert.equal(context.Chat_LocalVodEventSourceUnavailable, false, 'stale SSE error does not disable events for the new chat');
+  assert.equal(context.nextRequested, undefined, 'stale SSE error does not start polling for the old chat id');
 }
 
 {
@@ -1301,7 +1695,9 @@ assert.equal(packageJson.scripts['hosted:prepare'], 'npm run webos:prepare-relea
     delta_seconds: -1520,
     playback_url: '/archive/vods/grp/playlist.m3u8',
     vod: {
+      id: 'grp-melharucos-20260606T062240.114395769Z',
       channel: 'melharucos',
+      status: 'finalized',
       source_started_at: '2026-06-06T06:22:40Z',
       duration_seconds: 53246,
       playback_url: '/archive/vods/grp/playlist.m3u8',
@@ -1318,12 +1714,14 @@ assert.equal(packageJson.scripts['hosted:prepare'], 'npm run webos:prepare-relea
     toleranceSeconds: 600,
   };
   let localResult = null;
+  let preStartArchiveMeta = null;
   let twitchResult = null;
   const actions = {
     updateState() {},
     notify() {},
     playLocal(result) {
       localResult = result;
+      preStartArchiveMeta = context.STTVWebOSLocalVod.getArchiveMeta();
       context.Android.StartAuto(result.url, result.playlist || '', 2, result.twitchOffsetSeconds * 1000, 0);
     },
     playTwitch(result) {
@@ -1334,8 +1732,30 @@ assert.equal(packageJson.scripts['hosted:prepare'], 'npm run webos:prepare-relea
   assert.equal(context.STTVWebOSLocalVod.load(meta, actions), true, 'bridge local override accepts matched local VOD');
   assert.equal(localResult.twitchOffsetSeconds, 0, 'bridge preserves explicit zero Twitch offset');
   assert.equal(localResult.offsetSeconds, 1520, 'bridge still provides local offset for media start conversion');
+  assert.equal(
+    preStartArchiveMeta.recording_group_id,
+    'grp-melharucos-20260606T062240.114395769Z',
+    'bridge exposes archive metadata as soon as a local match is selected, before native playback starts'
+  );
   assert.equal(createdVideos[0].currentTime, 1520, 'local playback starts at the local media offset for Twitch zero');
   assert.equal(context.Android.gettime(), 0, 'local playback reports Twitch timeline zero to app code');
+  assert.deepEqual(
+    JSON.parse(JSON.stringify(context.STTVWebOSLocalVod.getArchiveMeta())),
+    {
+      source_platform: 'local_archive',
+      recording_group_id: 'grp-melharucos-20260606T062240.114395769Z',
+      stream_id: 'grp-melharucos-20260606T062240.114395769Z',
+      status: 'finalized',
+      active: false,
+      growing: false,
+      started_at: '2026-06-06T06:22:40Z',
+      twitch_vod_id: 'twitch-jun6',
+      twitch_started_at: '2026-06-06T06:48:00Z',
+      twitch_timeline_delta_seconds: -1520,
+      player_timeline_delta_seconds: -1520,
+    },
+    'bridge exposes matched archive identity and Twitch timing to the app chat layer'
+  );
 
   context.Android.mseekTo(300000);
   assert.equal(createdVideos[0].currentTime, 1820, 'local VOD seek converts Twitch offset to local media offset');
@@ -1379,13 +1799,16 @@ assert.equal(packageJson.scripts['hosted:prepare'], 'npm run webos:prepare-relea
     STR_CHAT_CONNECTED: 'connected',
     Chat_Messages: [],
     Chat_MessagesNext: [],
+    Chat_LocalVodPendingComments: [],
+    Chat_LocalVodLastSourceOffsetSeconds: 0,
     Chat_LocalVodIsLive: () => true,
     Chat_MessageVector: null,
     Chat_MessageVectorNext: null,
     Chat_Play: null,
     Chat_loadChatNext: null,
     PlayVod_ChatSecondsToPlayerSeconds: value => value,
-    PlayVod_LocalChatSecondsToPlayerSeconds: value => value - 10,
+    PlayVod_LocalChatSecondsToPlayerSeconds: value => (value === 15 ? null : value - 10),
+    PlayVod_LocalChatSecondsAfterTimeline: () => false,
     Play_timeS: value => String(value),
     ChatLive_ShouldShowBadge: () => true,
     Main_A_includes_B: (a, b) => String(a).includes(b),
@@ -1419,6 +1842,7 @@ assert.equal(packageJson.scripts['hosted:prepare'], 'npm run webos:prepare-relea
     context.nextRequested = id;
   };
   vm.createContext(context);
+  vm.runInContext(`function Chat_LocalVodPendComment(comment) {${functionBody(chatVodSource, 'Chat_LocalVodPendComment')}}`, context);
   vm.runInContext(`function Chat_loadChatSuccess(responseObj, id) {${functionBody(chatVodSource, 'Chat_loadChatSuccess')}}`, context);
 
   context.Chat_loadChatSuccess(
@@ -1447,6 +1871,16 @@ assert.equal(packageJson.scripts['hosted:prepare'], 'npm run webos:prepare-relea
         video: {
           comments: {
             edges: [
+              {
+                cursor: 'cursor-gap',
+                node: {
+                  id: 'msg-gap',
+                  contentOffsetSeconds: 15,
+                  sourcePlatform: 'local_archive',
+                  commenter: { displayName: 'viewer', login: 'viewer' },
+                  message: { fragments: [{ text: 'gap' }], userBadges: [], userColor: '#fff', is_action: false },
+                },
+              },
               {
                 cursor: 'cursor-1',
                 node: {
@@ -1477,7 +1911,69 @@ assert.equal(packageJson.scripts['hosted:prepare'], 'npm run webos:prepare-relea
 
   assert.equal(context.Chat_cursor, 'cursor-2', 'VOD chat pagination cursor advances to the newest loaded comment');
   assert.equal(context.Chat_MessagesNext.length, 2, 'VOD chat next-page comments are queued for playback');
+  assert.equal(context.Chat_comment_ids['msg-gap'], undefined, 'source-gap local chat comments are skipped before entering the playback queue');
   assert.equal(context.Chat_MessagesNext[0].time, 6, 'local archive chat comments are queued on the player timeline');
+
+  context.PlayVod_LocalChatSecondsToPlayerSeconds = value => (value === 30 ? null : value - 10);
+  context.PlayVod_LocalChatSecondsAfterTimeline = value => value === 30;
+  context.Chat_loadChatSuccess(
+    JSON.stringify({
+      data: {
+        video: {
+          comments: {
+            edges: [
+              {
+                cursor: 'cursor-future',
+                node: {
+                  id: 'msg-future',
+                  contentOffsetSeconds: 30,
+                  sourcePlatform: 'local_archive',
+                  commenter: { displayName: 'viewer', login: 'viewer' },
+                  message: { fragments: [{ text: 'future' }], userBadges: [], userColor: '#fff', is_action: false },
+                },
+              },
+            ],
+          },
+        },
+      },
+    }),
+    42
+  );
+  assert.equal(context.Chat_LocalVodPendingComments.length, 1, 'message beyond the current live map is retained for a timeline extension');
+  assert.equal(context.Chat_comment_ids['msg-future'], undefined, 'pending future message is not deduplicated before it maps');
+
+  context.PlayVod_LocalChatSecondsToPlayerSeconds = value => value - 10;
+  context.PlayVod_LocalChatSecondsAfterTimeline = () => false;
+  context.Chat_loadChatSuccess(
+    JSON.stringify({
+      data: {
+        video: {
+          comments: {
+            edges: [],
+          },
+        },
+      },
+    }),
+    42
+  );
+  assert.equal(context.Chat_LocalVodPendingComments.length, 0, 'timeline-only response retries retained future messages');
+  assert.equal(context.Chat_MessagesNext.length, 3, 'extended timeline queues the retained message exactly once');
+  assert.equal(context.Chat_MessagesNext[2].time, 20, 'retained source offset uses the extended media mapping');
+  assert.equal(context.Chat_comment_ids['msg-future'], true, 'retained message is deduplicated only after it maps');
+
+  context.Chat_loadChatSuccess(
+    JSON.stringify({
+      data: {
+        video: {
+          comments: {
+            edges: [],
+          },
+        },
+      },
+    }),
+    42
+  );
+  assert.equal(context.Chat_MessagesNext.length, 3, 'later timeline-only responses do not requeue an already mapped message');
 }
 
 {
