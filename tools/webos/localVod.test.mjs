@@ -1532,8 +1532,102 @@ assert.equal(packageJson.scripts['hosted:prepare'], 'npm run webos:prepare-relea
   context.Main_Addline(42);
 
   assert.deepEqual(context.Chat_Messages, [heldMessage], 'active local VOD chat keeps the current queue while fetching more messages');
+  assert.deepEqual(context.added, heldMessage, 'active local VOD chat renders the final message in the current batch');
+  context.Main_Addline(42);
   assert.equal(context.nextRequested, 42, 'active local VOD chat polls the next page even while the SSE stream is open');
   assert.equal(context.Chat_hasEnded, false, 'active local VOD chat does not mark chat ended while waiting for SSE messages');
+}
+
+{
+  let currentTime = 13;
+  const added = [];
+  const context = {
+    Chat_Messages: [
+      { time: 70, message: 'future-70' },
+      { time: 71, message: 'future-71' },
+    ],
+    Chat_MessagesNext: [],
+    Chat_cursor: 'local-live',
+    Chat_Id: [42],
+    Chat_Position: 0,
+    Chat_lastMsgTime: 0,
+    Chat_offset: 0,
+    Chat_loadingMore: false,
+    Chat_hasEnded: false,
+    ChannelVod_vodOffset: 0,
+    Main_values: {},
+    OSInterface_gettime: () => currentTime * 1000,
+    Main_Slice: value => value.slice(),
+    Chat_loadChatNext() {},
+    Chat_Clean() {},
+    Chat_Init() {},
+    Chat_loadChatRequest() {},
+    ChatLive_ElementAdd: message => added.push(message.time),
+    Main_clearInterval() {},
+    STR_BR: '<br>',
+    STR_CHAT_END: 'end',
+  };
+  vm.createContext(context);
+  vm.runInContext(
+    `
+      function Chat_InsertMessageByTime(list, messageObj, startIndex) {${functionBody(chatVodSource, 'Chat_InsertMessageByTime')}}
+      function Chat_MessageVectorNext(messageObj) {${functionBody(chatVodSource, 'Chat_MessageVectorNext')}}
+      function Main_Addline(id) {${functionBody(chatVodSource, 'Main_Addline')}}
+    `,
+    context
+  );
+
+  context.Chat_MessageVectorNext({ time: 12, message: 'due-12' });
+  context.Chat_MessageVectorNext({ time: 13, message: 'due-13' });
+  context.Main_Addline(42);
+  assert.deepEqual(added, [12], 'due polling messages are not blocked behind a future SSE batch');
+
+  currentTime = 14;
+  context.Main_Addline(42);
+  assert.deepEqual(added, [12, 13], 'due polling messages keep chronological order after the SSE/poll race');
+}
+
+{
+  const context = {
+    Chat_Messages: [{ time: 70 }, { time: 71 }],
+    Chat_MessagesNext: [{ time: 80 }],
+    Chat_lastMsgTime: 0,
+    Chat_offset: 0,
+  };
+  vm.createContext(context);
+  vm.runInContext(`function Chat_LocalVodNextOffsetSeconds() {${functionBody(chatVodSource, 'Chat_LocalVodNextOffsetSeconds')}}`, context);
+  assert.equal(context.Chat_LocalVodNextOffsetSeconds(), 80.001, 'local chat cursor advances across active and pending queues');
+}
+
+{
+  const added = [];
+  const context = {
+    Chat_Messages: [{ time: 12, message: 'only-message' }],
+    Chat_MessagesNext: [],
+    Chat_cursor: 'local-live',
+    Chat_Id: [42],
+    Chat_Position: 0,
+    Chat_lastMsgTime: 0,
+    Chat_offset: 0,
+    Chat_loadingMore: false,
+    Chat_hasEnded: false,
+    ChannelVod_vodOffset: 0,
+    Main_values: {},
+    OSInterface_gettime: () => 13000,
+    Main_Slice: value => value.slice(),
+    Chat_loadChatNext() {},
+    Chat_Clean() {},
+    Chat_Init() {},
+    Chat_loadChatRequest() {},
+    ChatLive_ElementAdd: message => added.push(message.time),
+    Main_clearInterval() {},
+    STR_BR: '<br>',
+    STR_CHAT_END: 'end',
+  };
+  vm.createContext(context);
+  vm.runInContext(`function Main_Addline(id) {${functionBody(chatVodSource, 'Main_Addline')}}`, context);
+  context.Main_Addline(42);
+  assert.deepEqual(added, [12], 'the final message in a local chat batch is rendered');
 }
 
 console.log('local VOD tests passed');

@@ -448,12 +448,14 @@ function Chat_loadChat(id) {
 }
 
 function Chat_LocalVodNextOffsetSeconds() {
-    var list = Chat_Messages.length ? Chat_Messages : Chat_MessagesNext;
     var offset = Chat_lastMsgTime || Chat_offset || 0;
-    var i;
+    var lists = [Chat_Messages, Chat_MessagesNext];
+    var i, j;
 
-    for (i = 0; i < list.length; i++) {
-        if (list[i] && list[i].time > offset) offset = list[i].time;
+    for (i = 0; i < lists.length; i++) {
+        for (j = 0; j < lists[i].length; j++) {
+            if (lists[i][j] && lists[i][j].time > offset) offset = lists[i][j].time;
+        }
     }
 
     return offset + 0.001;
@@ -846,8 +848,21 @@ function Chat_MessageVector(messageObj) {
     Chat_Messages.push(messageObj);
 }
 
+function Chat_InsertMessageByTime(list, messageObj, startIndex) {
+    var i = list.length;
+    var messageTime = parseFloat(messageObj && messageObj.time) || 0;
+
+    startIndex = parseInt(startIndex) || 0;
+    while (i > startIndex && (parseFloat(list[i - 1] && list[i - 1].time) || 0) > messageTime) i--;
+    list.splice(i, 0, messageObj);
+}
+
 function Chat_MessageVectorNext(messageObj) {
-    Chat_MessagesNext.push(messageObj);
+    if (Chat_Position < Chat_Messages.length) {
+        Chat_InsertMessageByTime(Chat_Messages, messageObj, Chat_Position);
+    } else {
+        Chat_InsertMessageByTime(Chat_MessagesNext, messageObj, 0);
+    }
 }
 
 function Chat_Play(id) {
@@ -912,7 +927,7 @@ function Main_Addline(id) {
         return;
     }
 
-    if (Chat_Position < len - 1) {
+    if (Chat_Position < len) {
         i = Chat_Position;
 
         for (i; i < len; i++, Chat_Position++) {
