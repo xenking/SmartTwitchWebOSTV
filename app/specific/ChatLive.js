@@ -194,7 +194,7 @@ var ChatLive_ShowBadges;
 var ChatLive_ShowBadgesMod;
 var ChatLive_ShowBadgesVIP;
 
-function ChatLive_SetOptions(chat_number, Channel_id, selectedChannel) {
+function ChatLive_SetOptions(chat_number, Channel_id, selectedChannel, sessionId) {
     extraEmotes[chat_number] = {};
 
     Chat_loadBadgesGlobal();
@@ -238,7 +238,7 @@ function ChatLive_SetOptions(chat_number, Channel_id, selectedChannel) {
         ChatLive_User_Regex_Replace = new RegExp('@' + AddUser_UsernameArray[0].name, 'gi');
     }
 
-    Chat_Id[chat_number] = new Date().getTime();
+    Chat_Id[chat_number] = typeof sessionId === 'number' && sessionId > 0 ? sessionId : new Date().getTime();
 
     ChatLive_sharedChannelBadgeLoaded[chat_number] = {};
 

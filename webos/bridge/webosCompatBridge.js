@@ -815,6 +815,36 @@
             reason: localVodOverride.lastError || ''
         };
     }
+    function localVodArchiveMeta() {
+        var match = localVodOverride.match;
+        var twitchMeta = localVodOverride.twitchMeta || {};
+        var vod;
+        var vodId;
+        var meta;
+
+        if (localVodOverride.source !== 'local' || !localVodHasUsableCurrentMatch() || !match || !match.vod) return null;
+        vod = match.vod;
+        vodId = String(vod.recording_group_id || vod.id || vod.stream_id || '');
+        if (!vodId) return null;
+
+        meta = {
+            source_platform: 'local_archive',
+            recording_group_id: vodId,
+            stream_id: vodId,
+            status: vod.status || '',
+            active: !!vod.active,
+            growing: !!vod.growing,
+            started_at: vod.source_started_at || vod.started_at || match.source_started_at || '',
+            twitch_vod_id: twitchMeta.vodId || '',
+            twitch_started_at: twitchMeta.startedAt || '',
+            twitch_timeline_delta_seconds: typeof match.delta_seconds === 'number' ? match.delta_seconds : 0,
+            player_timeline_delta_seconds: typeof match.delta_seconds === 'number' ? match.delta_seconds : 0
+        };
+        if (typeof vod.local_chat_display_delay_seconds !== 'undefined') {
+            meta.local_chat_display_delay_seconds = vod.local_chat_display_delay_seconds;
+        }
+        return meta;
+    }
     function localVodEmitState(actions) {
         actions = actions || localVodOverride.actions;
         if (actions && typeof actions.updateState === 'function') {
@@ -1021,6 +1051,7 @@
             switchSource: localVodSwitchWithActions,
             shutdown: localVodShutdown,
             getState: localVodControlState,
+            getArchiveMeta: localVodArchiveMeta,
             debugSnapshot: localVodDebugSnapshot,
             updateEndpoint: function () {
                 localArchiveEndpoint();

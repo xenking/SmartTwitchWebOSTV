@@ -49,6 +49,9 @@ var PlayVod_SaveOffsetId;
 var PlayVod_VodOffset;
 var PlayVod_VodGameID;
 var PlayVod_ChaptersArray = [];
+var PlayVod_LocalChatTimeline = [];
+var PlayVod_LocalChatTimelineVodId = '';
+var PlayVod_LocalChatTimelineValid = false;
 //Variable initialization end
 
 function PlayVod_Start() {
@@ -330,8 +333,11 @@ function PlayVod_SaveCurrentOffset() {
 }
 
 function PlayVod_LocalVodMeta() {
-    if (typeof LocalVod_GetMeta !== 'function') return null;
-    return LocalVod_GetMeta(Main_values_Play_data) || LocalVod_GetMeta(Play_data.data);
+    var meta = typeof LocalVod_GetMeta === 'function' ? LocalVod_GetMeta(Main_values_Play_data) || LocalVod_GetMeta(Play_data.data) : null;
+    var bridge = typeof PlayVod_WebOSLocalBridge === 'function' ? PlayVod_WebOSLocalBridge() : null;
+    var bridgeMeta = bridge && typeof bridge.getArchiveMeta === 'function' ? bridge.getArchiveMeta() : null;
+
+    return bridgeMeta || meta;
 }
 
 function PlayVod_ExternalTwitchVodId() {
@@ -390,6 +396,122 @@ function PlayVod_ChatSecondsToPlayerSeconds(seconds) {
     return seconds > 0 ? seconds : 0;
 }
 
+function PlayVod_LocalChatTimelineId() {
+    var meta = PlayVod_LocalVodMeta();
+    return meta ? String(meta.recording_group_id || meta.stream_id || '') : '';
+}
+
+function PlayVod_NormalizeLocalChatTimeline(timeline) {
+    var normalized = [];
+    var ranges = [];
+    var range;
+    var previous;
+    var i;
+
+    if (!Array.isArray(timeline)) return normalized;
+
+    for (i = 0; i < timeline.length; i++) {
+        range = timeline[i] || {};
+        range = {
+            source_start_ms: parseFloat(range.source_start_ms),
+            source_end_ms: parseFloat(range.source_end_ms),
+            media_start_ms: parseFloat(range.media_start_ms),
+            media_end_ms: parseFloat(range.media_end_ms)
+        };
+        if (
+            !isFinite(range.source_start_ms) ||
+            !isFinite(range.source_end_ms) ||
+            !isFinite(range.media_start_ms) ||
+            !isFinite(range.media_end_ms) ||
+            range.source_start_ms < 0 ||
+            range.source_end_ms < 0 ||
+            range.media_start_ms < 0 ||
+            range.media_end_ms < 0 ||
+            range.source_end_ms <= range.source_start_ms ||
+            range.media_end_ms <= range.media_start_ms
+        ) {
+            return [];
+        }
+        ranges.push(range);
+    }
+
+    ranges.sort(function (a, b) {
+        return a.source_start_ms - b.source_start_ms;
+    });
+    for (i = 0; i < ranges.length; i++) {
+        range = ranges[i];
+        previous = normalized.length ? normalized[normalized.length - 1] : null;
+        if (previous && (range.source_start_ms < previous.source_end_ms || range.media_start_ms < previous.media_end_ms)) return [];
+        normalized.push(range);
+    }
+
+    return normalized;
+}
+
+function PlayVod_SetLocalChatTimeline(timeline) {
+    PlayVod_LocalChatTimeline = PlayVod_NormalizeLocalChatTimeline(timeline);
+    PlayVod_LocalChatTimelineVodId = PlayVod_LocalChatTimelineId();
+    PlayVod_LocalChatTimelineValid = PlayVod_LocalChatTimeline.length > 0;
+    return PlayVod_LocalChatTimelineValid;
+}
+
+function PlayVod_HasLocalChatTimeline() {
+    return PlayVod_LocalChatTimelineValid && PlayVod_LocalChatTimelineVodId === PlayVod_LocalChatTimelineId();
+}
+
+function PlayVod_MapLocalChatTimelineSeconds(seconds, sourceToMedia) {
+    var value = parseFloat(seconds);
+    var valueMS;
+    var range;
+    var inputStart;
+    var inputEnd;
+    var outputStart;
+    var outputEnd;
+    var ratio;
+    var i;
+
+    if (!PlayVod_HasLocalChatTimeline() || !isFinite(value)) return null;
+    valueMS = value * 1000;
+
+    for (i = 0; i < PlayVod_LocalChatTimeline.length; i++) {
+        range = PlayVod_LocalChatTimeline[i];
+        inputStart = sourceToMedia ? range.source_start_ms : range.media_start_ms;
+        inputEnd = sourceToMedia ? range.source_end_ms : range.media_end_ms;
+        if (valueMS < inputStart || valueMS > inputEnd) continue;
+        outputStart = sourceToMedia ? range.media_start_ms : range.source_start_ms;
+        outputEnd = sourceToMedia ? range.media_end_ms : range.source_end_ms;
+        ratio = (valueMS - inputStart) / (inputEnd - inputStart);
+        return (outputStart + ratio * (outputEnd - outputStart)) / 1000;
+    }
+
+    return null;
+}
+
+function PlayVod_LocalChatSecondsAfterTimeline(seconds) {
+    var value = parseFloat(seconds);
+    var lastRange;
+
+    if (!PlayVod_HasLocalChatTimeline() || !isFinite(value) || !PlayVod_LocalChatTimeline.length) return false;
+    lastRange = PlayVod_LocalChatTimeline[PlayVod_LocalChatTimeline.length - 1];
+    return value * 1000 > lastRange.source_end_ms;
+}
+
+function PlayVod_NextLocalChatSecondsForPlayerSeconds(seconds) {
+    var value = parseFloat(seconds);
+    var valueMS;
+    var range;
+    var i;
+
+    if (!PlayVod_HasLocalChatTimeline() || !isFinite(value)) return null;
+    value -= PlayVod_LocalVodPlayerTimelineDeltaSeconds() + PlayVod_LocalVodChatDisplayDelaySeconds();
+    valueMS = value * 1000;
+    for (i = 0; i < PlayVod_LocalChatTimeline.length; i++) {
+        range = PlayVod_LocalChatTimeline[i];
+        if (valueMS < range.media_start_ms) return range.source_start_ms / 1000;
+    }
+    return null;
+}
+
 function PlayVod_LocalVodChatDisplayDelaySeconds() {
     var meta = PlayVod_LocalVodMeta();
     var delay;
@@ -399,16 +521,39 @@ function PlayVod_LocalVodChatDisplayDelaySeconds() {
         if (isFinite(delay)) return delay;
     }
 
-    return 16.368;
+    return PlayVod_HasLocalChatTimeline() ? 0 : 16.368;
+}
+
+function PlayVod_LocalVodPlayerTimelineDeltaSeconds() {
+    var meta = PlayVod_LocalVodMeta();
+    var delta = meta ? parseFloat(meta.player_timeline_delta_seconds) : 0;
+    return isFinite(delta) ? delta : 0;
 }
 
 function PlayVod_LocalChatSecondsToPlayerSeconds(seconds) {
-    seconds = (parseFloat(seconds) || 0) + PlayVod_LocalVodChatDisplayDelaySeconds();
+    var mapped;
+
+    if (PlayVod_HasLocalChatTimeline()) {
+        mapped = PlayVod_MapLocalChatTimelineSeconds(seconds, true);
+        if (mapped === null) return null;
+        seconds = mapped;
+    } else {
+        seconds = parseFloat(seconds) || 0;
+    }
+    seconds += PlayVod_LocalVodChatDisplayDelaySeconds();
+    seconds += PlayVod_LocalVodPlayerTimelineDeltaSeconds();
     return seconds > 0 ? seconds : 0;
 }
 
 function PlayVod_PlayerSecondsToLocalChatSeconds(seconds) {
-    seconds = (parseFloat(seconds) || 0) - PlayVod_LocalVodChatDisplayDelaySeconds();
+    var mapped;
+
+    seconds = (parseFloat(seconds) || 0) - PlayVod_LocalVodPlayerTimelineDeltaSeconds() - PlayVod_LocalVodChatDisplayDelaySeconds();
+    if (PlayVod_HasLocalChatTimeline()) {
+        mapped = PlayVod_MapLocalChatTimelineSeconds(seconds, false);
+        if (mapped === null) return null;
+        seconds = mapped;
+    }
     return seconds > 0 ? seconds : 0;
 }
 
