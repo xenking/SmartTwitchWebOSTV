@@ -1806,6 +1806,7 @@ assert.equal(packageJson.scripts['hosted:prepare'], 'npm run webos:prepare-relea
     Chat_MessageVectorNext: null,
     Chat_Play: null,
     Chat_loadChatNext: null,
+    ChatLive_ElementAdd() {},
     PlayVod_ChatSecondsToPlayerSeconds: value => value,
     PlayVod_LocalChatSecondsToPlayerSeconds: value => (value === 15 ? null : value - 10),
     PlayVod_LocalChatSecondsAfterTimeline: () => false,
@@ -1974,6 +1975,114 @@ assert.equal(packageJson.scripts['hosted:prepare'], 'npm run webos:prepare-relea
     42
   );
   assert.equal(context.Chat_MessagesNext.length, 3, 'later timeline-only responses do not requeue an already mapped message');
+}
+
+{
+  const added = [];
+  const nextRequests = [];
+  const context = {
+    JSON,
+    Chat_hasEnded: false,
+    Chat_Id: [42],
+    Chat_cursor: null,
+    Chat_loadingMore: false,
+    Chat_JustStarted: true,
+    Chat_offset: 2990,
+    Chat_lastMsgTime: 0,
+    Chat_Position: 0,
+    Chat_addLinesId: 0,
+    Chat_comment_ids: {},
+    ChatLive_Show_TimeStamp: false,
+    STR_CHAT_CONNECTED: 'connected',
+    Chat_Messages: [],
+    Chat_MessagesNext: [],
+    Chat_LocalVodPendingComments: [],
+    Chat_LocalVodLastSourceOffsetSeconds: 0,
+    Chat_LocalVodIsLive: () => true,
+    PlayVod_ChatSecondsToPlayerSeconds: value => value,
+    PlayVod_LocalChatSecondsToPlayerSeconds: value => value,
+    PlayVod_LocalChatSecondsAfterTimeline: () => false,
+    Play_timeS: value => String(value),
+    ChatLive_ShouldShowBadge: () => true,
+    Main_A_includes_B: (a, b) => String(a).includes(b),
+    Main_A_equals_B: (a, b) => a === b,
+    ChatLive_Highlight_Mod: false,
+    ChatLive_Highlight_Bits: false,
+    ChatLive_Highlight_AtStreamer: false,
+    ChatLive_Highlight_AtUser: false,
+    ChatLive_Highlight_FromStreamer: false,
+    ChatLive_Highlight_User_send: false,
+    ChatLive_Custom_Nick_Color: false,
+    ChatLive_selectedChannel_id: ['1'],
+    ChatLive_selectedChannel: ['elwycco'],
+    ChatLive_Channel_Regex_Search: [/elwycco/i],
+    ChatLive_User_Regex_Search: /viewer/i,
+    AddUser_UsernameArray: [{ display_name: 'viewer' }],
+    defaultColors: ['#fff'],
+    defaultColorsLength: 1,
+    ChatLive_extraMessageTokenize: value => value,
+    emoteTemplate: value => value,
+    emoteURL: value => value,
+    Chat_CheckUserName: () => '',
+    Chat_LocalVodStartEvents() {},
+    Chat_loadChatNext: id => {
+      nextRequests.push(id);
+    },
+    Chat_Init: () => {
+      context.reinitialized = true;
+    },
+    Chat_loadChatRequest() {},
+    ChatLive_ElementAdd: message => {
+      added.push(message);
+    },
+    Main_setInterval: () => 1,
+    Main_clearInterval() {},
+    Main_Slice: value => value.slice(),
+    Main_values: {},
+    Main_IsOn_OSInterface: true,
+    ChannelVod_vodOffset: 0,
+    OSInterface_gettime: () => 2990000,
+    STR_BR: '<br>',
+    STR_CHAT_END: 'end',
+  };
+  vm.createContext(context);
+  vm.runInContext(
+    `
+      function Chat_LocalVodPendComment(comment) {${functionBody(chatVodSource, 'Chat_LocalVodPendComment')}}
+      function Chat_MessageVector(messageObj) {${functionBody(chatVodSource, 'Chat_MessageVector')}}
+      function Chat_MessageVectorNext(messageObj) {${functionBody(chatVodSource, 'Chat_MessageVectorNext')}}
+      function Chat_Play(id) {${functionBody(chatVodSource, 'Chat_Play')}}
+      function Main_Addline(id) {${functionBody(chatVodSource, 'Main_Addline')}}
+      function Chat_loadChatSuccess(responseObj, id) {${functionBody(chatVodSource, 'Chat_loadChatSuccess')}}
+    `,
+    context
+  );
+
+  context.Chat_loadChatSuccess(
+    JSON.stringify({
+      data: {
+        video: {
+          comments: {
+            edges: [],
+          },
+        },
+      },
+    }),
+    42
+  );
+
+  assert.deepEqual(
+    added.map(message => message.message),
+    ['<span class="message">connected</span>'],
+    'empty active initial local chat renders connected status directly'
+  );
+  assert.deepEqual(context.Chat_Messages, [], 'connected status is not queued as timed chat content');
+  assert.deepEqual(context.Chat_MessagesNext, [], 'empty active initial local chat leaves the pending queue empty');
+  assert.equal(context.Chat_cursor, 'local-live', 'empty active initial local chat keeps the live cursor');
+  assert.equal(context.Chat_offset, 2990, 'empty active initial local chat keeps the player resume offset');
+  assert.equal(context.Chat_hasEnded, false, 'empty active initial local chat remains open');
+  assert.equal(context.reinitialized, undefined, 'empty active initial local chat does not restart chat playback');
+  assert.ok(nextRequests.includes(42), 'empty active initial local chat requests the next live window');
 }
 
 {
