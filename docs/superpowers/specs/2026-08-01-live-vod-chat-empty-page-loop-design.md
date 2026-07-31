@@ -10,9 +10,9 @@ An active local archive VOD can remain on `Chat: Connecting to <channel> VOD` wh
 
 ## Design
 
-Render the initial `Connected` status directly with `ChatLive_ElementAdd()` instead of adding it to `Chat_Messages`. Keep the existing initial-load guard, cursor, offset, live polling, SSE, pagination, and real-message queuing unchanged.
+Remove the initial `Connecting` placeholder, then render the `Connected` status directly with `ChatLive_ElementAdd()` instead of adding it to `Chat_Messages`. Keep the existing initial-load guard, cursor, offset, live polling, SSE, pagination, and real-message queuing unchanged.
 
-This preserves the visible `Connecting` then `Connected` ordering while keeping structural UI state out of the playback-timed message queue. Empty active pages then follow the existing `local-live` polling path instead of triggering stale-chat recovery.
+This replaces the visible `Connecting` placeholder with `Connected` while keeping structural UI state out of the playback-timed message queue. Empty active pages then follow the existing `local-live` polling path instead of triggering stale-chat recovery.
 
 ## Error handling
 
@@ -23,6 +23,7 @@ Existing HTTP error, Twitch fallback, retry, SSE failure, and polling paths rema
 Add a focused regression to `tools/webos/localVod.test.mjs` proving that an empty active initial response at a high player time:
 
 - renders `Connected` directly;
+- removes the initial `Connecting` placeholder;
 - leaves both timed message queues empty;
 - preserves `Chat_cursor = 'local-live'` and the requested offset;
 - does not call `Chat_Init()` from the immediate add-line path;

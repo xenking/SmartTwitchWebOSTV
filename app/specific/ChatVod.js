@@ -745,6 +745,7 @@ function Chat_loadChatSuccess(responseObj, id) {
     }
 
     if (null_next && !Chat_loadingMore) {
+        Main_emptyWithEle(Chat_div[0]);
         ChatLive_ElementAdd({
             chat_number: 0,
             time: 0,

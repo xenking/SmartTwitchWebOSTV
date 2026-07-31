@@ -1799,6 +1799,7 @@ assert.equal(packageJson.scripts['hosted:prepare'], 'npm run webos:prepare-relea
     STR_CHAT_CONNECTED: 'connected',
     Chat_Messages: [],
     Chat_MessagesNext: [],
+    Chat_div: [{ children: [] }],
     Chat_LocalVodPendingComments: [],
     Chat_LocalVodLastSourceOffsetSeconds: 0,
     Chat_LocalVodIsLive: () => true,
@@ -1807,6 +1808,9 @@ assert.equal(packageJson.scripts['hosted:prepare'], 'npm run webos:prepare-relea
     Chat_Play: null,
     Chat_loadChatNext: null,
     ChatLive_ElementAdd() {},
+    Main_emptyWithEle: element => {
+      element.children.length = 0;
+    },
     PlayVod_ChatSecondsToPlayerSeconds: value => value,
     PlayVod_LocalChatSecondsToPlayerSeconds: value => (value === 15 ? null : value - 10),
     PlayVod_LocalChatSecondsAfterTimeline: () => false,
@@ -1980,6 +1984,7 @@ assert.equal(packageJson.scripts['hosted:prepare'], 'npm run webos:prepare-relea
 {
   const added = [];
   const nextRequests = [];
+  const chatChildren = [{ message: 'connecting' }];
   const context = {
     JSON,
     Chat_hasEnded: false,
@@ -1996,6 +2001,7 @@ assert.equal(packageJson.scripts['hosted:prepare'], 'npm run webos:prepare-relea
     STR_CHAT_CONNECTED: 'connected',
     Chat_Messages: [],
     Chat_MessagesNext: [],
+    Chat_div: [{ children: chatChildren }],
     Chat_LocalVodPendingComments: [],
     Chat_LocalVodLastSourceOffsetSeconds: 0,
     Chat_LocalVodIsLive: () => true,
@@ -2034,6 +2040,9 @@ assert.equal(packageJson.scripts['hosted:prepare'], 'npm run webos:prepare-relea
     Chat_loadChatRequest() {},
     ChatLive_ElementAdd: message => {
       added.push(message);
+    },
+    Main_emptyWithEle: element => {
+      element.children.length = 0;
     },
     Main_setInterval: () => 1,
     Main_clearInterval() {},
@@ -2076,6 +2085,7 @@ assert.equal(packageJson.scripts['hosted:prepare'], 'npm run webos:prepare-relea
     ['<span class="message">connected</span>'],
     'empty active initial local chat renders connected status directly'
   );
+  assert.deepEqual(chatChildren, [], 'empty active initial local chat removes the connecting placeholder');
   assert.deepEqual(context.Chat_Messages, [], 'connected status is not queued as timed chat content');
   assert.deepEqual(context.Chat_MessagesNext, [], 'empty active initial local chat leaves the pending queue empty');
   assert.equal(context.Chat_cursor, 'local-live', 'empty active initial local chat keeps the live cursor');

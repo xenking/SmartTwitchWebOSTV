@@ -4,7 +4,7 @@
 
 **Goal:** Stop active local archive VOD chat from reinitializing when the first successful live-window response is empty.
 
-**Architecture:** Keep structural connection state out of the playback-timed message queue. Render the initial `Connected` status directly, while leaving real comments, pagination, offsets, polling, and SSE behavior unchanged.
+**Architecture:** Keep structural connection state out of the playback-timed message queue. Remove the initial `Connecting` placeholder and render `Connected` directly, while leaving real comments, pagination, offsets, polling, and SSE behavior unchanged.
 
 **Tech Stack:** JavaScript, Node.js VM regression harness, npm release tooling, LG webOS CLI/CDP.
 
@@ -26,6 +26,7 @@ assert.deepEqual(
   ['<span class="message">connected</span>'],
   'empty active local chat renders Connected as structural UI state'
 );
+assert.deepEqual(chatChildren, [], 'empty active local chat removes the Connecting placeholder');
 assert.equal(context.Chat_Messages.length, 0, 'Connected is not queued as timed chat content');
 assert.equal(context.Chat_MessagesNext.length, 0, 'empty active chat keeps the next timed queue empty');
 assert.equal(context.Chat_cursor, 'local-live', 'empty active chat keeps its live cursor');
@@ -51,6 +52,7 @@ In `Chat_loadChatSuccess()`, replace only the initial connection-status insertio
 
 ```js
 if (null_next && !Chat_loadingMore) {
+    Main_emptyWithEle(Chat_div[0]);
     ChatLive_ElementAdd({
         chat_number: 0,
         time: 0,
@@ -84,7 +86,7 @@ git commit -m "Fix empty live VOD chat restart loop"
 - Modify: `release/githubio/js/main.js`
 - Modify: `release/githubio/js/main_uncompressed.js`
 - Modify: `webos/app/appinfo.json`
-- Generate: `build/com.tbsniller.smarttwitchwebostv_1.1.37_all.ipk`
+- Generate: `build/com.tbsniller.smarttwitchwebostv_1.1.38_all.ipk`
 
 - [ ] **Step 1: Run the full source gates**
 
@@ -95,21 +97,32 @@ npm run lint
 
 Expected: all webOS tests pass and lint exits `0`.
 
-- [ ] **Step 2: Build, bump, package, and install without removing app data**
+- [ ] **Step 2: Build, bump, and package without removing app data**
 
 ```bash
-npm run webos:install
+npm run webos:bump-local-version
+npm run webos:package
 ```
 
-Expected: version bumps from `1.1.36` to `1.1.37`, release assets rebuild, the IPK is packaged, and install on `tv-wired` succeeds. Do not run `webos:remove`.
+Expected: release assets rebuild and the corrected package is version `1.1.38` after the first live install exposed the stale placeholder left by `1.1.37`.
 
-- [ ] **Step 3: Restart the installed app**
+- [ ] **Step 3: Install over the existing app through the rooted TV package service**
+
+The configured `tv-wired` Developer Mode SSH port is unavailable. Stage the exact IPK through `lgtv`, compare the local and remote final-200-byte MD5 values, then call the same package service used by `ares-install`:
+
+```text
+luna://com.webos.appInstallService/dev/install
+```
+
+Require an `installed` state before removing only the staged IPK from `/media/developer/temp/`. Do not run `webos:remove`, `opkg remove`, or clear app data.
+
+- [ ] **Step 4: Restart the installed app**
 
 ```bash
-npm run webos:restart
+/Users/xenking/.codex/skills/webos-tv-luna-control/scripts/control.sh --device lgtv launch com.tbsniller.smarttwitchwebostv
 ```
 
-Expected: close and launch succeed for `com.tbsniller.smarttwitchwebostv`.
+Expected: the package service closes the old process during install, then launch succeeds for `com.tbsniller.smarttwitchwebostv`.
 
 ### Task 3: Prove the real TV path and close out Git
 
@@ -149,7 +162,7 @@ Expected: tests/lint pass, no whitespace errors, and only the design/plan, sourc
 
 ```bash
 git add release/githubio/js/main.js release/githubio/js/main_uncompressed.js webos/app/appinfo.json
-git commit -m "chore(webos): bump release to 1.1.37"
+git commit -m "chore(webos): bump release to 1.1.38"
 ```
 
 - [ ] **Step 5: Push and open a draft PR**
