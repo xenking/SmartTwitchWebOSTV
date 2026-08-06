@@ -66,7 +66,7 @@ var featuredQuery =
 var topClipQuery =
     '{"query":"{games(first: 100) {edges{node{id,name,clips(first:50,criteria:{period:%t%l}){edges{node{title,videoOffsetSeconds,viewCount,slug,language,durationSeconds,createdAt,id,video{id},thumbnailURL(width:480,height: 272),broadcaster{id,displayName,login}}}}}}}}"}';
 var topVodQuery =
-    '{"query":"{games(first: 30) {edges{node{id,name,videos(first:20,types:%a%l,sort:VIEWS){edges{node{duration,viewCount,language,title,animatedPreviewURL,createdAt,id,thumbnailURLs(width:640,height:360),creator{id,displayName,login}}}}}}}}"}';
+    '{"query":"{games(first: 30) {edges{node{id,name,videos(first:20,types:%a%l,sort:VIEWS){edges{node{duration,viewCount,language,title,animatedPreviewURL,createdAt,id,thumbnailURLs(width:640,height:360),owner{id,displayName,login},creator{id,displayName,login}}}}}}}}"}';
 //,languages:"EN"
 
 var gamesQuery = '{"query":"{games(first:100 %y){pageInfo{hasNextPage},edges{cursor,node{id,displayName,boxArtURL,viewersCount,channelsCount}}}}"}';
@@ -78,7 +78,7 @@ var userLiveByIdsQuery =
     '{"query":"{users(ids: %a ){stream{type,game{displayName,id},isMature,title,id,previewImageURL,viewersCount,createdAt,broadcaster{roles{isPartner},id,login,displayName,language,profileImageURL(width:300)}}}}"}';
 
 var userVodQuery =
-    '{"operationName":"FollowedVideos_CurrentUser","query":"query FollowedVideos_CurrentUser{currentUser{followedVideos(%y first:100,types:%x,sort:%t){pageInfo{hasNextPage},edges{cursor,node{game{displayName,id},duration,viewCount,language,title,animatedPreviewURL,createdAt,id,thumbnailURLs(width:640,height:360),creator{id,displayName,login}}}}}}"}';
+    '{"operationName":"FollowedVideos_CurrentUser","query":"query FollowedVideos_CurrentUser{currentUser{followedVideos(%y first:100,types:%x,sort:%t){pageInfo{hasNextPage},edges{cursor,node{game{displayName,id},duration,viewCount,language,title,animatedPreviewURL,createdAt,id,thumbnailURLs(width:640,height:360),owner{id,displayName,login},creator{id,displayName,login}}}}}}"}';
 
 var userChannelQuery =
     '{"operationName":"ChannelFollows","query":"query,ChannelFollows{currentUser{follows(first:100 %y){pageInfo{hasNextPage},edges{cursor,node{id,displayName,login,followers(){totalCount},profileImageURL(width:300),roles{isPartner},stream{id}}}}}}"}';
@@ -90,11 +90,11 @@ var searchGamesQuery =
 var searchLiveQuery =
     '{"query":"{searchFor(userQuery:\\"%x\\",platform:\\"web\\",target:{%y index:LIVE,limit:100}){liveChannels{cursor,pageInfo{hasNextPage}items{stream{type,game{displayName,id},isMature,title,id,previewImageURL,viewersCount,createdAt,broadcaster{roles{isPartner},id,login,displayName,language,profileImageURL(width:300)}}}}}}"}';
 var searchVodQuery =
-    '{"query":"{searchFor(userQuery:\\"%x\\",platform:\\"web\\",target:{%y index:VOD,limit:100}){videos{cursor,pageInfo{hasNextPage}items{game{displayName,id},duration,viewCount,language,title,animatedPreviewURL,createdAt,id,thumbnailURLs(width:640,height:360),creator{id,displayName,login}}}}}"}';
+    '{"query":"{searchFor(userQuery:\\"%x\\",platform:\\"web\\",target:{%y index:VOD,limit:100}){videos{cursor,pageInfo{hasNextPage}items{game{displayName,id},duration,viewCount,language,title,animatedPreviewURL,createdAt,id,thumbnailURLs(width:640,height:360),owner{id,displayName,login},creator{id,displayName,login}}}}}"}';
 var liveQuery =
     '{"query":"{streams(first: 30, options:{sort:VIEWER_COUNT %l} %c) {pageInfo { hasNextPage },edges{cursor, node{ type,game{displayName,id},isMature,title,id,previewImageURL,viewersCount,createdAt,broadcaster{roles{isPartner},id,login,displayName,language,profileImageURL(width:300)} }}}}"}';
 var channelVodQuery =
-    '{"query":"{user(id: \\"%c\\") { videos(%y first:100,types:%x,sort:%t){pageInfo{hasNextPage},edges{cursor,node{game{id, displayName}, id,duration,viewCount,language,title,animatedPreviewURL,createdAt,id, thumbnailURLs(width: 640, height: 360),creator{id,displayName,login}}}}}}"}';
+    '{"query":"{user(id: \\"%c\\") { videos(%y first:100,types:%x,sort:%t){pageInfo{hasNextPage},edges{cursor,node{game{id, displayName}, id,duration,viewCount,language,title,animatedPreviewURL,createdAt,id, thumbnailURLs(width: 640, height: 360),owner{id,displayName,login},creator{id,displayName,login}}}}}}"}';
 var channelClipQuery =
     '{"query":"{user(id: \\"%c\\") { clips(%y first:100,criteria:{period:%t}){pageInfo{hasNextPage},edges{cursor,node{game{id, displayName}, id, title,videoOffsetSeconds,viewCount,slug,language,durationSeconds,createdAt,video{id}, thumbnailURL(width: 480, height: 272),broadcaster{id,login,displayName}}}}}}"}';
 
@@ -511,7 +511,7 @@ function ScreensObj_StartAllVars() {
                 (typeof LocalVod_IsData === 'function' && LocalVod_IsData(cell)) ||
                 (typeof WTV_IsData === 'function' && WTV_IsData(cell));
             var valuesArray = isExternalVod ? cell : ScreensObj_VodCellArray(cell, this.isQuery, this.gameSelected_Id, this.gameSelected_name);
-            var channelId = isExternalVod ? valuesArray[14] : this.isQuery && cell.creator ? cell.creator.id : cell.user_id;
+            var channelId = isExternalVod ? valuesArray[14] : this.isQuery ? valuesArray[14] : cell.user_id;
 
             //skip check if game is blocked as we are on the blocked game section
             var skipBlockedCheck = this.screen === Main_AGameVod && AddUser_IsUserSet() && Screens_getGameIsBlocked(this.gameSelected_Id);
@@ -1240,6 +1240,7 @@ function ScreensObj_InitChannelVod() {
                 );
             },
             lastselectedChannel: '',
+            lastChannelKey: '',
             label_init: function () {
                 ScreensObj_CheckUser(this.screen);
 
@@ -1247,12 +1248,17 @@ function ScreensObj_InitChannelVod() {
                     ChannelContent_RestoreChannelValue();
                 }
 
-                if (Main_values.Main_selectedChannel_id !== this.lastselectedChannel) {
+                //Key the cache on login as well: a stale channel id shared by two channels
+                //otherwise keeps the previous channel's VODs on screen.
+                var channelKey = Main_values.Main_selectedChannel_id + '|' + Main_values.Main_selectedChannel;
+
+                if (channelKey !== this.lastChannelKey) {
                     this.OffSetPos = 0;
                     this.extraoffset = 0;
                     this.status = false;
                 }
 
+                this.lastChannelKey = channelKey;
                 this.lastselectedChannel = Main_values.Main_selectedChannel_id;
                 Main_cleanTopLabel();
                 Main_IconLoad('label_thumb', 'icon-return', STR_GOBACK);
@@ -1932,15 +1938,21 @@ function ScreensObj_InitChannelClip() {
 
                 ScreensObj_SetTopLable(Main_values.Main_selectedChannelDisplayname, STR_CLIPS + STR_SPACE_HTML + Main_Periods[this.periodPos - 1]);
             },
+            lastChannelKey: '',
             label_init: function () {
                 ScreensObj_CheckUser(this.screen);
 
                 if (!Main_values.Search_isSearching && Main_values.Main_selectedChannel_id) ChannelContent_RestoreChannelValue();
-                if (Main_values.Main_selectedChannel_id !== this.lastselectedChannel) this.status = false;
+
+                //Key the cache on login as well, see the channel VOD screen.
+                var channelKey = Main_values.Main_selectedChannel_id + '|' + Main_values.Main_selectedChannel;
+
+                if (channelKey !== this.lastChannelKey) this.status = false;
 
                 Main_cleanTopLabel();
                 this.SetPeriod();
                 Main_IconLoad('label_thumb', 'icon-return', STR_GOBACK);
+                this.lastChannelKey = channelKey;
                 this.lastselectedChannel = Main_values.Main_selectedChannel_id;
             },
             label_exit: Main_RestoreTopLabel
@@ -3061,16 +3073,25 @@ function ScreensObj_LiveCellArray(cell, logo, partner) {
     ];
 }
 
+//Twitch reports `creator` as the account that produced the video entry, which for a highlight
+//is the channel editor that cut it, not the streamer. `owner` is always the channel the video
+//belongs to, so it decides the cell identity and only falls back to `creator`.
+function ScreensObj_VodChannel(cell) {
+    return (cell && (cell.owner || cell.creator)) || null;
+}
+
 function ScreensObj_VodCellArray(cell, isQuery, game_id, game_name) {
     if (isQuery) {
+        var channel = ScreensObj_VodChannel(cell);
+
         return [
             ScreensObj_VodGetPreview(cell.thumbnailURLs && cell.thumbnailURLs[0] ? cell.thumbnailURLs[0] : '', cell.animatedPreviewURL), //0
-            cell.creator ? cell.creator.displayName : '', //1
+            channel ? channel.displayName : '', //1
             Main_videoCreatedAt(cell.createdAt), //2
             cell.game_name ? cell.game_name : game_name, //3
             Main_formatNumber(cell.viewCount), //4
             cell.language ? '[' + cell.language.toUpperCase() + ']' : '', //5
-            cell.creator ? cell.creator.login : '', //6
+            channel ? channel.login : '', //6
             cell.id, //7
             cell.animatedPreviewURL, //8
             cell.language, //9
@@ -3078,7 +3099,7 @@ function ScreensObj_VodCellArray(cell, isQuery, game_id, game_name) {
             Play_timeHMS(cell.duration), //11
             cell.createdAt, //12
             cell.viewCount, //13
-            cell.creator ? cell.creator.id : '', //14
+            channel ? channel.id : '', //14
             cell.duration, //15
             cell.game_id ? cell.game_id : game_id //16
         ];

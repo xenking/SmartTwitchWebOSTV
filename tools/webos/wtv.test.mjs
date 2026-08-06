@@ -6,6 +6,7 @@ const wtvSource = fs.readFileSync('app/specific/WTV.js', 'utf8');
 const channelContentSource = fs.readFileSync('app/specific/ChannelContent.js', 'utf8');
 const mainSource = fs.readFileSync('app/specific/Main.js', 'utf8');
 const playSource = fs.readFileSync('app/specific/Play.js', 'utf8');
+const playVodSource = fs.readFileSync('app/specific/PlayVod.js', 'utf8');
 const playEtcSource = fs.readFileSync('app/specific/PlayEtc.js', 'utf8');
 const screensSource = fs.readFileSync('app/specific/Screens.js', 'utf8');
 const screensObjSource = fs.readFileSync('app/specific/ScreensObj.js', 'utf8');
@@ -725,5 +726,123 @@ segments/sess-wtv-kuboeb/000000002.ts
     functionBody(playSource, 'Play_getQualities'),
     /if \(!result\[i\] \|\| !result\[i\]\.id\) continue;/,
     'native quality parser ignores malformed quality entries'
+  );
+}
+
+{
+  //A channel page opened from a source that only carries the login (history, local archive,
+  //w.tv) used to keep the previously selected channel id, so the VODs/clips buttons loaded
+  //another streamer and the local archive merge never ran for the visible channel.
+  const requests = [];
+  const context = {
+    Main_helix_api: 'https://api.twitch.tv/helix/',
+    Main_values: {
+      Main_selectedChannel: 'elwycco',
+      Main_selectedChannel_id: '44338616',
+      Main_selectedChannelDisplayname: 'McMurphy2',
+      Play_isHost: false,
+    },
+    IMG_404_LOGO: '404-logo.png',
+    IMG_404_BANNER: '404-banner.png',
+    BaseXmlHttpGet(url, success) {
+      requests.push(url);
+      if (url.indexOf('users?login=') !== -1) {
+        success(
+          JSON.stringify({
+            data: [
+              {
+                id: '94849379',
+                login: 'elwycco',
+                display_name: 'elwycco',
+                profile_image_url: 'logo.png',
+                description: '',
+                offline_image_url: '',
+                broadcaster_type: 'partner',
+              },
+            ],
+          })
+        );
+        return;
+      }
+      success(JSON.stringify({ data: [] }));
+    },
+  };
+  context.window = context;
+  vm.createContext(context);
+  vm.runInContext(channelContentSource, context);
+  vm.runInContext('var BannerFollowersCalled = false; function ChannelContent_BannerFollowers() { BannerFollowersCalled = true; }', context);
+
+  context.ChannelContent_loadDataRequest();
+
+  assert.equal(requests[0], 'https://api.twitch.tv/helix/users?login=elwycco', 'channel page resolves the streamer from the login');
+  assert.equal(context.Main_values.Main_selectedChannel_id, '94849379', 'a stale channel id is replaced by the resolved one');
+  assert.equal(context.Main_values.Main_selectedChannelDisplayname, 'elwycco', 'the display name follows the resolved channel');
+  assert.equal(requests[1], 'https://api.twitch.tv/helix/streams?user_id=94849379', 'the live cell is fetched for the resolved channel');
+  assert.equal(context.BannerFollowersCalled, true, 'the channel page load finishes after the stream lookup');
+
+  assert.match(
+    functionBody(channelContentSource, 'ChannelContent_RestoreChannelValue'),
+    /if \(!ChannelContent_ChannelValueIsset\) return;[\s\S]*ChannelContent_ChannelValue\['Main_values\.Main_selectedChannel_id'\]/,
+    'channel value restore reads the stashed snapshot instead of self-assigning'
+  );
+  assert.match(
+    functionBody(screensObjSource, 'ScreensObj_InitChannelVod'),
+    /var channelKey = Main_values\.Main_selectedChannel_id \+ '\|' \+ Main_values\.Main_selectedChannel;[\s\S]*channelKey !== this\.lastChannelKey/,
+    'channel VOD screen drops cached rows when the channel login changes'
+  );
+  assert.match(
+    functionBody(screensObjSource, 'ScreensObj_InitChannelClip'),
+    /var channelKey = Main_values\.Main_selectedChannel_id \+ '\|' \+ Main_values\.Main_selectedChannel;[\s\S]*channelKey !== this\.lastChannelKey/,
+    'channel clip screen drops cached rows when the channel login changes'
+  );
+}
+
+{
+  //Twitch fills `creator` with the account that produced the video entry. For highlights that
+  //is the channel editor, so elwycco's highlights came back as McMurphy2 and every cell pointed
+  //the whole app at the wrong channel.
+  const context = {
+    Main_videoCreatedAt: value => 'created:' + value,
+    Main_formatNumber: value => String(value),
+    Play_timeHMS: () => 0,
+    twemoji: { parse: value => value },
+    ScreensObj_VodGetPreview: value => value,
+  };
+  vm.createContext(context);
+  vm.runInContext(`function ScreensObj_VodChannel(cell) {${functionBody(screensObjSource, 'ScreensObj_VodChannel')}}`, context);
+  vm.runInContext(
+    `function ScreensObj_VodCellArray(cell, isQuery, game_id, game_name) {${functionBody(screensObjSource, 'ScreensObj_VodCellArray')}}`,
+    context
+  );
+
+  const highlight = {
+    id: '2836932565',
+    title: 'первая часть утопии',
+    createdAt: '2026-08-04T11:23:25Z',
+    duration: '1h38m11s',
+    viewCount: 12,
+    thumbnailURLs: ['thumb.jpg'],
+    owner: { id: '94849379', login: 'elwycco', displayName: 'elwycco' },
+    creator: { id: '44338616', login: 'mcmurphy2', displayName: 'McMurphy2' },
+  };
+  const cell = context.ScreensObj_VodCellArray(highlight, true, null, null);
+
+  assert.equal(cell[1], 'elwycco', 'a highlight cell shows the channel it belongs to, not the editor that cut it');
+  assert.equal(cell[6], 'elwycco', 'the cell login is the channel owner');
+  assert.equal(cell[14], '94849379', 'the cell channel id is the channel owner');
+
+  const legacy = context.ScreensObj_VodCellArray({ id: '1', thumbnailURLs: [], creator: { id: '7', login: 'only', displayName: 'Only' } }, true, null, null);
+  assert.equal(legacy[14], '7', 'videos without an owner still fall back to creator');
+
+  for (const query of ['topVodQuery', 'userVodQuery', 'searchVodQuery', 'channelVodQuery']) {
+    const match = new RegExp(`var ${query} =\\s*'([^']*)'`).exec(screensObjSource);
+    assert.ok(match, `${query} exists`);
+    assert.match(match[1], /owner\{id,displayName,login\}/, `${query} requests the video owner`);
+  }
+
+  assert.match(
+    functionBody(playVodSource, 'PlayVod_get_vod_infoResult'),
+    /var vodChannel = obj\.data\.video\.owner \|\| obj\.data\.video\.creator;/,
+    'VOD playback takes its channel identity from the video owner'
   );
 }

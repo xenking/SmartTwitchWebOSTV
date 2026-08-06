@@ -131,30 +131,13 @@ function ChannelContent_StartLoad() {
 }
 
 function ChannelContent_loadDataRequest() {
-    var theUrl =
-        Main_helix_api + 'streams?user_id=' + (ChannelContent_TargetId !== undefined ? ChannelContent_TargetId : Main_values.Main_selectedChannel_id);
-
-    BaseXmlHttpGet(theUrl, ChannelContent_loadDataRequestSuccess, ChannelContent_loadDataError, null, 0, true);
-}
-
-function ChannelContent_loadDataRequestSuccess(response) {
-    var obj = JSON.parse(response);
-
-    if (obj && obj.data && obj.data.length) {
-        ChannelContent_responseText = obj.data;
-        ChannelContent_GetStreamerInfo();
-    } else {
-        ChannelContent_loadDataError();
-    }
-}
-
-function ChannelContent_loadDataError() {
-    ChannelContent_responseText = null;
-    ChannelContent_GetStreamerInfo();
-}
-
-function ChannelContent_GetStreamerInfo() {
-    var theUrl = Main_helix_api + 'users?id=' + Main_values.Main_selectedChannel_id;
+    //Resolve the channel identity from the login before anything else: Main_selectedChannel_id
+    //can still point at the previously opened channel when this screen was reached from a
+    //source that only carries the login (history, local archive, w.tv), and every following
+    //request (stream, VODs, clips) would then load that other channel.
+    var theUrl = Main_values.Main_selectedChannel
+        ? Main_helix_api + 'users?login=' + encodeURIComponent(Main_values.Main_selectedChannel)
+        : Main_helix_api + 'users?id=' + Main_values.Main_selectedChannel_id;
 
     BaseXmlHttpGet(theUrl, ChannelContent_GetStreamerInfoSuccess, ChannelContent_GetStreamerInfoError, null, 0, true);
 }
@@ -171,10 +154,33 @@ function ChannelContent_GetStreamerInfoSuccess(responseText) {
         Main_values.Main_selectedChannelLogo = channel.profile_image_url;
         Main_values.Main_selectedChannelPartner = channel.broadcaster_type === 'partner';
 
-        ChannelContent_BannerFollowers();
+        if (channel.id) Main_values.Main_selectedChannel_id = channel.id;
+        if (channel.login) Main_values.Main_selectedChannel = channel.login;
+        if (channel.display_name && !Main_values.Play_isHost) Main_values.Main_selectedChannelDisplayname = channel.display_name;
+
+        ChannelContent_GetStreamInfo();
     } else {
         ChannelContent_GetStreamerInfoError();
     }
+}
+
+function ChannelContent_GetStreamInfo() {
+    var theUrl =
+        Main_helix_api + 'streams?user_id=' + (ChannelContent_TargetId !== undefined ? ChannelContent_TargetId : Main_values.Main_selectedChannel_id);
+
+    BaseXmlHttpGet(theUrl, ChannelContent_loadDataRequestSuccess, ChannelContent_loadDataError, null, 0, true);
+}
+
+function ChannelContent_loadDataRequestSuccess(response) {
+    var obj = JSON.parse(response);
+
+    ChannelContent_responseText = obj && obj.data && obj.data.length ? obj.data : null;
+    ChannelContent_BannerFollowers();
+}
+
+function ChannelContent_loadDataError() {
+    ChannelContent_responseText = null;
+    ChannelContent_BannerFollowers();
 }
 var ChannelContent_BannerFollowersPost = '{"query":"{user(login: \\"%x\\") {bannerImageURL, followers(){totalCount}}}"}';
 function ChannelContent_BannerFollowers() {
@@ -211,7 +217,7 @@ function ChannelContent_GetStreamerInfoError() {
     ChannelContent_selectedChannelFollower = '';
     ChannelContent_description = '';
     Main_values.Main_selectedChannelLogo = IMG_404_LOGO;
-    ChannelContent_loadDataSuccess();
+    ChannelContent_GetStreamInfo();
 }
 
 function ChannelContent_setFollow() {
@@ -608,12 +614,16 @@ function ChannelContent_SetChannelValue() {
 }
 
 function ChannelContent_RestoreChannelValue() {
-    Main_values.Main_selectedChannel_id = Main_values.Main_selectedChannel_id;
-    Main_values.Main_selectedChannelLogo = Main_values.Main_selectedChannelLogo;
-    Main_values.Main_selectedChannel = Main_values.Main_selectedChannel;
-    Main_values.Main_selectedChannelDisplayname = Main_values.Main_selectedChannelDisplayname;
+    //Nothing was stashed away, so there is nothing to restore. Without this guard the
+    //VOD/clip screens wiped ChannelContent_UserChannels with undefined on every entry.
+    if (!ChannelContent_ChannelValueIsset) return;
+
+    Main_values.Main_selectedChannel_id = ChannelContent_ChannelValue['Main_values.Main_selectedChannel_id'];
+    Main_values.Main_selectedChannelLogo = ChannelContent_ChannelValue['Main_values.Main_selectedChannelLogo'];
+    Main_values.Main_selectedChannel = ChannelContent_ChannelValue['Main_values.Main_selectedChannel'];
+    Main_values.Main_selectedChannelDisplayname = ChannelContent_ChannelValue['Main_values.Main_selectedChannelDisplayname'];
     ChannelContent_UserChannels = ChannelContent_ChannelValue.ChannelContent_UserChannels;
-    Main_values.Main_BeforeChannel = Main_values.Main_BeforeChannel;
+    Main_values.Main_BeforeChannel = ChannelContent_ChannelValue['Main_values.Main_BeforeChannel'];
     ChannelContent_ChannelValue = {};
     ChannelContent_ChannelValueIsset = false;
 }
