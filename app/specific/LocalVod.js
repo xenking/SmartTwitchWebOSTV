@@ -414,7 +414,7 @@ function LocalVod_ChatMessageToTwitchComment(message) {
     var body = message && message.body ? String(message.body) : '';
     var id = (message && (message.msg_id || message.id)) || 'local-chat-' + (message ? message.offset_ms || 0 : 0);
 
-    if (!message || (message.deleted && !body)) return null;
+    if (!message || message.event_type === 'capture_connected' || message.event_type === 'capture_disconnected' || (message.deleted && !body)) return null;
 
     return {
         cursor: id,

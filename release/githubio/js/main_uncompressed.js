@@ -13102,7 +13102,8 @@
         var body = message && message.body ? String(message.body) : '';
         var id = (message && (message.msg_id || message.id)) || 'local-chat-' + (message ? message.offset_ms || 0 : 0);
 
-        if (!message || (message.deleted && !body)) return null;
+        if (!message || message.event_type === 'capture_connected' || message.event_type === 'capture_disconnected' || (message.deleted && !body))
+            return null;
 
         return {
             cursor: id,
@@ -29401,11 +29402,16 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
 
     function PlayVod_PlayerSecondsToLocalChatSeconds(seconds) {
         var mapped;
+        var lastRange;
 
         seconds = (parseFloat(seconds) || 0) - PlayVod_LocalVodPlayerTimelineDeltaSeconds() - PlayVod_LocalVodChatDisplayDelaySeconds();
         if (PlayVod_HasLocalChatTimeline()) {
             mapped = PlayVod_MapLocalChatTimelineSeconds(seconds, false);
-            if (mapped === null) return null;
+            if (mapped === null) {
+                lastRange = PlayVod_LocalChatTimeline[PlayVod_LocalChatTimeline.length - 1];
+                if (lastRange && seconds * 1000 > lastRange.media_end_ms) return lastRange.source_end_ms / 1000;
+                return null;
+            }
             seconds = mapped;
         }
         return seconds > 0 ? seconds : 0;

@@ -487,6 +487,7 @@ assert.equal(packageJson.scripts['hosted:prepare'], 'npm run webos:prepare-relea
   assert.equal(context.PlayVod_PlayerSecondsToLocalChatSeconds(15), 25, 'media-to-source conversion uses the inverse normalized range');
   assert.equal(context.PlayVod_PlayerSecondsToLocalChatSeconds(9), null, 'media gaps are unmappable in the inverse direction');
   assert.equal(context.PlayVod_NextLocalChatSecondsForPlayerSeconds(9), 20, 'chat requests advance to the next source range when player time is in a media gap');
+  assert.equal(context.PlayVod_PlayerSecondsToLocalChatSeconds(25), 30, 'player positions beyond the current live map clamp to the known source tail');
   assert.equal(context.PlayVod_LocalChatSecondsAfterTimeline(31), true, 'source offsets beyond the map tail remain eligible for a later live extension');
   assert.equal(context.PlayVod_LocalChatSecondsAfterTimeline(15), false, 'closed interior source gaps are not treated as future timeline extensions');
 
@@ -828,6 +829,15 @@ assert.equal(packageJson.scripts['hosted:prepare'], 'npm run webos:prepare-relea
       chat_timeline: chatTimeline,
       messages: [
         {
+          msg_id: 'capture_connected:1788088290764:00000000000000000001',
+          event_type: 'capture_connected',
+          offset_ms: 533,
+          sent_at_unix_ms: 1788088290764,
+          body: '',
+          is_action: false,
+          deleted: false,
+        },
+        {
           msg_id: 'a4ba2223-0f47-4eb9-aa8d-c71c4c78f73c',
           offset_ms: 12425,
           user_id: '73935315',
@@ -843,6 +853,7 @@ assert.equal(packageJson.scripts['hosted:prepare'], 'npm run webos:prepare-relea
       ],
     })
   );
+  assert.equal(twitchLikeChat.data.video.comments.edges.length, 1, 'capture-state records are not rendered as Twitch chat comments');
   const twitchLikeNode = twitchLikeChat.data.video.comments.edges[0].node;
   assert.equal(updatedChatTimeline, chatTimeline, 'polling or SSE chat responses refresh the active timeline before message conversion');
   assert.equal(twitchLikeNode.id, 'a4ba2223-0f47-4eb9-aa8d-c71c4c78f73c', 'local chat msg id maps to Twitch-like comment id');

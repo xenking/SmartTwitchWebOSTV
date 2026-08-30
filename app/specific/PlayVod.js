@@ -547,11 +547,16 @@ function PlayVod_LocalChatSecondsToPlayerSeconds(seconds) {
 
 function PlayVod_PlayerSecondsToLocalChatSeconds(seconds) {
     var mapped;
+    var lastRange;
 
     seconds = (parseFloat(seconds) || 0) - PlayVod_LocalVodPlayerTimelineDeltaSeconds() - PlayVod_LocalVodChatDisplayDelaySeconds();
     if (PlayVod_HasLocalChatTimeline()) {
         mapped = PlayVod_MapLocalChatTimelineSeconds(seconds, false);
-        if (mapped === null) return null;
+        if (mapped === null) {
+            lastRange = PlayVod_LocalChatTimeline[PlayVod_LocalChatTimeline.length - 1];
+            if (lastRange && seconds * 1000 > lastRange.media_end_ms) return lastRange.source_end_ms / 1000;
+            return null;
+        }
         seconds = mapped;
     }
     return seconds > 0 ? seconds : 0;
