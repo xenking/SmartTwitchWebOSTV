@@ -547,11 +547,16 @@ function PlayVod_LocalChatSecondsToPlayerSeconds(seconds) {
 
 function PlayVod_PlayerSecondsToLocalChatSeconds(seconds) {
     var mapped;
+    var lastRange;
 
     seconds = (parseFloat(seconds) || 0) - PlayVod_LocalVodPlayerTimelineDeltaSeconds() - PlayVod_LocalVodChatDisplayDelaySeconds();
     if (PlayVod_HasLocalChatTimeline()) {
         mapped = PlayVod_MapLocalChatTimelineSeconds(seconds, false);
-        if (mapped === null) return null;
+        if (mapped === null) {
+            lastRange = PlayVod_LocalChatTimeline[PlayVod_LocalChatTimeline.length - 1];
+            if (lastRange && seconds * 1000 > lastRange.media_end_ms) return lastRange.source_end_ms / 1000;
+            return null;
+        }
         seconds = mapped;
     }
     return seconds > 0 ? seconds : 0;
@@ -1943,7 +1948,7 @@ function PlayVod_FastBackForward(position) {
 }
 
 var fullVodInfoQuery =
-    '{"query":"{video(id:\\"%x\\"){seekPreviewsURL,creator{roles{isPartner},id,login,displayName,language,profileImageURL(width:300)},muteInfo{mutedSegmentConnection{nodes{duration,offset}}},game{displayName,id},duration,viewCount,language,title,animatedPreviewURL,createdAt,id,thumbnailURLs(width:640,height:360),creator{id,displayName,login},moments(momentRequestType:VIDEO_CHAPTER_MARKERS types:[GAME_CHANGE]) {edges{...VideoPlayerVideoMomentEdge}}}}fragment VideoPlayerVideoMomentEdge on VideoMomentEdge{node {...VideoPlayerVideoMoment}}fragment VideoPlayerVideoMoment on VideoMoment{durationMilliseconds positionMilliseconds type description details{...VideoPlayerGameChangeDetails}}fragment VideoPlayerGameChangeDetails on GameChangeMomentDetails{game{id displayName}}"}';
+    '{"query":"{video(id:\\"%x\\"){seekPreviewsURL,owner{roles{isPartner},id,login,displayName,profileImageURL(width:300)},creator{roles{isPartner},id,login,displayName,language,profileImageURL(width:300)},muteInfo{mutedSegmentConnection{nodes{duration,offset}}},game{displayName,id},duration,viewCount,language,title,animatedPreviewURL,createdAt,id,thumbnailURLs(width:640,height:360),creator{id,displayName,login},moments(momentRequestType:VIDEO_CHAPTER_MARKERS types:[GAME_CHANGE]) {edges{...VideoPlayerVideoMomentEdge}}}}fragment VideoPlayerVideoMomentEdge on VideoMomentEdge{node {...VideoPlayerVideoMoment}}fragment VideoPlayerVideoMoment on VideoMoment{durationMilliseconds positionMilliseconds type description details{...VideoPlayerGameChangeDetails}}fragment VideoPlayerGameChangeDetails on GameChangeMomentDetails{game{id displayName}}"}';
 
 function PlayVod_get_vod_info() {
     var vodInfoId;
@@ -1994,14 +1999,18 @@ function PlayVod_get_vod_infoResult(responseObj) {
 
                 PlayVod_ProcessChapters(obj);
 
-                if (obj.data.video.creator) {
-                    Main_values.Main_selectedChannelPartner = obj.data.video.creator.roles.isPartner;
-                    Play_LoadLogo(Main_getElementById('stream_info_icon'), obj.data.video.creator.profileImageURL);
+                //`creator` is the account that produced the entry (a channel editor for
+                //highlights); the channel the VOD belongs to is `owner`.
+                var vodChannel = obj.data.video.owner || obj.data.video.creator;
 
-                    Main_values.Main_selectedChannelDisplayname = obj.data.video.creator.displayName;
+                if (vodChannel) {
+                    Main_values.Main_selectedChannelPartner = !!(vodChannel.roles && vodChannel.roles.isPartner);
+                    Play_LoadLogo(Main_getElementById('stream_info_icon'), vodChannel.profileImageURL);
 
-                    Main_values.Main_selectedChannel_id = obj.data.video.creator.id;
-                    Main_values.Main_selectedChannel = obj.data.video.creator.login;
+                    Main_values.Main_selectedChannelDisplayname = vodChannel.displayName;
+
+                    Main_values.Main_selectedChannel_id = vodChannel.id;
+                    Main_values.Main_selectedChannel = vodChannel.login;
                 }
 
                 PlayVod_updateVodInfoPanel(obj);

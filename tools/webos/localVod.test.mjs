@@ -487,6 +487,7 @@ assert.equal(packageJson.scripts['hosted:prepare'], 'npm run webos:prepare-relea
   assert.equal(context.PlayVod_PlayerSecondsToLocalChatSeconds(15), 25, 'media-to-source conversion uses the inverse normalized range');
   assert.equal(context.PlayVod_PlayerSecondsToLocalChatSeconds(9), null, 'media gaps are unmappable in the inverse direction');
   assert.equal(context.PlayVod_NextLocalChatSecondsForPlayerSeconds(9), 20, 'chat requests advance to the next source range when player time is in a media gap');
+  assert.equal(context.PlayVod_PlayerSecondsToLocalChatSeconds(25), 30, 'player positions beyond the current live map clamp to the known source tail');
   assert.equal(context.PlayVod_LocalChatSecondsAfterTimeline(31), true, 'source offsets beyond the map tail remain eligible for a later live extension');
   assert.equal(context.PlayVod_LocalChatSecondsAfterTimeline(15), false, 'closed interior source gaps are not treated as future timeline extensions');
 
@@ -828,6 +829,15 @@ assert.equal(packageJson.scripts['hosted:prepare'], 'npm run webos:prepare-relea
       chat_timeline: chatTimeline,
       messages: [
         {
+          msg_id: 'capture_connected:1788088290764:00000000000000000001',
+          event_type: 'capture_connected',
+          offset_ms: 533,
+          sent_at_unix_ms: 1788088290764,
+          body: '',
+          is_action: false,
+          deleted: false,
+        },
+        {
           msg_id: 'a4ba2223-0f47-4eb9-aa8d-c71c4c78f73c',
           offset_ms: 12425,
           user_id: '73935315',
@@ -843,6 +853,7 @@ assert.equal(packageJson.scripts['hosted:prepare'], 'npm run webos:prepare-relea
       ],
     })
   );
+  assert.equal(twitchLikeChat.data.video.comments.edges.length, 1, 'capture-state records are not rendered as Twitch chat comments');
   const twitchLikeNode = twitchLikeChat.data.video.comments.edges[0].node;
   assert.equal(updatedChatTimeline, chatTimeline, 'polling or SSE chat responses refresh the active timeline before message conversion');
   assert.equal(twitchLikeNode.id, 'a4ba2223-0f47-4eb9-aa8d-c71c4c78f73c', 'local chat msg id maps to Twitch-like comment id');
@@ -1799,6 +1810,7 @@ assert.equal(packageJson.scripts['hosted:prepare'], 'npm run webos:prepare-relea
     STR_CHAT_CONNECTED: 'connected',
     Chat_Messages: [],
     Chat_MessagesNext: [],
+    Chat_div: [{ children: [] }],
     Chat_LocalVodPendingComments: [],
     Chat_LocalVodLastSourceOffsetSeconds: 0,
     Chat_LocalVodIsLive: () => true,
@@ -1806,6 +1818,10 @@ assert.equal(packageJson.scripts['hosted:prepare'], 'npm run webos:prepare-relea
     Chat_MessageVectorNext: null,
     Chat_Play: null,
     Chat_loadChatNext: null,
+    ChatLive_ElementAdd() {},
+    Main_emptyWithEle: element => {
+      element.children.length = 0;
+    },
     PlayVod_ChatSecondsToPlayerSeconds: value => value,
     PlayVod_LocalChatSecondsToPlayerSeconds: value => (value === 15 ? null : value - 10),
     PlayVod_LocalChatSecondsAfterTimeline: () => false,
@@ -1974,6 +1990,120 @@ assert.equal(packageJson.scripts['hosted:prepare'], 'npm run webos:prepare-relea
     42
   );
   assert.equal(context.Chat_MessagesNext.length, 3, 'later timeline-only responses do not requeue an already mapped message');
+}
+
+{
+  const added = [];
+  const nextRequests = [];
+  const chatChildren = [{ message: 'connecting' }];
+  const context = {
+    JSON,
+    Chat_hasEnded: false,
+    Chat_Id: [42],
+    Chat_cursor: null,
+    Chat_loadingMore: false,
+    Chat_JustStarted: true,
+    Chat_offset: 2990,
+    Chat_lastMsgTime: 0,
+    Chat_Position: 0,
+    Chat_addLinesId: 0,
+    Chat_comment_ids: {},
+    ChatLive_Show_TimeStamp: false,
+    STR_CHAT_CONNECTED: 'connected',
+    Chat_Messages: [],
+    Chat_MessagesNext: [],
+    Chat_div: [{ children: chatChildren }],
+    Chat_LocalVodPendingComments: [],
+    Chat_LocalVodLastSourceOffsetSeconds: 0,
+    Chat_LocalVodIsLive: () => true,
+    PlayVod_ChatSecondsToPlayerSeconds: value => value,
+    PlayVod_LocalChatSecondsToPlayerSeconds: value => value,
+    PlayVod_LocalChatSecondsAfterTimeline: () => false,
+    Play_timeS: value => String(value),
+    ChatLive_ShouldShowBadge: () => true,
+    Main_A_includes_B: (a, b) => String(a).includes(b),
+    Main_A_equals_B: (a, b) => a === b,
+    ChatLive_Highlight_Mod: false,
+    ChatLive_Highlight_Bits: false,
+    ChatLive_Highlight_AtStreamer: false,
+    ChatLive_Highlight_AtUser: false,
+    ChatLive_Highlight_FromStreamer: false,
+    ChatLive_Highlight_User_send: false,
+    ChatLive_Custom_Nick_Color: false,
+    ChatLive_selectedChannel_id: ['1'],
+    ChatLive_selectedChannel: ['elwycco'],
+    ChatLive_Channel_Regex_Search: [/elwycco/i],
+    ChatLive_User_Regex_Search: /viewer/i,
+    AddUser_UsernameArray: [{ display_name: 'viewer' }],
+    defaultColors: ['#fff'],
+    defaultColorsLength: 1,
+    ChatLive_extraMessageTokenize: value => value,
+    emoteTemplate: value => value,
+    emoteURL: value => value,
+    Chat_CheckUserName: () => '',
+    Chat_LocalVodStartEvents() {},
+    Chat_loadChatNext: id => {
+      nextRequests.push(id);
+    },
+    Chat_Init: () => {
+      context.reinitialized = true;
+    },
+    Chat_loadChatRequest() {},
+    ChatLive_ElementAdd: message => {
+      added.push(message);
+    },
+    Main_emptyWithEle: element => {
+      element.children.length = 0;
+    },
+    Main_setInterval: () => 1,
+    Main_clearInterval() {},
+    Main_Slice: value => value.slice(),
+    Main_values: {},
+    Main_IsOn_OSInterface: true,
+    ChannelVod_vodOffset: 0,
+    OSInterface_gettime: () => 2990000,
+    STR_BR: '<br>',
+    STR_CHAT_END: 'end',
+  };
+  vm.createContext(context);
+  vm.runInContext(
+    `
+      function Chat_LocalVodPendComment(comment) {${functionBody(chatVodSource, 'Chat_LocalVodPendComment')}}
+      function Chat_MessageVector(messageObj) {${functionBody(chatVodSource, 'Chat_MessageVector')}}
+      function Chat_MessageVectorNext(messageObj) {${functionBody(chatVodSource, 'Chat_MessageVectorNext')}}
+      function Chat_Play(id) {${functionBody(chatVodSource, 'Chat_Play')}}
+      function Main_Addline(id) {${functionBody(chatVodSource, 'Main_Addline')}}
+      function Chat_loadChatSuccess(responseObj, id) {${functionBody(chatVodSource, 'Chat_loadChatSuccess')}}
+    `,
+    context
+  );
+
+  context.Chat_loadChatSuccess(
+    JSON.stringify({
+      data: {
+        video: {
+          comments: {
+            edges: [],
+          },
+        },
+      },
+    }),
+    42
+  );
+
+  assert.deepEqual(
+    added.map(message => message.message),
+    ['<span class="message">connected</span>'],
+    'empty active initial local chat renders connected status directly'
+  );
+  assert.deepEqual(chatChildren, [], 'empty active initial local chat removes the connecting placeholder');
+  assert.deepEqual(context.Chat_Messages, [], 'connected status is not queued as timed chat content');
+  assert.deepEqual(context.Chat_MessagesNext, [], 'empty active initial local chat leaves the pending queue empty');
+  assert.equal(context.Chat_cursor, 'local-live', 'empty active initial local chat keeps the live cursor');
+  assert.equal(context.Chat_offset, 2990, 'empty active initial local chat keeps the player resume offset');
+  assert.equal(context.Chat_hasEnded, false, 'empty active initial local chat remains open');
+  assert.equal(context.reinitialized, undefined, 'empty active initial local chat does not restart chat playback');
+  assert.ok(nextRequests.includes(42), 'empty active initial local chat requests the next live window');
 }
 
 {

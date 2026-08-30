@@ -7391,32 +7391,13 @@
     }
 
     function ChannelContent_loadDataRequest() {
-        var theUrl =
-            Main_helix_api +
-            'streams?user_id=' +
-            (ChannelContent_TargetId !== undefined ? ChannelContent_TargetId : Main_values.Main_selectedChannel_id);
-
-        BaseXmlHttpGet(theUrl, ChannelContent_loadDataRequestSuccess, ChannelContent_loadDataError, null, 0, true);
-    }
-
-    function ChannelContent_loadDataRequestSuccess(response) {
-        var obj = JSON.parse(response);
-
-        if (obj && obj.data && obj.data.length) {
-            ChannelContent_responseText = obj.data;
-            ChannelContent_GetStreamerInfo();
-        } else {
-            ChannelContent_loadDataError();
-        }
-    }
-
-    function ChannelContent_loadDataError() {
-        ChannelContent_responseText = null;
-        ChannelContent_GetStreamerInfo();
-    }
-
-    function ChannelContent_GetStreamerInfo() {
-        var theUrl = Main_helix_api + 'users?id=' + Main_values.Main_selectedChannel_id;
+        //Resolve the channel identity from the login before anything else: Main_selectedChannel_id
+        //can still point at the previously opened channel when this screen was reached from a
+        //source that only carries the login (history, local archive, w.tv), and every following
+        //request (stream, VODs, clips) would then load that other channel.
+        var theUrl = Main_values.Main_selectedChannel
+            ? Main_helix_api + 'users?login=' + encodeURIComponent(Main_values.Main_selectedChannel)
+            : Main_helix_api + 'users?id=' + Main_values.Main_selectedChannel_id;
 
         BaseXmlHttpGet(theUrl, ChannelContent_GetStreamerInfoSuccess, ChannelContent_GetStreamerInfoError, null, 0, true);
     }
@@ -7433,10 +7414,35 @@
             Main_values.Main_selectedChannelLogo = channel.profile_image_url;
             Main_values.Main_selectedChannelPartner = channel.broadcaster_type === 'partner';
 
-            ChannelContent_BannerFollowers();
+            if (channel.id) Main_values.Main_selectedChannel_id = channel.id;
+            if (channel.login) Main_values.Main_selectedChannel = channel.login;
+            if (channel.display_name && !Main_values.Play_isHost) Main_values.Main_selectedChannelDisplayname = channel.display_name;
+
+            ChannelContent_GetStreamInfo();
         } else {
             ChannelContent_GetStreamerInfoError();
         }
+    }
+
+    function ChannelContent_GetStreamInfo() {
+        var theUrl =
+            Main_helix_api +
+            'streams?user_id=' +
+            (ChannelContent_TargetId !== undefined ? ChannelContent_TargetId : Main_values.Main_selectedChannel_id);
+
+        BaseXmlHttpGet(theUrl, ChannelContent_loadDataRequestSuccess, ChannelContent_loadDataError, null, 0, true);
+    }
+
+    function ChannelContent_loadDataRequestSuccess(response) {
+        var obj = JSON.parse(response);
+
+        ChannelContent_responseText = obj && obj.data && obj.data.length ? obj.data : null;
+        ChannelContent_BannerFollowers();
+    }
+
+    function ChannelContent_loadDataError() {
+        ChannelContent_responseText = null;
+        ChannelContent_BannerFollowers();
     }
     var ChannelContent_BannerFollowersPost = '{"query":"{user(login: \\"%x\\") {bannerImageURL, followers(){totalCount}}}"}';
     function ChannelContent_BannerFollowers() {
@@ -7473,7 +7479,7 @@
         ChannelContent_selectedChannelFollower = '';
         ChannelContent_description = '';
         Main_values.Main_selectedChannelLogo = IMG_404_LOGO;
-        ChannelContent_loadDataSuccess();
+        ChannelContent_GetStreamInfo();
     }
 
     function ChannelContent_setFollow() {
@@ -7871,12 +7877,16 @@
     }
 
     function ChannelContent_RestoreChannelValue() {
-        Main_values.Main_selectedChannel_id = Main_values.Main_selectedChannel_id;
-        Main_values.Main_selectedChannelLogo = Main_values.Main_selectedChannelLogo;
-        Main_values.Main_selectedChannel = Main_values.Main_selectedChannel;
-        Main_values.Main_selectedChannelDisplayname = Main_values.Main_selectedChannelDisplayname;
+        //Nothing was stashed away, so there is nothing to restore. Without this guard the
+        //VOD/clip screens wiped ChannelContent_UserChannels with undefined on every entry.
+        if (!ChannelContent_ChannelValueIsset) return;
+
+        Main_values.Main_selectedChannel_id = ChannelContent_ChannelValue['Main_values.Main_selectedChannel_id'];
+        Main_values.Main_selectedChannelLogo = ChannelContent_ChannelValue['Main_values.Main_selectedChannelLogo'];
+        Main_values.Main_selectedChannel = ChannelContent_ChannelValue['Main_values.Main_selectedChannel'];
+        Main_values.Main_selectedChannelDisplayname = ChannelContent_ChannelValue['Main_values.Main_selectedChannelDisplayname'];
         ChannelContent_UserChannels = ChannelContent_ChannelValue.ChannelContent_UserChannels;
-        Main_values.Main_BeforeChannel = Main_values.Main_BeforeChannel;
+        Main_values.Main_BeforeChannel = ChannelContent_ChannelValue['Main_values.Main_BeforeChannel'];
         ChannelContent_ChannelValue = {};
         ChannelContent_ChannelValueIsset = false;
     }
@@ -12181,7 +12191,8 @@
         }
 
         if (null_next && !Chat_loadingMore) {
-            Chat_MessageVector({
+            Main_emptyWithEle(Chat_div[0]);
+            ChatLive_ElementAdd({
                 chat_number: 0,
                 time: 0,
                 message: '<span class="message">' + STR_CHAT_CONNECTED + '</span>'
@@ -13091,7 +13102,8 @@
         var body = message && message.body ? String(message.body) : '';
         var id = (message && (message.msg_id || message.id)) || 'local-chat-' + (message ? message.offset_ms || 0 : 0);
 
-        if (!message || (message.deleted && !body)) return null;
+        if (!message || message.event_type === 'capture_connected' || message.event_type === 'capture_disconnected' || (message.deleted && !body))
+            return null;
 
         return {
             cursor: id,
@@ -29390,11 +29402,16 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
 
     function PlayVod_PlayerSecondsToLocalChatSeconds(seconds) {
         var mapped;
+        var lastRange;
 
         seconds = (parseFloat(seconds) || 0) - PlayVod_LocalVodPlayerTimelineDeltaSeconds() - PlayVod_LocalVodChatDisplayDelaySeconds();
         if (PlayVod_HasLocalChatTimeline()) {
             mapped = PlayVod_MapLocalChatTimelineSeconds(seconds, false);
-            if (mapped === null) return null;
+            if (mapped === null) {
+                lastRange = PlayVod_LocalChatTimeline[PlayVod_LocalChatTimeline.length - 1];
+                if (lastRange && seconds * 1000 > lastRange.media_end_ms) return lastRange.source_end_ms / 1000;
+                return null;
+            }
             seconds = mapped;
         }
         return seconds > 0 ? seconds : 0;
@@ -30804,7 +30821,7 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
     }
 
     var fullVodInfoQuery =
-        '{"query":"{video(id:\\"%x\\"){seekPreviewsURL,creator{roles{isPartner},id,login,displayName,language,profileImageURL(width:300)},muteInfo{mutedSegmentConnection{nodes{duration,offset}}},game{displayName,id},duration,viewCount,language,title,animatedPreviewURL,createdAt,id,thumbnailURLs(width:640,height:360),creator{id,displayName,login},moments(momentRequestType:VIDEO_CHAPTER_MARKERS types:[GAME_CHANGE]) {edges{...VideoPlayerVideoMomentEdge}}}}fragment VideoPlayerVideoMomentEdge on VideoMomentEdge{node {...VideoPlayerVideoMoment}}fragment VideoPlayerVideoMoment on VideoMoment{durationMilliseconds positionMilliseconds type description details{...VideoPlayerGameChangeDetails}}fragment VideoPlayerGameChangeDetails on GameChangeMomentDetails{game{id displayName}}"}';
+        '{"query":"{video(id:\\"%x\\"){seekPreviewsURL,owner{roles{isPartner},id,login,displayName,profileImageURL(width:300)},creator{roles{isPartner},id,login,displayName,language,profileImageURL(width:300)},muteInfo{mutedSegmentConnection{nodes{duration,offset}}},game{displayName,id},duration,viewCount,language,title,animatedPreviewURL,createdAt,id,thumbnailURLs(width:640,height:360),creator{id,displayName,login},moments(momentRequestType:VIDEO_CHAPTER_MARKERS types:[GAME_CHANGE]) {edges{...VideoPlayerVideoMomentEdge}}}}fragment VideoPlayerVideoMomentEdge on VideoMomentEdge{node {...VideoPlayerVideoMoment}}fragment VideoPlayerVideoMoment on VideoMoment{durationMilliseconds positionMilliseconds type description details{...VideoPlayerGameChangeDetails}}fragment VideoPlayerGameChangeDetails on GameChangeMomentDetails{game{id displayName}}"}';
 
     function PlayVod_get_vod_info() {
         var vodInfoId;
@@ -30855,14 +30872,18 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
 
                     PlayVod_ProcessChapters(obj);
 
-                    if (obj.data.video.creator) {
-                        Main_values.Main_selectedChannelPartner = obj.data.video.creator.roles.isPartner;
-                        Play_LoadLogo(Main_getElementById('stream_info_icon'), obj.data.video.creator.profileImageURL);
+                    //`creator` is the account that produced the entry (a channel editor for
+                    //highlights); the channel the VOD belongs to is `owner`.
+                    var vodChannel = obj.data.video.owner || obj.data.video.creator;
 
-                        Main_values.Main_selectedChannelDisplayname = obj.data.video.creator.displayName;
+                    if (vodChannel) {
+                        Main_values.Main_selectedChannelPartner = !!(vodChannel.roles && vodChannel.roles.isPartner);
+                        Play_LoadLogo(Main_getElementById('stream_info_icon'), vodChannel.profileImageURL);
 
-                        Main_values.Main_selectedChannel_id = obj.data.video.creator.id;
-                        Main_values.Main_selectedChannel = obj.data.video.creator.login;
+                        Main_values.Main_selectedChannelDisplayname = vodChannel.displayName;
+
+                        Main_values.Main_selectedChannel_id = vodChannel.id;
+                        Main_values.Main_selectedChannel = vodChannel.login;
                     }
 
                     PlayVod_updateVodInfoPanel(obj);
@@ -35844,7 +35865,7 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
     var topClipQuery =
         '{"query":"{games(first: 100) {edges{node{id,name,clips(first:50,criteria:{period:%t%l}){edges{node{title,videoOffsetSeconds,viewCount,slug,language,durationSeconds,createdAt,id,video{id},thumbnailURL(width:480,height: 272),broadcaster{id,displayName,login}}}}}}}}"}';
     var topVodQuery =
-        '{"query":"{games(first: 30) {edges{node{id,name,videos(first:20,types:%a%l,sort:VIEWS){edges{node{duration,viewCount,language,title,animatedPreviewURL,createdAt,id,thumbnailURLs(width:640,height:360),creator{id,displayName,login}}}}}}}}"}';
+        '{"query":"{games(first: 30) {edges{node{id,name,videos(first:20,types:%a%l,sort:VIEWS){edges{node{duration,viewCount,language,title,animatedPreviewURL,createdAt,id,thumbnailURLs(width:640,height:360),owner{id,displayName,login},creator{id,displayName,login}}}}}}}}"}';
     //,languages:"EN"
 
     var gamesQuery =
@@ -35857,7 +35878,7 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
         '{"query":"{users(ids: %a ){stream{type,game{displayName,id},isMature,title,id,previewImageURL,viewersCount,createdAt,broadcaster{roles{isPartner},id,login,displayName,language,profileImageURL(width:300)}}}}"}';
 
     var userVodQuery =
-        '{"operationName":"FollowedVideos_CurrentUser","query":"query FollowedVideos_CurrentUser{currentUser{followedVideos(%y first:100,types:%x,sort:%t){pageInfo{hasNextPage},edges{cursor,node{game{displayName,id},duration,viewCount,language,title,animatedPreviewURL,createdAt,id,thumbnailURLs(width:640,height:360),creator{id,displayName,login}}}}}}"}';
+        '{"operationName":"FollowedVideos_CurrentUser","query":"query FollowedVideos_CurrentUser{currentUser{followedVideos(%y first:100,types:%x,sort:%t){pageInfo{hasNextPage},edges{cursor,node{game{displayName,id},duration,viewCount,language,title,animatedPreviewURL,createdAt,id,thumbnailURLs(width:640,height:360),owner{id,displayName,login},creator{id,displayName,login}}}}}}"}';
 
     var userChannelQuery =
         '{"operationName":"ChannelFollows","query":"query,ChannelFollows{currentUser{follows(first:100 %y){pageInfo{hasNextPage},edges{cursor,node{id,displayName,login,followers(){totalCount},profileImageURL(width:300),roles{isPartner},stream{id}}}}}}"}';
@@ -35869,11 +35890,11 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
     var searchLiveQuery =
         '{"query":"{searchFor(userQuery:\\"%x\\",platform:\\"web\\",target:{%y index:LIVE,limit:100}){liveChannels{cursor,pageInfo{hasNextPage}items{stream{type,game{displayName,id},isMature,title,id,previewImageURL,viewersCount,createdAt,broadcaster{roles{isPartner},id,login,displayName,language,profileImageURL(width:300)}}}}}}"}';
     var searchVodQuery =
-        '{"query":"{searchFor(userQuery:\\"%x\\",platform:\\"web\\",target:{%y index:VOD,limit:100}){videos{cursor,pageInfo{hasNextPage}items{game{displayName,id},duration,viewCount,language,title,animatedPreviewURL,createdAt,id,thumbnailURLs(width:640,height:360),creator{id,displayName,login}}}}}"}';
+        '{"query":"{searchFor(userQuery:\\"%x\\",platform:\\"web\\",target:{%y index:VOD,limit:100}){videos{cursor,pageInfo{hasNextPage}items{game{displayName,id},duration,viewCount,language,title,animatedPreviewURL,createdAt,id,thumbnailURLs(width:640,height:360),owner{id,displayName,login},creator{id,displayName,login}}}}}"}';
     var liveQuery =
         '{"query":"{streams(first: 30, options:{sort:VIEWER_COUNT %l} %c) {pageInfo { hasNextPage },edges{cursor, node{ type,game{displayName,id},isMature,title,id,previewImageURL,viewersCount,createdAt,broadcaster{roles{isPartner},id,login,displayName,language,profileImageURL(width:300)} }}}}"}';
     var channelVodQuery =
-        '{"query":"{user(id: \\"%c\\") { videos(%y first:100,types:%x,sort:%t){pageInfo{hasNextPage},edges{cursor,node{game{id, displayName}, id,duration,viewCount,language,title,animatedPreviewURL,createdAt,id, thumbnailURLs(width: 640, height: 360),creator{id,displayName,login}}}}}}"}';
+        '{"query":"{user(id: \\"%c\\") { videos(%y first:100,types:%x,sort:%t){pageInfo{hasNextPage},edges{cursor,node{game{id, displayName}, id,duration,viewCount,language,title,animatedPreviewURL,createdAt,id, thumbnailURLs(width: 640, height: 360),owner{id,displayName,login},creator{id,displayName,login}}}}}}"}';
     var channelClipQuery =
         '{"query":"{user(id: \\"%c\\") { clips(%y first:100,criteria:{period:%t}){pageInfo{hasNextPage},edges{cursor,node{game{id, displayName}, id, title,videoOffsetSeconds,viewCount,slug,language,durationSeconds,createdAt,video{id}, thumbnailURL(width: 480, height: 272),broadcaster{id,login,displayName}}}}}}"}';
 
@@ -36291,7 +36312,7 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
                 var isExternalVod =
                     (typeof LocalVod_IsData === 'function' && LocalVod_IsData(cell)) || (typeof WTV_IsData === 'function' && WTV_IsData(cell));
                 var valuesArray = isExternalVod ? cell : ScreensObj_VodCellArray(cell, this.isQuery, this.gameSelected_Id, this.gameSelected_name);
-                var channelId = isExternalVod ? valuesArray[14] : this.isQuery && cell.creator ? cell.creator.id : cell.user_id;
+                var channelId = isExternalVod ? valuesArray[14] : this.isQuery ? valuesArray[14] : cell.user_id;
 
                 //skip check if game is blocked as we are on the blocked game section
                 var skipBlockedCheck = this.screen === Main_AGameVod && AddUser_IsUserSet() && Screens_getGameIsBlocked(this.gameSelected_Id);
@@ -37019,6 +37040,7 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
                     );
                 },
                 lastselectedChannel: '',
+                lastChannelKey: '',
                 label_init: function () {
                     ScreensObj_CheckUser(this.screen);
 
@@ -37026,12 +37048,17 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
                         ChannelContent_RestoreChannelValue();
                     }
 
-                    if (Main_values.Main_selectedChannel_id !== this.lastselectedChannel) {
+                    //Key the cache on login as well: a stale channel id shared by two channels
+                    //otherwise keeps the previous channel's VODs on screen.
+                    var channelKey = Main_values.Main_selectedChannel_id + '|' + Main_values.Main_selectedChannel;
+
+                    if (channelKey !== this.lastChannelKey) {
                         this.OffSetPos = 0;
                         this.extraoffset = 0;
                         this.status = false;
                     }
 
+                    this.lastChannelKey = channelKey;
                     this.lastselectedChannel = Main_values.Main_selectedChannel_id;
                     Main_cleanTopLabel();
                     Main_IconLoad('label_thumb', 'icon-return', STR_GOBACK);
@@ -37715,15 +37742,21 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
                         STR_CLIPS + STR_SPACE_HTML + Main_Periods[this.periodPos - 1]
                     );
                 },
+                lastChannelKey: '',
                 label_init: function () {
                     ScreensObj_CheckUser(this.screen);
 
                     if (!Main_values.Search_isSearching && Main_values.Main_selectedChannel_id) ChannelContent_RestoreChannelValue();
-                    if (Main_values.Main_selectedChannel_id !== this.lastselectedChannel) this.status = false;
+
+                    //Key the cache on login as well, see the channel VOD screen.
+                    var channelKey = Main_values.Main_selectedChannel_id + '|' + Main_values.Main_selectedChannel;
+
+                    if (channelKey !== this.lastChannelKey) this.status = false;
 
                     Main_cleanTopLabel();
                     this.SetPeriod();
                     Main_IconLoad('label_thumb', 'icon-return', STR_GOBACK);
+                    this.lastChannelKey = channelKey;
                     this.lastselectedChannel = Main_values.Main_selectedChannel_id;
                 },
                 label_exit: Main_RestoreTopLabel
@@ -38853,16 +38886,25 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
         ];
     }
 
+    //Twitch reports `creator` as the account that produced the video entry, which for a highlight
+    //is the channel editor that cut it, not the streamer. `owner` is always the channel the video
+    //belongs to, so it decides the cell identity and only falls back to `creator`.
+    function ScreensObj_VodChannel(cell) {
+        return (cell && (cell.owner || cell.creator)) || null;
+    }
+
     function ScreensObj_VodCellArray(cell, isQuery, game_id, game_name) {
         if (isQuery) {
+            var channel = ScreensObj_VodChannel(cell);
+
             return [
                 ScreensObj_VodGetPreview(cell.thumbnailURLs && cell.thumbnailURLs[0] ? cell.thumbnailURLs[0] : '', cell.animatedPreviewURL), //0
-                cell.creator ? cell.creator.displayName : '', //1
+                channel ? channel.displayName : '', //1
                 Main_videoCreatedAt(cell.createdAt), //2
                 cell.game_name ? cell.game_name : game_name, //3
                 Main_formatNumber(cell.viewCount), //4
                 cell.language ? '[' + cell.language.toUpperCase() + ']' : '', //5
-                cell.creator ? cell.creator.login : '', //6
+                channel ? channel.login : '', //6
                 cell.id, //7
                 cell.animatedPreviewURL, //8
                 cell.language, //9
@@ -38870,7 +38912,7 @@ https://video-weaver.sao03.hls.ttvnw.net/v1/playlist/C.m3u8 09:36:20.90
                 Play_timeHMS(cell.duration), //11
                 cell.createdAt, //12
                 cell.viewCount, //13
-                cell.creator ? cell.creator.id : '', //14
+                channel ? channel.id : '', //14
                 cell.duration, //15
                 cell.game_id ? cell.game_id : game_id //16
             ];

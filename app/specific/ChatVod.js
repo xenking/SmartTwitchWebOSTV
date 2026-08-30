@@ -745,7 +745,8 @@ function Chat_loadChatSuccess(responseObj, id) {
     }
 
     if (null_next && !Chat_loadingMore) {
-        Chat_MessageVector({
+        Main_emptyWithEle(Chat_div[0]);
+        ChatLive_ElementAdd({
             chat_number: 0,
             time: 0,
             message: '<span class="message">' + STR_CHAT_CONNECTED + '</span>'
